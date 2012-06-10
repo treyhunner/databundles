@@ -27,20 +27,62 @@ class Bundle(object):
     def config(self):
         return self.root_dir.bundle_config
 
+    """ Prepare is run before building, part of the devel process.  """
+
+    def pre_prepare(self):
+        return True
+
     def prepare(self):
-        pass
+        return True
+    
+
+    def post_prepare(self):
+        return True
+   
+    """ Download URLS from a list, hand coded, or from prepare() """
+   
+    def pre_download(self):
+        return True  
     
     def download(self):
-        pass  
+        return True  
+    
+    def post_download(self):
+        return True  
+    
+    """ Transform to the database format """
+ 
+    def pre_transform(self):
+        return True
     
     def transform(self):
-        pass
+        return True
     
+    def post_transform(self):
+        return True
+    
+    """ Build the final package """
+
+    def pre_build(self):
+        return True
+        
     def build(self):
-        pass
+        return True
+    
+    def post_build(self):
+        return True
+    
+        
+    """ Submit the package to the repository """
+ 
+    def pre_submit(self):
+        return True
     
     def submit(self):
-        pass
+        return True
+        
+    def post_submit(self):
+        return True
     
     
     

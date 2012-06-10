@@ -22,11 +22,7 @@ class Test(unittest.TestCase):
         import sys
         pprint.pprint(sys.path)
         
-        import bundle.bundle
-        
-        b = bundle.bundle.Bundle()
-        
-        pprint.pprint(b)
+     
        
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
