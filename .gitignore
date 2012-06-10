@@ -1,5 +1,3 @@
 # gcc coverage testing tool files
+*.pyc
 
-*.gcno
-*.gcda
-*.gcov
