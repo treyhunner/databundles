@@ -56,5 +56,3 @@ class Files(object):
         
     def local(self):
         pass
-    
-   
