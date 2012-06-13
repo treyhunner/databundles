@@ -4,7 +4,7 @@ Created on Jun 7, 2012
 @author: eric
 '''
 
-class MyClass(object):
+class SqliteDatabase(object):
     '''
     classdocs
     '''

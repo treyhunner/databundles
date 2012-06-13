@@ -19,10 +19,14 @@ class Test(unittest.TestCase):
 
     def testName(self):
         import pprint
-        import sys
-        pprint.pprint(sys.path)
         
-     
+        from databundles.objectnumber import ObjectNumber
+ 
+        o = ObjectNumber()
+ 
+        pprint.pprint(ObjectNumber.TYPE.DATASET)
+        
+        o.TYPE.DATASET = 'z'
        
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
