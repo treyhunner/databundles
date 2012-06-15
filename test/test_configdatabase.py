@@ -8,11 +8,13 @@ import unittest
 
 class Test(unittest.TestCase):
 
-
     def test_basic(self):
-        from databundles.table import Table
-        from databundles.column import Column
-        import uuid
+        from databundles.config.database import Database, Table, Column
+        
+       
+        ds = Database()
+        
+       
 
         t = Table()
         t.name = "Test Table"
@@ -22,7 +24,6 @@ class Test(unittest.TestCase):
         t.add_column(Column(name=str(uuid.uuid4()),altname='foobar'))
         t.add_column(Column(name=str(uuid.uuid4()),altname='foobar'))
     
-      
         print t.dump()
 
 if __name__ == "__main__":

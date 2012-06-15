@@ -31,12 +31,17 @@ class Test(unittest.TestCase):
         from databundles.properties import SimpleProperty
         
         class Class2(object):
-            x = SimpleProperty('bingo', 'Documentation')
+            x = SimpleProperty('x','bingo', 'Documentation')
          
         o = Class2()
-        print "a "+str(o.x)
-        o.x = 'foo';
-        print "b "+o.x
+        print "initial: "+str(o.x)
+        o.x = 1
+        print "final:   "+str(o.x)
+        
+        import pprint
+        pprint.pprint(o.__dict__)
+       
+        
 
 
 if __name__ == "__main__":
