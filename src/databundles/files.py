@@ -35,7 +35,7 @@ class RootDir:
     
     @property
     def bundle_config(self):
-        from config import Config
+        from databundles.config.config import Config
         import os.path
         return Config(os.path.normpath(self.directory+'/'+'bundle.yaml'))
  

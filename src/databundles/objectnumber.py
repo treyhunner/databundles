@@ -19,7 +19,7 @@ class ObjectNumber(object):
     TYPE.DATASET = 'a'
     TYPE.TABLE ='b'
     TYPE.COLUMN = 'c'
-    
+
     TCMAXVAL = 62*62 -1; # maximum for table and column values. 
     
     EPOCH = 1325376000 # Jan 1, 2012 in UNIX time
@@ -37,35 +37,9 @@ class ObjectNumber(object):
             self._type = self.TYPE.DATASET
         else:
             raise "Bad Arguments";
-            
-          
-        if isinstance(table, int):
-            
-            if table < 0 or table > self.TCMAXVAL:
-                raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
-                
-            self.table = ObjectNumber.base62_encode(table).rjust(2,'0')
-        elif isinstance(table, str):
-            self.table = table
-        elif table == None:
-            self.table = None
-        else:
-            raise TypeError, "table argument must be an int or str. Got "+type(table).__name__
 
-
-        if isinstance(column, int):  
-            
-            if column < 0 or column > self.TCMAXVAL:
-                raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
-                
-                   
-            self.column = ObjectNumber.base62_encode(column).rjust(2,'0')
-        elif isinstance(column, str):
-            self.column = column
-        elif column == None:
-            self.column = None
-        else:
-            raise TypeError, "column argument must be an int or str. Got "+type(table).__name__
+        self.table = table
+        self.column = column
 
         # If the dataset is not defined, create a new dataset number. 
         if dataset == None:
@@ -89,6 +63,9 @@ class ObjectNumber(object):
         else:
             raise TypeError
 
+  
+    def normalize_id(self):
+        pass
   
     @classmethod
     def base62_encode(cls, num):
@@ -135,36 +112,62 @@ class ObjectNumber(object):
             idx += 1
     
         return num
-
-        
+       
     @property
     def object_type(self):
         return self.type
-    
-        
-    @property
-    def dataset_id(self):
-        return self.dataset
+     
     
     @property
     def dataset_number(self):
         return ObjectNumber.base62_decode(self.dataset)
+ 
+    @property 
+    def table(self):
+        return self.table_
     
-    @property
-    def table_id(self):
-        return self.table
-    
+    @table.setter
+    def table(self, value): #@DuplicatedSignature         
+        if isinstance(value, int):
+            if value < 0 or value > self.TCMAXVAL:
+                raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
+            self.table_ = ObjectNumber.base62_encode(value).rjust(2,'0')
+        elif isinstance(value, str):
+            self.table_ = value
+        elif value == None:
+            self.table_ = None
+        else:
+            raise TypeError, "table argument must be an int or str. Got "+type(value).__name__
+
+ 
+ 
     @property
     def table_number(self):
         return ObjectNumber.base62_decode(self.table)
-    
-    @property
-    def column_id(self):
-        return self.column
+
     
     @property
     def column_number(self):
         return ObjectNumber.base62_decode(self.column)
+    
+    
+    @property 
+    def column(self):
+        return self.column_
+    
+    @column.setter
+    def column(self, value): #@DuplicatedSignature
+        if isinstance(value, int):              
+            if value < 0 or value > self.TCMAXVAL:
+                raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
+            self.column_ = ObjectNumber.base62_encode(value).rjust(2,'0')
+        elif isinstance(value, str):
+            self.column_ = value
+        elif value == None:
+            self.column_ = None
+        else:
+            raise TypeError, "column argument must be an int or str. Got "+type(value).__name__
+ 
     
     
     def __str__(self):
