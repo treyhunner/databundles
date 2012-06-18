@@ -85,23 +85,8 @@ class Column(object):
         del d['onid']
         return d
                 
-    def as_sqlalchemy(self):
-        import sqlalchemy
-        
-        type_map = { 
-            None: sqlalchemy.types.Text,
-            Column.DATATYPE_TEXT: sqlalchemy.types.Text,
-            Column.DATATYPE_INTEGER:sqlalchemy.types.Integer,
-            Column.DATATYPE_REAL:sqlalchemy.types.Float,
-            Column.DATATYPE_NUMERIC:sqlalchemy.types.Numeric(self.precision,self.scale),
-            Column.DATATYPE_DATE: sqlalchemy.types.Date,
-            Column.DATATYPE_TIME:sqlalchemy.types.Time,
-            Column.DATATYPE_TIMESTAMP:sqlalchemy.types.DateTime,
-            }
-        
-        
-        return sqlalchemy.Column(self.name, type_map[self.datatype], primary_key = False)
-    
+
+      
 class Table(object):
     '''
     classdocs
@@ -183,19 +168,7 @@ class Table(object):
             
       
         return d
-    
-    def as_sqlalchemy(self, metadata):
-        import sqlalchemy
-        
-        table = sqlalchemy.Table(self.name, metadata,
-                                 sqlalchemy.Column('id',sqlalchemy.Integer, primary_key = True)
-                                 )
-        
-        for column in self.columns_:
-            ac = column.as_sqlalchemy()
-            table.append_column(column.as_sqlalchemy());
-        
-        return table
+  
     
 class Database(object):
     
@@ -227,7 +200,7 @@ class Database(object):
     @property
     def tables(self):
         """A list of tables in this database"""
-        return self.table_
+        return self.tables_
         
     def propagate_id(self):
         """Set a dataset id for all tables and columns. If id is None, create a new dataset Id """
@@ -267,12 +240,6 @@ class Database(object):
         pass
     
     
-    def as_sqlalchemy(self, metadata):
-      
-        tables = []
-        for table in self.tables_:
-            tables.append(table.as_sqlalchemy(metadata))
-            
-        return metadata
+   
             
            

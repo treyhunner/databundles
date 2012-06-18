@@ -11,8 +11,7 @@ class Bundle(object):
     
     BUNDLE_CONFIG_FILE = 'bundle.yaml'
     SCHEMA_CONFIG_FILE = 'schema.yaml'
-    PROTO_DB_FILE = 'proto.db'
-    PROTO_SQL_FILE = 'configuration.sql' # Stored in the databundles module. 
+   
     
     def __init__(self, directory=None):
         '''
@@ -59,31 +58,14 @@ class Bundle(object):
         '''Resolve a path that is relative to the bundle root into an absoulte path'''
         return self._root_dir.path(rel_path)
 
+    @property
     def protodb(self):
         '''Return the path to the proto.db Sqlite File, which holds the prototype configuration for a bundle'''
-        import os.path
-        proto_file=self.path(Bundle.PROTO_DB_FILE)
+       
+        import protodb
         
-        if os.path.exists(proto_file):
-            return proto_file
-     
-        import databundles
-        script_str = os.path.normpath(os.path.dirname(databundles.__file__)+'/'+Bundle.PROTO_SQL_FILE)
-        
-        print "!!!!! "+proto_file
-        print "!!!!! "+script_str
-        
-        import sqlite3
-        conn = sqlite3.connect(proto_file)
-        conn.executescript(open(script_str).read().strip())
-        conn.commit()
-        
-        return proto_file
+        return protodb.ProtoDB(self)
 
-
-    def protodb_dsn(self):
-        '''return the SqlAlchemy connection string for the protodb'''
-        pass
 
     @property
     def root_dir(self):
