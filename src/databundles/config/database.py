@@ -45,12 +45,13 @@ class Column(object):
     universe = SimpleProperty("universe",None)
     uscale = SimpleProperty("uscale",None)
 
-    table = None
+    
 
     def __init__(self, table=None, **kwargs):
         '''
         Constructor
         '''
+        self.table = None
          
         if table and not isinstance(table, Table ):
             raise TypeError, "table must be of type Table. Got: "+str(type(table))
@@ -84,7 +85,22 @@ class Column(object):
         del d['onid']
         return d
                 
-                
+    def as_sqlalchemy(self):
+        import sqlalchemy
+        
+        type_map = { 
+            None: sqlalchemy.types.Text,
+            Column.DATATYPE_TEXT: sqlalchemy.types.Text,
+            Column.DATATYPE_INTEGER:sqlalchemy.types.Integer,
+            Column.DATATYPE_REAL:sqlalchemy.types.Float,
+            Column.DATATYPE_NUMERIC:sqlalchemy.types.Numeric(self.precision,self.scale),
+            Column.DATATYPE_DATE: sqlalchemy.types.Date,
+            Column.DATATYPE_TIME:sqlalchemy.types.Time,
+            Column.DATATYPE_TIMESTAMP:sqlalchemy.types.DateTime,
+            }
+        
+        
+        return sqlalchemy.Column(self.name, type_map[self.datatype], primary_key = False)
     
 class Table(object):
     '''
@@ -96,13 +112,16 @@ class Table(object):
     onid = SimpleProperty('onid',None)
     description = SimpleProperty('description',None)
     keywords = SimpleProperty('keywords',None)
+    universe = SimpleProperty('universe',None)
     
-    columns_ = []
+   
 
     def __init__(self,  **kwargs):
         '''
         Constructor
         '''
+       
+        self. columns_ = []
        
         # Set all of the SimpleProperties from kwargs
         for name,value in Column.__dict__.items():
@@ -165,6 +184,18 @@ class Table(object):
       
         return d
     
+    def as_sqlalchemy(self, metadata):
+        import sqlalchemy
+        
+        table = sqlalchemy.Table(self.name, metadata,
+                                 sqlalchemy.Column('id',sqlalchemy.Integer, primary_key = True)
+                                 )
+        
+        for column in self.columns_:
+            ac = column.as_sqlalchemy()
+            table.append_column(column.as_sqlalchemy());
+        
+        return table
     
 class Database(object):
     
@@ -213,6 +244,7 @@ class Database(object):
             
          
     def dump(self):
+        """Return a string for debugging"""
         x = '';
         for table in self.tables_:
             x += table.dump()
@@ -221,11 +253,26 @@ class Database(object):
         return x
 
     def as_dict(self):
+        """Return the database, and all of its tables, as a python structure that is
+        suitable for conversion to YAML"""
+        
         a = []
         for table in self.tables_:
-           a.append(table.as_dict())
+            a.append(table.as_dict())
         
         return a
     
     def from_dict(self, d):
+        """Set all tables and columns from a python data structure, as returned from loading YAML"""
         pass
+    
+    
+    def as_sqlalchemy(self, metadata):
+      
+        tables = []
+        for table in self.tables_:
+            tables.append(table.as_sqlalchemy(metadata))
+            
+        return metadata
+            
+           

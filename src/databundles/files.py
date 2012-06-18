@@ -33,6 +33,10 @@ class RootDir:
     def __str__(self):
         return self.directory
     
+    def path(self, file):
+        import os.path
+        return os.path.normpath(self.directory+'/'+file)
+    
     @property
     def bundle_config(self):
         from databundles.config.config import Config

@@ -7,27 +7,88 @@ Created on Jun 9, 2012
 import files
 
 class Bundle(object):
-    '''
-    classdocs
-    '''
-
+    '''Represents a bundle, including all configuration and top level operations. '''
+    
+    BUNDLE_CONFIG_FILE = 'bundle.yaml'
+    SCHEMA_CONFIG_FILE = 'schema.yaml'
+    PROTO_DB_FILE = 'proto.db'
+    PROTO_SQL_FILE = 'configuration.sql' # Stored in the databundles module. 
+    
     def __init__(self, directory=None):
         '''
         Constructor
         '''
        
         if not directory:
-            self.root_dir_  = files.root_dir()
+            self._root_dir = files.root_dir()
         else:
-            self.root_dir_ = files.RootDir(directory)
+            self._root_dir = files.RootDir(directory)
 
+        self._config = None
+        self._schema = None
+  
     @property
     def config(self):
-        return self.root_dir_.bundle_config
+        '''Return a dict/array object tree for the bundle configuration'''
+        if(self._config == None):
+            import yaml
+            bundle_path = self._root_dir.path(Bundle.BUNDLE_CONFIG_FILE)
+    
+            try:
+                self._config = yaml.load(file(bundle_path, 'r'))  
+            except:
+                raise NotImplementedError,' Bundle.yaml missing. Auto-creation not implemented'
+  
+        return self._config
+
+    @property
+    def schema(self):
+        '''Return the dict form of the schema'''
+        if(self._schema == None):
+            import yaml
+            schema_path = self._root_dir.path(Bundle.SCHEMA_CONFIG_FILE)
+    
+            try:
+                self._schema = yaml.load(file(schema_path, 'r'))  
+            except:
+                raise NotImplementedError,' Schema.yaml missing. Auto-creation not implemented'
+  
+        return self.config
+
+    def path(self, rel_path):
+        '''Resolve a path that is relative to the bundle root into an absoulte path'''
+        return self._root_dir.path(rel_path)
+
+    def protodb(self):
+        '''Return the path to the proto.db Sqlite File, which holds the prototype configuration for a bundle'''
+        import os.path
+        proto_file=self.path(Bundle.PROTO_DB_FILE)
+        
+        if os.path.exists(proto_file):
+            return proto_file
+     
+        import databundles
+        script_str = os.path.normpath(os.path.dirname(databundles.__file__)+'/'+Bundle.PROTO_SQL_FILE)
+        
+        print "!!!!! "+proto_file
+        print "!!!!! "+script_str
+        
+        import sqlite3
+        conn = sqlite3.connect(proto_file)
+        conn.executescript(open(script_str).read().strip())
+        conn.commit()
+        
+        return proto_file
+
+
+    def protodb_dsn(self):
+        '''return the SqlAlchemy connection string for the protodb'''
+        pass
 
     @property
     def root_dir(self):
-        return self.root_dir_
+        '''Returns the root directory of the bundle '''
+        return self._root_dir
 
     """ Prepare is run before building, part of the devel process.  """
 
@@ -37,7 +98,6 @@ class Bundle(object):
     def prepare(self):
         return True
     
-
     def post_prepare(self):
         return True
    
