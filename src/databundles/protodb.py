@@ -19,13 +19,14 @@ class ProtoDB():
         self.proto_file=bundle.path(ProtoDB.PROTO_DB_FILE)
       
      
+    def path(self):
+        return self.proto_file
+     
     def metadata(self):
         '''Return an SqlAlchemy MetaData object'''
         
-        from sqlalchemy import create_engine,MetaData
-        
-        engine = create_engine('sqlite:///'+self.proto_file,echo=True)
-         
+        from sqlalchemy import create_engine,MetaData   
+        engine = create_engine('sqlite:///'+self.proto_file)
         metadata = MetaData(bind=engine)
        
         return metadata
@@ -77,16 +78,21 @@ class ProtoDB():
         except:
             pass
         
+    def load_sql(self, sql_file):
+        import sqlite3
+        conn = sqlite3.connect( self.proto_file)
+        conn.executescript(open(sql_file).read().strip())
+        
+        conn.commit()
+        
     def create(self):
         
         if not os.path.exists( self.proto_file):
             import databundles
             script_str = os.path.normpath(os.path.dirname(databundles.__file__)+'/'+ProtoDB.PROTO_SQL_FILE)
             
-            import sqlite3
-            conn = sqlite3.connect( self.proto_file)
-            conn.executescript(open(script_str).read().strip())
-            conn.commit()
+            self.load_sql(script_str)
+           
             
         
         
