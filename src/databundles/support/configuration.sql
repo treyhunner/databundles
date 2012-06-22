@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-06-13 16:35                                */
+/* Created on:            2012-06-22 11:14                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -38,8 +38,21 @@ CREATE TABLE "config" (
     "co_group" TEXT,
     "co_key" TEXT,
     "co_value" TEXT,
-    CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id"),
+    CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
     FOREIGN KEY ("co_d_id") REFERENCES "datasets" ("d_id")
+);
+
+/* ---------------------------------------------------------------------- */
+/* Add table "files"                                                      */
+/* ---------------------------------------------------------------------- */
+
+CREATE TABLE "files" (
+    "f_id" INTEGER NOT NULL,
+    "f_path" TEXT NOT NULL,
+    "f_process" TEXT NOT NULL,
+    "f_hash" TEXT,
+    "f_modified" TEXT,
+    CONSTRAINT "PK_files" PRIMARY KEY ("f_id")
 );
 
 /* ---------------------------------------------------------------------- */
@@ -47,13 +60,13 @@ CREATE TABLE "config" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "tables" (
-    "t_d_id" TEXT NOT NULL,
     "t_id" INTEGER NOT NULL,
+    "t_d_id" TEXT NOT NULL,
     "t_name" TEXT,
     "t_altname" TEXT,
     "t_description" TEXT,
     "t_keywords" TEXT,
-    CONSTRAINT "PK_tables" PRIMARY KEY ("t_d_id", "t_id"),
+    CONSTRAINT "PK_tables" PRIMARY KEY ("t_id"),
     FOREIGN KEY ("t_d_id") REFERENCES "datasets" ("d_id")
 );
 
@@ -62,9 +75,9 @@ CREATE TABLE "tables" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "columns" (
-    "c_d_id" TEXT NOT NULL,
-    "c_t_id" INTEGER NOT NULL,
     "c_id" INTEGER NOT NULL,
+    "c_t_id" TEXT NOT NULL,
+    "c_d_id" TEXT,
     "c_name" TEXT,
     "c_altname" TEXT,
     "c_datatype" TEXT,
@@ -77,8 +90,25 @@ CREATE TABLE "columns" (
     "c_units" TEXT,
     "c_universe" TEXT,
     "c_scale" REAL,
-    CONSTRAINT "PK_columns" PRIMARY KEY ("c_d_id", "c_t_id", "c_id"),
-    FOREIGN KEY ("c_d_id", "c_t_id") REFERENCES "tables" ("t_d_id","t_id")
+    CONSTRAINT "PK_columns" PRIMARY KEY ("c_id"),
+    FOREIGN KEY ("c_t_id") REFERENCES "tables" ("t_id"),
+    FOREIGN KEY ("c_d_id") REFERENCES "datasets" ("d_id")
+);
+
+/* ---------------------------------------------------------------------- */
+/* Add table "partitions"                                                 */
+/* ---------------------------------------------------------------------- */
+
+CREATE TABLE "partitions" (
+    "p_id" TEXT NOT NULL,
+    "p_t_id" INTEGER,
+    "p_d_id" TEXT,
+    "p_space" TEXT,
+    "p_time" TEXT,
+    "p_name" TEXT,
+    CONSTRAINT "PK_partitions" PRIMARY KEY ("p_id"),
+    FOREIGN KEY ("p_t_id") REFERENCES "tables" ("t_id"),
+    FOREIGN KEY ("p_d_id") REFERENCES "datasets" ("d_id")
 );
 
 /* ---------------------------------------------------------------------- */

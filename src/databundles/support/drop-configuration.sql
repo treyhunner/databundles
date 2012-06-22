@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-06-13 16:35                                */
+/* Created on:            2012-06-22 11:14                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -14,16 +14,28 @@
 /* ---------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------- */
+/* Drop table "partitions"                                                */
+/* ---------------------------------------------------------------------- */
+
+/* Drop constraints */
+
+ALTER TABLE "partitions" DROP CONSTRAINT "NN_partitions_p_id";
+
+ALTER TABLE "partitions" DROP CONSTRAINT "PK_partitions";
+
+/* Drop table */
+
+DROP TABLE "partitions";
+
+/* ---------------------------------------------------------------------- */
 /* Drop table "columns"                                                   */
 /* ---------------------------------------------------------------------- */
 
 /* Drop constraints */
 
-ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_d_id";
+ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_id";
 
 ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_t_id";
-
-ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_id";
 
 ALTER TABLE "columns" DROP CONSTRAINT "PK_columns";
 
@@ -37,15 +49,33 @@ DROP TABLE "columns";
 
 /* Drop constraints */
 
-ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_d_id";
-
 ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_id";
+
+ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_d_id";
 
 ALTER TABLE "tables" DROP CONSTRAINT "PK_tables";
 
 /* Drop table */
 
 DROP TABLE "tables";
+
+/* ---------------------------------------------------------------------- */
+/* Drop table "files"                                                     */
+/* ---------------------------------------------------------------------- */
+
+/* Drop constraints */
+
+ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_id";
+
+ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_path";
+
+ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_process";
+
+ALTER TABLE "files" DROP CONSTRAINT "PK_files";
+
+/* Drop table */
+
+DROP TABLE "files";
 
 /* ---------------------------------------------------------------------- */
 /* Drop table "config"                                                    */

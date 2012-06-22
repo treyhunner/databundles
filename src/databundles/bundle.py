@@ -4,118 +4,235 @@ Created on Jun 9, 2012
 @author: eric
 '''
 
-import files
 import os.path
 import exceptions
+from database import Database
 
-class Partition(object):
-    '''Represents a bundle partition, part of the bunle data broken out in time, space, or by table. '''
-    
+class PartitionId(object):
+
     def __init__(self, bundle, time=None, space=None, table=None):
         self.bundle = bundle
         self.time = time
         self.space = space
         self.table = table
-    
-    def get_name_part(self):
+
+    def __str__(self):
         '''Return the parttion component of the name'''
         import re
-        return '.'.join([re.sub('[^\w\.]','_',s).lower() for s in filter(None, [self.time, self.space, self.table])])
-      
-  
+        return '.'.join([re.sub('[^\w\.]','_',s).lower() 
+                         for s in filter(None, [self.pid.time, self.pid.space, 
+                                                self.pid.table])])
+
+
+class Partition(object):
+    '''Represents a bundle partition, part of the bunle data broken out in 
+    time, space, or by table. '''
     
+  
+    def __init__(self, bundle, partition_id):
+        self.bundle = bundle
+        self.pid= partition_id
+      
+    @property
+    def name(self):
+        pass
+    
+    @property
+    def database(self):
+        pass
+ 
+
+class Filesystem(object):
+    
+    BUILD_DIR = 'build'
+    
+    def __init__(self, bundle, root_directory = None):
+        self.bundle = bundle
+        if root_directory:
+            self.root_directory = root_directory
+        else:
+            self.root_directory = Filesystem.find_root_directory()
+ 
+        if not os.path.exists(self.path(Filesystem.BUILD_DIR)):
+            os.makedirs(self.path(Filesystem.BUILD_DIR),0755)
+ 
+    @staticmethod
+    def find_root_dir(cls,testFile='bundle.yaml'):
+        '''Find the parent directory that contains the bundle.yaml file '''
+        import sys
+
+        d = sys.path[0]
+        
+        while os.path.isdir(d) and d != '/':
+            test =  os.path.normpath(d+'/'+testFile)
+            print "D "+test
+            if(os.path.isfile(test)):
+                return d
+            d = os.path.dirname(d)
+             
+        return None
+    
+    @property
+    def root_dir(self):
+        '''Returns the root directory of the bundle '''
+        return self.root_directory
+
+    def path(self, *args):
+        '''Resolve a path that is relative to the bundle root into an 
+        absoulte path'''
+     
+        return os.path.normpath(self.root_directory+'/'+os.path.join(*args))    
+
+    def directory(self, rel_path):
+        '''Resolve a path that is relative to the bundle root into 
+        an absoulte path'''
+        abs_path = self.path(rel_path)
+        if(not os.path.isdir(abs_path) ):
+            os.makedirs(abs_path)
+        return abs_path
+ 
+ 
+class Identity(object):
+    
+    from databundles.config.properties import DbRowProperty
+   
+    source = DbRowProperty("source",None)
+    dataset = DbRowProperty("dataset",None)
+    subset = DbRowProperty("subset",None)
+    variation = DbRowProperty("variation",None)
+    creator = DbRowProperty("creator",None)
+    revision = DbRowProperty("revision",None)
+    
+    def __init__(self, bundle):
+        self.bundle = bundle
+ 
+    @property
+    def row(self):
+        '''Return the dataset row object for this bundle'''
+        from databundles.config.orm import Dataset
+        session = self.bundle.database.session
+        return session.query(Dataset).first()
+        
+      
+    @property
+    def creatorcode(self):
+        import hashlib
+        # Create the creator code if it was not specified. 
+        return hashlib.sha1(self.creator).hexdigest()[0:4]
+       
+    @property
+    def name(self):
+        return  '-'.join(self.name_parts())
+    
+    def name_parts(self):
+        """Return the parts of the name as a list, for additional processing. """
+        name_parts = [];
+     
+        try: 
+            name_parts.append(self.source)
+        except:
+            raise exceptions.ConfigurationError('Missing identity.source')
+  
+        try: 
+            name_parts.append(self.dataset)
+        except:
+            raise exceptions.ConfigurationError('Missing identity.dataset')  
+        
+        try: 
+            name_parts.append(self.subset)
+        except:
+            pass
+        
+        try: 
+            name_parts.append(self.variation)
+        except:
+            pass
+        
+        try: 
+            name_parts.append(self.creatorcode)
+        except:
+            raise exceptions.ConfigurationError('Missing identity.creatorcode')
+        
+             
+        try: 
+            name_parts.append('r'+str(self.revision))
+        except:
+            raise exceptions.ConfigurationError('Missing identity.revision')
+        
+        import re
+        return [re.sub('[^\w\.]','_',s).lower() for s in name_parts]
+       
+   
+    def load_from_config(self):
+        pass
+   
+    def write_to_config(self):
+        pass
+   
 class Bundle(object):
-    '''Represents a bundle, including all configuration and top level operations. '''
+    '''Represents a bundle, including all configuration 
+    and top level operations. '''
     
     BUNDLE_CONFIG_FILE = 'bundle.yaml'
     SCHEMA_CONFIG_FILE = 'schema.yaml'
+    
    
     def __init__(self, directory=None):
         '''
         Constructor
         '''
+     
+        self.filesystem = Filesystem(self, directory)
+        self.identity = Identity(self)
+        self.database = Database(self)
+        
+        ##
+        ## Check that we have a dataset in the database. If not, create one, 
+        ## since the Identity depends on it. 
+        from databundles.config.orm import Dataset
+        session = self.database.session
+        ds = session.query(Dataset).first()
+            
+        if not ds:
+            self._init_identity()
+     
+      
+    def _init_identity(self):
+        '''Initialize the identity, creating a dataset record, 
+        from the bundle.yaml file'''
+        from databundles.config.orm import Dataset
+        c = self.config
+        
+        ds = Dataset(**c['identity'])
        
-        if not directory:
-            self._root_dir = files.root_dir()
-        else:
-            self._root_dir = files.RootDir(directory)
-
-        self._config = None
-        self._schema = None
-        self._partition = None
-  
-    @property
-    def name(self):
+        s = self.database.session
+        s.add(ds)
+        s.commit()
+        
+        return 
        
-        name_parts = [];
-        
-        partition = self.partition
-        
-        try: 
-            name_parts.append(self.identity['source'])
-        except:
-            raise exceptions.ConfigurationError('Missing identity.source')
-  
-        try: 
-            name_parts.append(self.identity['dataset'])
-        except:
-            raise exceptions.ConfigurationError('Missing identity.dataset')  
-        
-        try: 
-            name_parts.append(self.identity['subset'])
-        except:
-            pass
-        
-        try: 
-            name_parts.append(self.identity['variation'])
-        except:
-            pass
-        
-        try: 
-            name_parts.append(self.identity['creatorcode'])
-        except:
-            raise exceptions.ConfigurationError('Missing identity.creatorcode')
-        
-        if partition:
-            part = partition.get_name_part()
-            if part:
-                name_parts.append(part)
-                
-        try: 
-            name_parts.append('r'+str(self.identity['revision']))
-        except:
-            raise exceptions.ConfigurationError('Missing identity.revision')
-        
-        import re
-        return '-'.join([re.sub('[^\w\.]','_',s).lower() for s in name_parts])
-  
-    @property
-    def partition(self):
+    def partition(self, partition_id):
         
         if not self._partition:
-            p = self.config.get('partition',{'time':None, 'state': None, 'table': None})
-            self._partition=Partition(self,p.get('time', None),p.get('space', None),p.get('table', None))
+            p = self.config.get('partition',
+                                {'time':None, 'state': None, 'table': None})
+            self._partition=Partition(self,p.get('time', None),
+                                      p.get('space', None),p.get('table', None))
        
         return self._partition
-        
+
     @property
     def config(self):
         '''Return a dict/array object tree for the bundle configuration'''
-        if(self._config == None):
-            import yaml
-            bundle_path = self._root_dir.path(Bundle.BUNDLE_CONFIG_FILE)
-    
-            try:
-                self._config = yaml.load(file(bundle_path, 'r'))  
-            except:
-                raise NotImplementedError,' Bundle.yaml missing. Auto-creation not implemented'
-  
-            if not 'creatorcode' in self._config['identity']:
-                import hashlib
-                # Create the creator code if it was not specified. 
-                self._config['identity']['creatorcode'] = hashlib.sha1(self._config['identity']['creator']).hexdigest()[0:4]
-  
-        return self._config
+     
+        import yaml
+        bundle_path = self.filesystem.path(Bundle.BUNDLE_CONFIG_FILE)
+
+        try:
+            return  yaml.load(file(bundle_path, 'r'))  
+        except:
+            raise NotImplementedError,''' Bundle.yaml missing. 
+            Auto-creation not implemented'''
 
     @property
     def schema(self):
@@ -127,60 +244,18 @@ class Bundle(object):
             try:
                 self._schema = yaml.load(file(schema_path, 'r'))  
             except:
-                raise NotImplementedError,' Schema.yaml missing. Auto-creation not implemented'
+                raise NotImplementedError,''' Schema.yaml missing. Auto-creation
+                 not implemented'''
   
         return self.config
+  
+   
+    ###
+    ### Process Methods
+    ###
 
-    def path(self, rel_path):
-        '''Resolve a path that is relative to the bundle root into an absoulte path'''
-        return self._root_dir.path(rel_path)
 
-    def directory(self, rel_path):
-        '''Resolve a path that is relative to the bundle root into an absoulte path'''
-        abs_path = self.path(rel_path)
-        if(not os.path.isdir(abs_path) ):
-            os.makedirs(abs_path)
-        return abs_path
-            
-    @property
-    def protodb(self):
-        '''Return the path to the proto.db Sqlite File, which holds the prototype configuration for a bundle'''
-       
-        import protodb
-        
-        return protodb.ProtoDB(self)
-
-    @property
-    def productiondb(self):
-        '''Return the path to the production database, creating one from a copy of the prototype if it does not exist'''
-        
-        proto_file = self.protodb.path()
-        pdb_file = self.name.".db"
-        
-        import os.path
-        
-        if not os.path.exists():
-            pass
-        
-        
-        
-        from sqlalchemy import create_engine,MetaData   
-        engine = create_engine('sqlite:///'+self.proto_file)
-        metadata = MetaData(bind=engine)
-
-    def get_bundle_db(self, Partition=None):
-        '''Get the output bundle database, possibly a partitioned database.'''
-
-    @property
-    def identity(self):
-        return self.config['identity']
-
-    @property
-    def root_dir(self):
-        '''Returns the root directory of the bundle '''
-        return self._root_dir
-
-    """ Prepare is run before building, part of the devel process.  """
+    ### Prepare is run before building, part of the devel process.  
 
     def pre_prepare(self):
         return True
@@ -191,7 +266,7 @@ class Bundle(object):
     def post_prepare(self):
         return True
    
-    """ Download URLS from a list, hand coded, or from prepare() """
+    ### Download URLS from a list, hand coded, or from prepare() 
    
     def pre_download(self):
         return True  
@@ -202,7 +277,7 @@ class Bundle(object):
     def post_download(self):
         return True  
     
-    """ Transform to the database format """
+    ### Transform to the database format
  
     def pre_transform(self):
         return True
@@ -213,7 +288,7 @@ class Bundle(object):
     def post_transform(self):
         return True
     
-    """ Build the final package """
+    ### Build the final package
 
     def pre_build(self):
         return True
@@ -225,7 +300,7 @@ class Bundle(object):
         return True
     
         
-    """ Submit the package to the repository """
+    ### Submit the package to the repository
  
     def pre_submit(self):
         return True
