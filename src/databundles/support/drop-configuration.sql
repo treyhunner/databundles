@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-06-22 11:14                                */
+/* Created on:            2012-06-23 11:13                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -28,6 +28,20 @@ ALTER TABLE "partitions" DROP CONSTRAINT "PK_partitions";
 DROP TABLE "partitions";
 
 /* ---------------------------------------------------------------------- */
+/* Drop table "config"                                                    */
+/* ---------------------------------------------------------------------- */
+
+/* Drop constraints */
+
+ALTER TABLE "config" DROP CONSTRAINT "NN_config_co_d_id";
+
+ALTER TABLE "config" DROP CONSTRAINT "PK_config";
+
+/* Drop table */
+
+DROP TABLE "config";
+
+/* ---------------------------------------------------------------------- */
 /* Drop table "columns"                                                   */
 /* ---------------------------------------------------------------------- */
 
@@ -38,6 +52,8 @@ ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_id";
 ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_t_id";
 
 ALTER TABLE "columns" DROP CONSTRAINT "PK_columns";
+
+ALTER TABLE "columns" DROP CONSTRAINT "TUC_columns_1";
 
 /* Drop table */
 
@@ -54,6 +70,8 @@ ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_id";
 ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_d_id";
 
 ALTER TABLE "tables" DROP CONSTRAINT "PK_tables";
+
+ALTER TABLE "tables" DROP CONSTRAINT "TUC_tables_1";
 
 /* Drop table */
 
@@ -76,20 +94,6 @@ ALTER TABLE "files" DROP CONSTRAINT "PK_files";
 /* Drop table */
 
 DROP TABLE "files";
-
-/* ---------------------------------------------------------------------- */
-/* Drop table "config"                                                    */
-/* ---------------------------------------------------------------------- */
-
-/* Drop constraints */
-
-ALTER TABLE "config" DROP CONSTRAINT "NN_config_co_d_id";
-
-ALTER TABLE "config" DROP CONSTRAINT "PK_config";
-
-/* Drop table */
-
-DROP TABLE "config";
 
 /* ---------------------------------------------------------------------- */
 /* Drop table "datasets"                                                  */

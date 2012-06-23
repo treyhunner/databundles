@@ -57,11 +57,13 @@ class ObjectNumber(object):
                 dataset = dataset - self.EPOCH
                    
             self.dataset = ObjectNumber.base62_encode(dataset)
-        elif isinstance(dataset, str):
+        elif isinstance(dataset, str) or isinstance(dataset, unicode):
             self.dataset = dataset
         
         else:
-            raise TypeError
+            raise TypeError('dataset value must be an integer or a string. got: '
+                            +str(type(dataset)))
+        
 
   
     def normalize_id(self):
@@ -132,7 +134,7 @@ class ObjectNumber(object):
             if value < 0 or value > self.TCMAXVAL:
                 raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
             self.table_ = ObjectNumber.base62_encode(value).rjust(2,'0')
-        elif isinstance(value, str):
+        elif isinstance(value, str) or isinstance(value, unicode) :
             self.table_ = value
         elif value == None:
             self.table_ = None

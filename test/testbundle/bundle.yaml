@@ -6,10 +6,7 @@ identity:
   creator: clarinova.com
   variation: orig
   revision: 1
-  
-partition:
-   space: AL
-   table: SF10003
+
    
 build:
   rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/

@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-06-22 11:14                                */
+/* Created on:            2012-06-23 11:13                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -30,19 +30,6 @@ CREATE TABLE "datasets" (
 );
 
 /* ---------------------------------------------------------------------- */
-/* Add table "config"                                                     */
-/* ---------------------------------------------------------------------- */
-
-CREATE TABLE "config" (
-    "co_d_id" TEXT NOT NULL,
-    "co_group" TEXT,
-    "co_key" TEXT,
-    "co_value" TEXT,
-    CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
-    FOREIGN KEY ("co_d_id") REFERENCES "datasets" ("d_id")
-);
-
-/* ---------------------------------------------------------------------- */
 /* Add table "files"                                                      */
 /* ---------------------------------------------------------------------- */
 
@@ -51,7 +38,7 @@ CREATE TABLE "files" (
     "f_path" TEXT NOT NULL,
     "f_process" TEXT NOT NULL,
     "f_hash" TEXT,
-    "f_modified" TEXT,
+    "f_modified" INTEGER,
     CONSTRAINT "PK_files" PRIMARY KEY ("f_id")
 );
 
@@ -67,6 +54,7 @@ CREATE TABLE "tables" (
     "t_description" TEXT,
     "t_keywords" TEXT,
     CONSTRAINT "PK_tables" PRIMARY KEY ("t_id"),
+    CONSTRAINT "TUC_tables_1" UNIQUE ("t_name"),
     FOREIGN KEY ("t_d_id") REFERENCES "datasets" ("d_id")
 );
 
@@ -91,8 +79,24 @@ CREATE TABLE "columns" (
     "c_universe" TEXT,
     "c_scale" REAL,
     CONSTRAINT "PK_columns" PRIMARY KEY ("c_id"),
+    CONSTRAINT "TUC_columns_1" UNIQUE ("c_d_id", "c_t_id", "c_id"),
     FOREIGN KEY ("c_t_id") REFERENCES "tables" ("t_id"),
     FOREIGN KEY ("c_d_id") REFERENCES "datasets" ("d_id")
+);
+
+/* ---------------------------------------------------------------------- */
+/* Add table "config"                                                     */
+/* ---------------------------------------------------------------------- */
+
+CREATE TABLE "config" (
+    "co_d_id" TEXT NOT NULL,
+    "co_group" TEXT,
+    "co_key" TEXT,
+    "co_source" TEXT,
+    "co_value" TEXT,
+    CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
+    FOREIGN KEY ("co_d_id") REFERENCES "datasets" ("d_id"),
+    FOREIGN KEY ("co_source") REFERENCES "files" ("f_id")
 );
 
 /* ---------------------------------------------------------------------- */

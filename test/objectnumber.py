@@ -36,6 +36,19 @@ class Test(unittest.TestCase):
         
         print "On Copy: "+str(on)
         
+    def test_values(self):
+        from databundles.objectnumber import ObjectNumber
+        
+        print ObjectNumber('foo')
+        
+        print ObjectNumber('foo',1)
+        
+        print ObjectNumber('foo',2)
+        
+        print ObjectNumber('foo',1,3)
+        
+        print ObjectNumber('foo',2,4)
+        
         
 
 if __name__ == "__main__":

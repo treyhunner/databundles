@@ -70,7 +70,7 @@ class ConfigDbProperty(object):
 
     def __get__(self, obj, objtype=None):
 
-        from databundles.config.orm import Config
+        from databundles.orm import Config
 
         db = obj.bundle.database 
         session = db.session

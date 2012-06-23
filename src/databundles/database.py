@@ -119,7 +119,9 @@ class Database(object):
     def load_sql(self, sql_file):
         import sqlite3
         conn = sqlite3.connect( self.path)
-        conn.executescript(open(sql_file).read().strip())
+        sql = open(sql_file).read().strip()
+       
+        conn.executescript(sql)
         
         conn.commit()
         
@@ -127,7 +129,7 @@ class Database(object):
         """Create the database from the base SQL"""
         if not self.exists():
             import databundles
-            from databundles.config.orm import Dataset
+           
             script_str = os.path.join(os.path.dirname(databundles.__file__),
                                       Database.PROTO_SQL_FILE)
             self.load_sql(script_str)
