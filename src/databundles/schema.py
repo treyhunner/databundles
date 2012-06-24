@@ -10,17 +10,28 @@ class Schema(object):
     def __init__(self, bundle):
         self.bundle = bundle
         
+        if not self.bundle.identity.oid:
+            raise ValueError("self.bundle.identity.oid not set")
+        
+        self.dataset_id = self.bundle.identity.oid
+        
       
     def generate(self):
         '''Load the schema from the bundle.schemaGenerator() generator'''
         from databundles.orm import Table, Column
       
+        s = self.bundle.database.session
+
+        s.query(Table).delete()
+        s.query(Column).delete()
+       
         for i in self.bundle.schemaGenerator():       
             if isinstance(i, Table):
                 self.add_table(i)
             elif isinstance(i, Column):
                 self.add_column(i.table_name, i)
         
+        s.commit()
         
     @property
     def tables(self):
@@ -30,13 +41,13 @@ class Schema(object):
                 .filter(Table.d_id==self.bundle.identity.oid)
                 .all())
     
+    
+    
     def add_table(self, name_or_table, **kwargs):
         '''Add a table to the schema'''
         from databundles.orm import Table
-        
-        if not self.bundle.identity.oid:
-            raise ValueError("self.bundle.identity.oid not set")
-        
+        import sqlalchemy.orm.exc
+
         # if name is a Table object, extract the dict and name
         if isinstance(name_or_table, Table):
             kwargs = name_or_table.__dict__
@@ -44,28 +55,32 @@ class Schema(object):
         else:
             name = name_or_table
             
+        name = Table.mangle_name(name)
+        
         s = self.bundle.database.session
         
-        try:
+        try:    
             row = (s.query(Table)
                    .filter(Table.name==name)
-                   .filter(Table.d_id==self.bundle.identity.oid)
-                   .one())
-        except:
-            row = Table(name=name, d_id=self.bundle.identity.oid)
+                   .filter(Table.d_id==self.dataset_id).one())
+ 
+        except sqlalchemy.orm.exc.NoResultFound:
+
+            row = Table(name=name, d_id=self.dataset_id)
             s.add(row)
             
         for key, value in kwargs.items():    
             if key[0] != '_' and key not in ['d_id','name','sequence_id']:
-                #print 'Setting', self.bundle.identity.oid, key,value
+                #print 'Setting', self.dataset_id, key,value
                 setattr(row, key, value)
       
-        s.commit()
-        
         return row
         
     def add_column(self, table_name, name, **kwargs):
         '''Add a column to the schema'''
+    
+        if not table_name:
+            raise ValueError("Must supply a table_name")
     
         # Will fetch the table, or create if not exists
         t = self.add_table(table_name)
@@ -75,4 +90,8 @@ class Schema(object):
     
     @property
     def columns(self):
-        pass
+        '''Return a list of tables for this bundle'''
+        from databundles.orm import Column
+        return (self.bundle.database.session.query(Column)
+                .filter(Column.d_id==self.dataset_id)
+                .all())

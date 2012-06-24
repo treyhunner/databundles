@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-06-23 11:13                                */
+/* Created on:            2012-06-24 13:47                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -86,8 +86,6 @@ DROP TABLE "tables";
 ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_id";
 
 ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_path";
-
-ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_process";
 
 ALTER TABLE "files" DROP CONSTRAINT "PK_files";
 

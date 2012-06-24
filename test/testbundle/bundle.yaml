@@ -1,14 +1,12 @@
-
-identity: 
-  source: census.gov
-  dataset: 2000 Population Census
-  subset: SF1
-  creator: clarinova.com
-  variation: orig
-  revision: 1
-
-   
 build:
-  rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/
-  statesFile: States
-  headers: sf1headers.csv
+    headers: sf1headers.csv
+    rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/
+    statesFile: States
+identity:
+    creator: clarinova.com
+    dataset: 2000 Population Census
+    id: a11M2G
+    revision: 1
+    source: census.gov
+    subset: SF1
+    variation: orig

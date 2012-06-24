@@ -10,6 +10,7 @@ from partition import Partition
 from filesystem import  Filesystem
 from config import Config
 from schema import Schema
+from partition import Partitions
 
 class Bundle(object):
     '''Represents a bundle, including all configuration 
@@ -25,31 +26,22 @@ class Bundle(object):
         
         Order of operations is:
             Create bundle.db if it does not exist
-        
-        
-        
         '''
-     
+        
+        if not directory:
+            directory = Filesystem.find_root_dir()
+        
         self.filesystem = Filesystem(self, directory)
         self.database = Database(self)
+        
         self.config = Config(self,directory)
-        #self.identity = Identity(self)
-        #self.schema = Schema(self)
-        
-  
-  
-       
-    def partition(self, partition_id):
-        
-        if not self._partition:
-            p = self.config.get('partition',
-                                {'time':None, 'state': None, 'table': None})
-            self._partition=Partition(self,p.get('time', None),
-                                      p.get('space', None),p.get('table', None))
-       
-        return self._partition
+        self.identity = Identity(self)
+        self.schema = Schema(self)
+        self.partitions = Partitions(self)
 
-   
+    def log(self, message, **kwargs):
+        '''Log the messsage'''
+        print "LOG: ",message
 
     ###
     ### Process Methods

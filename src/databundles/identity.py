@@ -12,7 +12,7 @@ class Identity(object):
     
     from databundles.properties import DbRowProperty
     
-    oid = DbRowProperty("oid",None)
+    oid = DbRowProperty("oid",None,ascii=True)
     source = DbRowProperty("source",None)
     dataset = DbRowProperty("dataset",None)
     subset = DbRowProperty("subset",None)
@@ -22,20 +22,7 @@ class Identity(object):
     
     def __init__(self, bundle):
         self.bundle = bundle
-        
-        ##
-        ## Check that we have a dataset in the database. If not, create one, 
-        ## since the Identity depends on it. 
-        from databundles.orm import Dataset
-        session = self.database.session
-        ds = session.query(Dataset).first()
-            
-        self._init_config()
-            
-        if not ds:
-            self._init_identity()
-        
- 
+
     @property
     def row(self):
         '''Return the dataset row object for this bundle'''
@@ -81,8 +68,7 @@ class Identity(object):
             name_parts.append(self.creatorcode)
         except:
             raise exceptions.ConfigurationError('Missing identity.creatorcode')
-        
-             
+   
         try: 
             name_parts.append('r'+str(self.revision))
         except:

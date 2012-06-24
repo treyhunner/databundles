@@ -4,6 +4,7 @@ Created on Jun 23, 2012
 @author: eric
 '''
 import os.path
+from databundles.filesystem import Filesystem
 
 from exceptions import  ConfigurationError
 
@@ -18,8 +19,8 @@ class Config(object):
         
         self.bundle = bundle
         
-        if not os.path.isdir(directory):
-            raise ConfigurationError("Is not a directory: "+directory)
+        if not directory or not os.path.isdir(directory):
+            raise ConfigurationError("Is not a directory: "+str(directory))
         
         config_file = self.bundle.filesystem.path(Config.BUNDLE_CONFIG_FILE)
         
@@ -28,14 +29,17 @@ class Config(object):
         
         self.config_file = config_file
         self.directory = directory
-        
-        self.get_or_new_dataset()
-        
-        bfr = self.filerec(Config.BUNDLE_CONFIG_FILE)
+
+        bfr = self.filerec(Config.BUNDLE_CONFIG_FILE, True)
              
+
         if bfr._is_new or self.file_changed(bfr):
             self.get_or_new_dataset(delete=True)
             self.reload_config()
+            self.bundle.filesystem.ref(Config.BUNDLE_CONFIG_FILE).update()
+            
+        else:
+            self.get_or_new_dataset()
      
     def group(self,group):
         '''Extract a set of configuration items from the database and 
@@ -64,10 +68,20 @@ class Config(object):
         s = self.bundle.database.session
         ds = self.get_or_new_dataset()
          
+        # Delete all of the records for this dataset that have the
+        # bundle.yaml file as a source. 
+        (s.query(SAConfig)
+         .filter(SAConfig.d_id == ds.oid)
+         .filter(SAConfig.source == Config.BUNDLE_CONFIG_FILE )
+         .delete())
+        
+         
         for group,gvalues in self.config_dict.items():
             for key, value in gvalues.items():
                 try:
+                    # This is useless here, btu also harmless. 
                     o = (s.query(SAConfig)
+                         .filter(SAConfig.d_id == ds.oid)
                          .filter(SAConfig.group == group)
                          .filter(SAConfig.key == key)
                          .one())
@@ -78,25 +92,22 @@ class Config(object):
                                group=group,
                                key=key,
                                source=Config.BUNDLE_CONFIG_FILE,
-                               d_id=ds.oid
+                               d_id=ds.oid,
+                               value = value
                                )
                     s.add(o)
         s.commit()
 
-    def file_hash(self, path):
-        '''Compute hash of a file in chuncks'''
-        import hashlib
-        md5 = hashlib.md5()
-        with open(path,'rb') as f: 
-            for chunk in iter(lambda: f.read(8192), b''): 
-                md5.update(chunk)
-        return md5.hexdigest()
+    
     
     def file_changed(self,filerec):
         a_path = self.bundle.filesystem.path(filerec.path)
         
-        if os.path.getmtime(a_path) < filerec.modified:
-            if self.file_hash(a_path) != filerec.hash:
+        t1 = filerec.modified
+        t2 = os.path.getmtime(a_path)
+     
+        if  t2 > t1:
+            if Filesystem.file_hash(a_path) != filerec.content_hash:
                 return True
             else:
                 return False
@@ -104,7 +115,10 @@ class Config(object):
             return False
             
     
-    def filerec(self, rel_path):
+    def add_file(self, rel_path):
+        return self.filerec(rel_path, True)
+    
+    def filerec(self, rel_path, create=False):
         '''Return a database record for a file'''
     
         from databundles.orm import File
@@ -112,13 +126,20 @@ class Config(object):
  
         s = self.bundle.database.session
         
+        if not rel_path:
+            raise ValueError('Must supply rel_path')
+        
         try:
             o = (s.query(File).filter(File.path==rel_path).one())
             o._is_new = False
-        except sqlalchemy.orm.exc.NoResultFound:
+        except sqlalchemy.orm.exc.NoResultFound as e:
+           
+            if not create:
+                raise e
+           
             a_path = self.bundle.filesystem.path(rel_path)
             o = File(path=rel_path,
-                     content_hash=self.file_hash(a_path),
+                     content_hash=Filesystem.file_hash(a_path),
                      modified=os.path.getmtime(a_path),
                      process='none'
                      )
@@ -127,6 +148,30 @@ class Config(object):
             o._is_new = True
             
         return o
+    
+    
+    def get_url(self,source_url, create=False):
+        '''Return a database record for a file'''
+    
+        from databundles.orm import File
+        import sqlalchemy.orm.exc
+ 
+        s = self.bundle.database.session
+        
+        try:
+            o = (s.query(File).filter(File.source_url==source_url).one())
+         
+        except sqlalchemy.orm.exc.NoResultFound:
+          
+            o = File(source_url=source_url,process='none' )
+            s.add(o)
+          
+          
+        o.session = s # Files have SavableMixin
+        return o
+    
+    def get_or_new_url(self, source_url):
+        return self.get_url(source_url, True)
     
     def get_or_new_dataset(self, delete = False):
         '''Initialize the identity, creating a dataset record, 
@@ -139,6 +184,7 @@ class Config(object):
 
         try:
             if delete:
+             
                 s.delete(s.query(Dataset).one())
                 ds = None
             else:
@@ -155,6 +201,17 @@ class Config(object):
             s.add(ds)
             s.commit()
 
+            # Re-write the bundle.yaml file with the dataset id. 
+            if not c.get('identity',False) or not c.get('identity').get('id',False):
+                import yaml
+                c['identity']['id'] = ds.oid.encode('ascii','ignore')
+                yaml.dump(c, file(self.config_file, 'w'), 
+                          indent=4, default_flow_style=False)
+            
+                bfr = self.bundle.filesystem.ref(Config.BUNDLE_CONFIG_FILE)
+              
+                bfr.update()
+
         return ds
 
     @property
@@ -168,3 +225,7 @@ class Config(object):
         except:
             raise NotImplementedError,''' Bundle.yaml missing. 
             Auto-creation not implemented'''
+            
+
+         
+            

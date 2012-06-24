@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-06-23 11:13                                */
+/* Created on:            2012-06-24 13:47                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -26,6 +26,7 @@ CREATE TABLE "datasets" (
     "d_variation" TEXT,
     "d_creator" TEXT,
     "d_revision" TEXT,
+    "d_data" TEXT,
     CONSTRAINT "PK_datasets" PRIMARY KEY ("d_id")
 );
 
@@ -36,8 +37,10 @@ CREATE TABLE "datasets" (
 CREATE TABLE "files" (
     "f_id" INTEGER NOT NULL,
     "f_path" TEXT NOT NULL,
-    "f_process" TEXT NOT NULL,
+    "f_process" TEXT,
+    "f_source_url" TEXT,
     "f_hash" TEXT,
+    "f_state" TEXT,
     "f_modified" INTEGER,
     CONSTRAINT "PK_files" PRIMARY KEY ("f_id")
 );
@@ -53,8 +56,9 @@ CREATE TABLE "tables" (
     "t_altname" TEXT,
     "t_description" TEXT,
     "t_keywords" TEXT,
+    "t_data" TEXT,
     CONSTRAINT "PK_tables" PRIMARY KEY ("t_id"),
-    CONSTRAINT "TUC_tables_1" UNIQUE ("t_name"),
+    CONSTRAINT "TUC_tables_1" UNIQUE ("t_name", "t_d_id"),
     FOREIGN KEY ("t_d_id") REFERENCES "datasets" ("d_id")
 );
 
@@ -65,7 +69,7 @@ CREATE TABLE "tables" (
 CREATE TABLE "columns" (
     "c_id" INTEGER NOT NULL,
     "c_t_id" TEXT NOT NULL,
-    "c_d_id" TEXT,
+    "c_d_id" TEXT NOT NULL,
     "c_name" TEXT,
     "c_altname" TEXT,
     "c_datatype" TEXT,
@@ -78,7 +82,8 @@ CREATE TABLE "columns" (
     "c_units" TEXT,
     "c_universe" TEXT,
     "c_scale" REAL,
-    CONSTRAINT "PK_columns" PRIMARY KEY ("c_id"),
+    "c_data" TEXT,
+    CONSTRAINT "PK_columns" PRIMARY KEY ("c_id", "c_t_id", "c_d_id"),
     CONSTRAINT "TUC_columns_1" UNIQUE ("c_d_id", "c_t_id", "c_id"),
     FOREIGN KEY ("c_t_id") REFERENCES "tables" ("t_id"),
     FOREIGN KEY ("c_d_id") REFERENCES "datasets" ("d_id")
@@ -104,15 +109,16 @@ CREATE TABLE "config" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "partitions" (
+    "p_d_id" TEXT NOT NULL,
     "p_id" TEXT NOT NULL,
-    "p_t_id" INTEGER,
-    "p_d_id" TEXT,
+    "p_name" TEXT,
     "p_space" TEXT,
     "p_time" TEXT,
-    "p_name" TEXT,
-    CONSTRAINT "PK_partitions" PRIMARY KEY ("p_id"),
-    FOREIGN KEY ("p_t_id") REFERENCES "tables" ("t_id"),
-    FOREIGN KEY ("p_d_id") REFERENCES "datasets" ("d_id")
+    "p_t_id" INTEGER,
+    "p_data" TEXT,
+    CONSTRAINT "PK_partitions" PRIMARY KEY ("p_d_id", "p_id"),
+    FOREIGN KEY ("p_d_id") REFERENCES "datasets" ("d_id"),
+    FOREIGN KEY ("p_t_id") REFERENCES "tables" ("t_id")
 );
 
 /* ---------------------------------------------------------------------- */

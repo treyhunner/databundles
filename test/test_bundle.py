@@ -10,12 +10,53 @@ class Test(unittest.TestCase):
 
     def setUp(self):
         
-        import os
-        bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-        bundle = Bundle(bundle_dir)     
-        bundle.database.delete()
+        import os.path, yaml
+        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
+        db_file = os.path.join(self.bundle_dir,'build/bundle.db')
+        if os.path.exists(db_file):
+            os.remove(db_file)
+        
+        bundle_yaml = '''
+build:
+    headers: sf1headers.csv
+    rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/
+    statesFile: States
+identity:
+    creator: clarinova.com
+    dataset: 2000 Population Census
+    revision: 1
+    source: census.gov
+    subset: SF1
+    variation: orig '''
      
-        self.bundle = Bundle(bundle_dir)
+        cf = os.path.join(self.bundle_dir,'bundle.yaml')
+      
+        yaml.dump(yaml.load(bundle_yaml), file(cf, 'w'), indent=4, default_flow_style=False)
+     
+     
+        self.bundle = Bundle(self.bundle_dir)
+      
+    def test_bundle_init(self):
+        
+        import yaml, time
+        
+        cd = self.bundle.config.config_dict
+        cf = self.bundle.config.config_file
+     
+        self.assertIn('id', cd['identity'])
+        self.assertEquals('clarinova.com', self.bundle.identity.creator)
+        oid = self.bundle.identity.oid
+    
+        time.sleep(1)
+       
+        # Test that the build.yaml file is reloaded, but that the
+        # id value does not change. 
+        cd['identity']['creator'] = 'foobar'
+        yaml.dump(cd, file(cf, 'w'), indent=4, default_flow_style=False)
+
+        bundle =  Bundle(self.bundle_dir)     
+        self.assertEquals('foobar', bundle.identity.creator)
+        self.assertEquals(oid, bundle.identity.oid)
       
     def test_identity(self):
         self.assertEqual('census.gov', self.bundle.identity.source)
@@ -32,11 +73,12 @@ class Test(unittest.TestCase):
         self.assertEqual('foobar-2000_population_census-sf1-orig-a7d9-r1', 
                          self.bundle.identity.name)
 
-    def test_tables(self):
+    def test_schema_direct(self):
+        '''Test adding tables directly to the schema'''
         s = self.bundle.schema
-        s.add_table('table 1', altname='alt name1')
-        s.add_table('table 2', altname='alt name2')
-        s.add_table('table 1', altname='alt name1')
+        s.add_table('table 1', altname='alt name a')
+        s.add_table('table 2', altname='alt name b')
+        s.add_table('table 1', altname='alt name c')
         
         self.bundle.identity.oid = 'foobar'
         
@@ -54,15 +96,23 @@ class Test(unittest.TestCase):
         for column in t.columns:
             print column.oid, column.name
         
-    def test_bundle_init(self):
+    def test_generate_schema(self):
+        self.bundle.schema.generate()
         
-        print self.bundle.config.group('identity')
-       
+    def test_data(self):
+        ds = self.bundle.config.get_or_new_dataset()
+        s = self.bundle.database.session
+    
+        ds.data['foo'] = 'bat'
         
+        print ds.data['foo']
         
+        s.commit()
+
+
 
 if __name__ == "__main__":
-    if False:
+    if True:
         unittest.main()
     else:
         suite = unittest.TestSuite()

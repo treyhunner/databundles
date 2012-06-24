@@ -16,13 +16,18 @@ class SimpleProperty(object):
         self.name = name
         self.value = default
         self.__doc__ = doc
+        
 
     def __get__(self, obj, objtype=None):
         #if obj is None:
         #    return self
     
         try:
-            return obj.__dict__['_'+self.name]
+            v =  obj.__dict__['_'+self.name]
+            return v
+        
+
+            
         except KeyError:
             # We return none because the fact that we are in this function means
             # that the right property was in the class, even if it does 
@@ -42,13 +47,21 @@ class SimpleProperty(object):
 class DbRowProperty(object):
     """a property that is linked to a row in the database"""
 
-    def __init__(self, name,  doc=None):
+    def __init__(self, name,  doc=None, **kwargs):
         self.name = name
         self.__doc__ = doc
+        self._ascii = kwargs.get('ascii',False);
 
     def __get__(self, obj, objtype=None):
-        return getattr(obj.row, self.name)
-
+        
+        v = getattr(obj.row, self.name)
+        
+        if self._ascii:
+            return v.encode('ascii','ignore')
+        else:
+            return v;
+        
+  
     def __set__(self, obj, value):   
         session = obj.bundle.database.session     
         setattr(obj.row, self.name, value)

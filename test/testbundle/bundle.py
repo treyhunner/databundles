@@ -16,7 +16,7 @@ class Bundle(Base):
     def schemaGenerator(self):
         '''Return schema rows'''
         
-        from databundles.config.orm import Table, Column
+        from databundles.orm import Table, Column
         
         yield Table(name='table1')
         yield Table(name='table2')

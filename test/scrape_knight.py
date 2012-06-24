@@ -6,7 +6,7 @@ Created on Jun 21, 2012
 
 
 def main():
-    import urllib, urlparse, pprint, csv
+    import urllib, csv
   
     from bs4 import BeautifulSoup
 

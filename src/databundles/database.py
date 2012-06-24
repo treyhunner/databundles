@@ -49,7 +49,7 @@ class Database(object):
         from sqlalchemy import create_engine  
         
         if not self._engine:
-            self._engine = create_engine('sqlite:///'+self.path) 
+            self._engine = create_engine('sqlite:///'+self.path, echo=False) 
             
         return self._engine
 
@@ -75,7 +75,7 @@ class Database(object):
  
         import sqlalchemy
  
-        from  databundles.config.database import Column
+        from  databundles.orm import Column
      
         type_map = { 
          None: sqlalchemy.types.Text,
@@ -111,6 +111,7 @@ class Database(object):
         return os.path.exists( self.path)
     
     def delete(self):
+        
         try :
             os.remove(self.path)
         except:
@@ -126,8 +127,10 @@ class Database(object):
         conn.commit()
         
     def create(self):
+        
         """Create the database from the base SQL"""
         if not self.exists():
+            
             import databundles
            
             script_str = os.path.join(os.path.dirname(databundles.__file__),

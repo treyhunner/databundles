@@ -4,8 +4,33 @@ Created on Jun 23, 2012
 @author: eric
 '''
 
-import os
 import os.path
+
+from databundles.orm import File
+
+class FileRef(File):
+    '''Extends the File orm class with awareness of the filsystem'''
+    def __init__(self, bundle):
+        
+        self.super_ = super(FileRef, self)
+        self.super_.__init__()
+        
+        self.bundle = bundle
+        
+ 
+    @property
+    def abs_path(self):
+        return self.bundle.filesystem.path(self.path)
+    
+    @property
+    def changed(self):
+        return os.path.getmtime(self.abs_path) > self.modified
+       
+    def update(self):
+        self.modified = os.path.getmtime(self.abs_path)
+        self.content_hash = Filesystem.file_hash(self.abs_path)
+        self.bundle.database.session.commit()
+        
 
 class Filesystem(object):
     
@@ -42,6 +67,19 @@ class Filesystem(object):
         '''Returns the root directory of the bundle '''
         return self.root_directory
 
+    def ref(self,rel_path):
+        
+        s = self.bundle.database.session
+        import sqlalchemy.orm.exc
+        
+        try:
+            o = s.query(FileRef).filter(FileRef.path==rel_path).one()
+            o.bundle = self.bundle
+        
+            return o
+        except  sqlalchemy.orm.exc.NoResultFound as e:
+            raise e
+
     def path(self, *args):
         '''Resolve a path that is relative to the bundle root into an 
         absoulte path'''
@@ -56,4 +94,13 @@ class Filesystem(object):
             os.makedirs(abs_path)
         return abs_path
  
+    @staticmethod
+    def file_hash(path):
+        '''Compute hash of a file in chuncks'''
+        import hashlib
+        md5 = hashlib.md5()
+        with open(path,'rb') as f: 
+            for chunk in iter(lambda: f.read(8192), b''): 
+                md5.update(chunk)
+        return md5.hexdigest()
  
