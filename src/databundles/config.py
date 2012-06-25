@@ -71,7 +71,7 @@ class Config(object):
         # Delete all of the records for this dataset that have the
         # bundle.yaml file as a source. 
         (s.query(SAConfig)
-         .filter(SAConfig.d_id == ds.oid)
+         .filter(SAConfig.d_id == ds.id_)
          .filter(SAConfig.source == Config.BUNDLE_CONFIG_FILE )
          .delete())
         
@@ -81,7 +81,7 @@ class Config(object):
                 try:
                     # This is useless here, btu also harmless. 
                     o = (s.query(SAConfig)
-                         .filter(SAConfig.d_id == ds.oid)
+                         .filter(SAConfig.d_id == ds.id_)
                          .filter(SAConfig.group == group)
                          .filter(SAConfig.key == key)
                          .one())
@@ -92,7 +92,7 @@ class Config(object):
                                group=group,
                                key=key,
                                source=Config.BUNDLE_CONFIG_FILE,
-                               d_id=ds.oid,
+                               d_id=ds.id_,
                                value = value
                                )
                     s.add(o)
@@ -204,7 +204,7 @@ class Config(object):
             # Re-write the bundle.yaml file with the dataset id. 
             if not c.get('identity',False) or not c.get('identity').get('id',False):
                 import yaml
-                c['identity']['id'] = ds.oid.encode('ascii','ignore')
+                c['identity']['id'] = ds.id_.encode('ascii','ignore')
                 yaml.dump(c, file(self.config_file, 'w'), 
                           indent=4, default_flow_style=False)
             

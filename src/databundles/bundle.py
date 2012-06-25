@@ -35,9 +35,12 @@ class Bundle(object):
         self.database = Database(self)
         
         self.config = Config(self,directory)
+        
         self.identity = Identity(self)
         self.schema = Schema(self)
         self.partitions = Partitions(self)
+
+        
 
     def log(self, message, **kwargs):
         '''Log the messsage'''

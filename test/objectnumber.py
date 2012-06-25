@@ -4,51 +4,54 @@ Created on Jun 13, 2012
 @author: eric
 '''
 import unittest
-
+from databundles.objectnumber import ObjectNumber
 
 class Test(unittest.TestCase):
 
-
     def test_basic(self):
-        from databundles.objectnumber import ObjectNumber
-        
-        on1 = ObjectNumber(1)
-        
-        print "On 1: "+str(on1)
-        
-        on2 = ObjectNumber()
-        
-        print "On Empty: "+str(on2)
-        
-        on = ObjectNumber(on2)
-        
-        print "On Copy: "+str(on)
-        
-        on = ObjectNumber(on2,10)
-        
-        print "On Copy: "+str(on)
+      
+        self.assertEquals('a1',str(ObjectNumber(1)))
+        self.assertEquals('b101',str(ObjectNumber(1,1)))
+        self.assertEquals('c10101',str(ObjectNumber(1,1,1)))
 
-        on = ObjectNumber(on,10,20)
+        with self.assertRaises(ValueError):
+            self.assertEquals('aFooBar',str(ObjectNumber('FooBar')))
+      
         
-        print "On Copy: "+str(on)
+        self.assertEquals('aFooBar',str(ObjectNumber('aFooBar')))
+        self.assertEquals('aFooBar',str(ObjectNumber(ObjectNumber('aFooBar'))))
+ 
+        on = ObjectNumber('aFooBar')
+
+        self.assertEquals('bFooBar00',str(ObjectNumber(on,0)))
+        self.assertEquals('cFooBar0000',str(ObjectNumber(on,0,0)))
+        self.assertEquals('bFooBarZZ',str(ObjectNumber(on,3843)))
+        self.assertEquals('cFooBarZZZZ',str(ObjectNumber(on,3843,3843)))
         
-        on = ObjectNumber(on,10,3843)
+        with self.assertRaises(ValueError):
+            on = ObjectNumber(on,3844)
+            print str(on)
+     
+        with self.assertRaises(ValueError):
+            on = ObjectNumber(on,3844,3844)
+            print str(on)
+     
+        o = ObjectNumber('aFooBar')
+        self.assertIsNone(o.table);
+        self.assertIsNone(o.column);
         
-        print "On Copy: "+str(on)
+        o = ObjectNumber('bFooBar03')
+        self.assertEquals(3,o.table);
+        self.assertIsNone(o.column);
         
-    def test_values(self):
-        from databundles.objectnumber import ObjectNumber
+        o = ObjectNumber('cFooBar0302')
+        self.assertEquals(3,o.table);
+        self.assertEquals(2,o.column);
         
-        print ObjectNumber('foo')
-        
-        print ObjectNumber('foo',1)
-        
-        print ObjectNumber('foo',2)
-        
-        print ObjectNumber('foo',1,3)
-        
-        print ObjectNumber('foo',2,4)
-        
+        o = ObjectNumber('cFooBar0302',20)
+        o.type = ObjectNumber.TYPE.TABLE
+        self.assertEquals(20,o.table);
+        self.assertEquals('bFooBar0k',str(o))
         
 
 if __name__ == "__main__":

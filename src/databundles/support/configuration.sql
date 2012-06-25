@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-06-24 13:47                                */
+/* Created on:            2012-06-24 17:42                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -50,15 +50,17 @@ CREATE TABLE "files" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "tables" (
-    "t_id" INTEGER NOT NULL,
+    "t_id" TEXT,
+    "t_sequence_id" INTEGER NOT NULL,
     "t_d_id" TEXT NOT NULL,
-    "t_name" TEXT,
+    "t_name" TEXT NOT NULL,
     "t_altname" TEXT,
     "t_description" TEXT,
     "t_keywords" TEXT,
     "t_data" TEXT,
     CONSTRAINT "PK_tables" PRIMARY KEY ("t_id"),
     CONSTRAINT "TUC_tables_1" UNIQUE ("t_name", "t_d_id"),
+    CONSTRAINT "TUC_tables_2" UNIQUE ("t_d_id", "t_sequence_id"),
     FOREIGN KEY ("t_d_id") REFERENCES "datasets" ("d_id")
 );
 
@@ -67,9 +69,9 @@ CREATE TABLE "tables" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "columns" (
-    "c_id" INTEGER NOT NULL,
-    "c_t_id" TEXT NOT NULL,
-    "c_d_id" TEXT NOT NULL,
+    "c_id" TEXT NOT NULL,
+    "c_sequence_id" INTEGER NOT NULL,
+    "c_t_id" TEXT,
     "c_name" TEXT,
     "c_altname" TEXT,
     "c_datatype" TEXT,
@@ -83,10 +85,10 @@ CREATE TABLE "columns" (
     "c_universe" TEXT,
     "c_scale" REAL,
     "c_data" TEXT,
-    CONSTRAINT "PK_columns" PRIMARY KEY ("c_id", "c_t_id", "c_d_id"),
-    CONSTRAINT "TUC_columns_1" UNIQUE ("c_d_id", "c_t_id", "c_id"),
-    FOREIGN KEY ("c_t_id") REFERENCES "tables" ("t_id"),
-    FOREIGN KEY ("c_d_id") REFERENCES "datasets" ("d_id")
+    CONSTRAINT "PK_columns" PRIMARY KEY ("c_id"),
+    CONSTRAINT "TUC_columns_1" UNIQUE ("c_sequence_id", "c_t_id"),
+    CONSTRAINT "TUC_columns_2" UNIQUE ("c_sequence_id", "c_t_id"),
+    FOREIGN KEY ("c_t_id") REFERENCES "tables" ("t_id")
 );
 
 /* ---------------------------------------------------------------------- */
@@ -109,14 +111,13 @@ CREATE TABLE "config" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "partitions" (
+    "p_id" TEXT,
     "p_d_id" TEXT NOT NULL,
-    "p_id" TEXT NOT NULL,
-    "p_name" TEXT,
     "p_space" TEXT,
     "p_time" TEXT,
-    "p_t_id" INTEGER,
+    "p_t_id" TEXT,
     "p_data" TEXT,
-    CONSTRAINT "PK_partitions" PRIMARY KEY ("p_d_id", "p_id"),
+    CONSTRAINT "PK_partitions" PRIMARY KEY ("p_id"),
     FOREIGN KEY ("p_d_id") REFERENCES "datasets" ("d_id"),
     FOREIGN KEY ("p_t_id") REFERENCES "tables" ("t_id")
 );

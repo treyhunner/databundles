@@ -61,14 +61,28 @@ class Partitions(object):
         return self._partition
     
     def generate(self):
-        from databundles.orm import Partition
+        from databundles.orm import Partition as OrmPartition, Table
       
         s = self.bundle.database.session
 
-        s.query(Partition).delete()
-      
+        s.query(OrmPartition).delete()
 
-        for i in self.bundle.partitionGenerator():       
-            print i.name
-        
+        for i in self.bundle.partitionGenerator(): 
+            table = None
+            p = OrmPartition(name = i.name,
+                             space = i.pid.space,
+                             time=i.pid.time
+                             ) 
+            
+            if i.pid.table:
+                try:
+                    table = s.query(Table).filter(Table.name==i.pid.table).one()
+                except:
+                    table = None
+            else:
+                table = None 
+                
+                
+            p.table=table.sequence_id
+ 
         s.commit()

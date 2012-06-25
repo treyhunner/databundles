@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-06-24 13:47                                */
+/* Created on:            2012-06-24 17:42                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -18,8 +18,6 @@
 /* ---------------------------------------------------------------------- */
 
 /* Drop constraints */
-
-ALTER TABLE "partitions" DROP CONSTRAINT "NN_partitions_p_id";
 
 ALTER TABLE "partitions" DROP CONSTRAINT "PK_partitions";
 
@@ -49,11 +47,13 @@ DROP TABLE "config";
 
 ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_id";
 
-ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_t_id";
+ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_sequence_id";
 
 ALTER TABLE "columns" DROP CONSTRAINT "PK_columns";
 
 ALTER TABLE "columns" DROP CONSTRAINT "TUC_columns_1";
+
+ALTER TABLE "columns" DROP CONSTRAINT "TUC_columns_2";
 
 /* Drop table */
 
@@ -65,13 +65,15 @@ DROP TABLE "columns";
 
 /* Drop constraints */
 
-ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_id";
+ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_sequence_id";
 
 ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_d_id";
 
 ALTER TABLE "tables" DROP CONSTRAINT "PK_tables";
 
 ALTER TABLE "tables" DROP CONSTRAINT "TUC_tables_1";
+
+ALTER TABLE "tables" DROP CONSTRAINT "TUC_tables_2";
 
 /* Drop table */
 

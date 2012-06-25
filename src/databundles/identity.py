@@ -12,7 +12,7 @@ class Identity(object):
     
     from databundles.properties import DbRowProperty
     
-    oid = DbRowProperty("oid",None,ascii=True)
+    id_ = DbRowProperty("id_",None,ascii=True)
     source = DbRowProperty("source",None)
     dataset = DbRowProperty("dataset",None)
     subset = DbRowProperty("subset",None)

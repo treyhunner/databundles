@@ -45,7 +45,7 @@ identity:
      
         self.assertIn('id', cd['identity'])
         self.assertEquals('clarinova.com', self.bundle.identity.creator)
-        oid = self.bundle.identity.oid
+        oid = self.bundle.identity.id_
     
         time.sleep(1)
        
@@ -56,7 +56,10 @@ identity:
 
         bundle =  Bundle(self.bundle_dir)     
         self.assertEquals('foobar', bundle.identity.creator)
-        self.assertEquals(oid, bundle.identity.oid)
+        self.assertEquals(oid, bundle.identity.id_)
+        
+        self.bundle.database.session.commit() # Catch any dangling commits
+        
       
     def test_identity(self):
         self.assertEqual('census.gov', self.bundle.identity.source)
@@ -72,6 +75,8 @@ identity:
         
         self.assertEqual('foobar-2000_population_census-sf1-orig-a7d9-r1', 
                          self.bundle.identity.name)
+        
+        self.bundle.database.session.commit() # Catch any dangling commits
 
     def test_schema_direct(self):
         '''Test adding tables directly to the schema'''
@@ -95,9 +100,15 @@ identity:
         
         for column in t.columns:
             print column.oid, column.name
+            
+        self.bundle.database.session.commit() # Catch any dangling commits
+            
         
     def test_generate_schema(self):
         self.bundle.schema.generate()
+        
+        
+        self.bundle.database.session.commit() # Catch any dangling commits
         
     def test_data(self):
         ds = self.bundle.config.get_or_new_dataset()
@@ -108,6 +119,8 @@ identity:
         print ds.data['foo']
         
         s.commit()
+        
+        
 
 
 

@@ -29,43 +29,87 @@ class ObjectNumber(object):
         Constructor
         '''
         
-        if table == None and column == None:
-            self._type = self.TYPE.DATASET
-        elif table != None and column == None:
-            self._type = self.TYPE.DATASET
-        elif table != None and column != None:  
-            self._type = self.TYPE.DATASET
-        else:
-            raise "Bad Arguments";
-
-        self.table = table
-        self.column = column
-
-        # If the dataset is not defined, create a new dataset number. 
-        if dataset == None:
-            import time
-            dataset = int(time.time())
-        
         if isinstance(dataset, ObjectNumber):
+            # Copy constructor
+            if table is None: 
+                table = dataset.table
+                
+            if column is None:
+                column = dataset.column
+            
             dataset = dataset.dataset
-          
-    
-        if isinstance(dataset, int):
+                 
+        elif isinstance(dataset, int):
             
             # This calc is OK until 31 Dec 2053 00:00:00 GMT
             if dataset > self.EPOCH:
                 dataset = dataset - self.EPOCH
-                   
-            self.dataset = ObjectNumber.base62_encode(dataset)
+          
         elif isinstance(dataset, str) or isinstance(dataset, unicode):
-            self.dataset = dataset
-        
+            
+            if  isinstance(dataset, unicode):
+                dataset = dataset.encode('ascii')
+          
+            if dataset[0] == self.TYPE.DATASET:
+                dataset = int(ObjectNumber.base62_decode(dataset[1:]))
+            elif dataset[0] == self.TYPE.TABLE:
+                if table is None:
+                    table = int(ObjectNumber.base62_decode(dataset[-2:]))
+                dataset = int(ObjectNumber.base62_decode(dataset[1:-2]))
+            elif dataset[0] == self.TYPE.COLUMN:       
+                if column is None:
+                    column = int(ObjectNumber.base62_decode(dataset[-2:]))
+                if table is None:
+                    table = int(ObjectNumber.base62_decode(dataset[-4:-2]))
+                dataset = int(ObjectNumber.base62_decode(dataset[1:-4]))
+            else:
+                raise ValueError('Unknow type character: '+dataset[0])
+           
+            
+        elif dataset is None:
+            import time
+            dataset = int(time.time())-self.EPOCH
         else:
             raise TypeError('dataset value must be an integer or a string. got: '
                             +str(type(dataset)))
-        
 
-  
+        if table is None and column is None:
+            self.type = self.TYPE.DATASET
+            
+        elif table is not None and column is None:
+            self.type = self.TYPE.TABLE
+            
+        elif table is not None and column is not None:  
+            self.type = self.TYPE.COLUMN
+            
+        else:
+            raise "Bad Arguments";
+
+        if table is not None:
+            self._table = table
+        else:
+            self._table = None
+            
+        if column is not None:
+            self._column = column
+        else:
+            self._column = None
+
+        if isinstance(dataset, str):
+            self.dataset =ObjectNumber.base62_decode(dataset)
+        elif isinstance(dataset, int):
+            self.dataset = dataset
+        else:
+            raise ValueError('Data set must end up as a string or an int')
+        
+        if self._table >  self.TCMAXVAL:
+            raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
+        
+        if self._column >  self.TCMAXVAL:
+            raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
+        
+       
+ 
     def normalize_id(self):
         pass
   
@@ -92,7 +136,7 @@ class ObjectNumber(object):
         return ''.join(arr)
 
     @classmethod
-    def base62_decode(string):
+    def base62_decode(cls,string):
         """Decode a Base X encoded string into the number
     
         Arguments:
@@ -126,59 +170,65 @@ class ObjectNumber(object):
  
     @property 
     def table(self):
-        return self.table_
+        
+        if self._table >  self.TCMAXVAL:
+            raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
+        
+        return self._table
     
     @table.setter
     def table(self, value): #@DuplicatedSignature         
         if isinstance(value, int):
             if value < 0 or value > self.TCMAXVAL:
                 raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
-            self.table_ = ObjectNumber.base62_encode(value).rjust(2,'0')
+            self._table = value 
         elif isinstance(value, str) or isinstance(value, unicode) :
-            self.table_ = value
-        elif value == None:
-            self.table_ = None
+            self._table = ObjectNumber.base62_decode(value)
+        elif value is None:
+            self._table = None
         else:
             raise TypeError, "table argument must be an int or str. Got "+type(value).__name__
-
- 
- 
-    @property
-    def table_number(self):
-        return ObjectNumber.base62_decode(self.table)
-
-    
-    @property
-    def column_number(self):
-        return ObjectNumber.base62_decode(self.column)
-    
-    
+   
     @property 
     def column(self):
-        return self.column_
+        
+        if self._column >  self.TCMAXVAL:
+            raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
+        
+        return self._column
     
     @column.setter
     def column(self, value): #@DuplicatedSignature
         if isinstance(value, int):              
             if value < 0 or value > self.TCMAXVAL:
                 raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
-            self.column_ = ObjectNumber.base62_encode(value).rjust(2,'0')
+            self._column = value
         elif isinstance(value, str):
-            self.column_ = value
-        elif value == None:
-            self.column_ = None
+            self._column =  ObjectNumber.base62_decode(value)
+        elif value is None:
+            self._column = None
         else:
             raise TypeError, "column argument must be an int or str. Got "+type(value).__name__
  
     
     
     def __str__(self):
-        if self.column:
-            return self._type+self.dataset+self.table+self.column
-        elif self.table:
-            return self._type+self.dataset+self.table
+        if self.type == self.TYPE.COLUMN:
+  
+            return (self.type+
+                    ObjectNumber.base62_encode(self.dataset)+
+                    ObjectNumber.base62_encode(self.table).rjust(2,'0')+
+                    ObjectNumber.base62_encode(self.column).rjust(2,'0'))
+            
+        elif self.type == self.TYPE.TABLE:
+            return (self.type+
+                    ObjectNumber.base62_encode(self.dataset)+
+                    ObjectNumber.base62_encode(self.table).rjust(2,'0'))
         else:
-            return self._type+self.dataset
-        
-        
+            return (self.type+ObjectNumber.base62_encode(self.dataset))
+           
+    def __repr__(self):
+        return "<ObjectNumber:{}:{}:{}:{}>".format(self.type, self.dataset, self._table, self._column)
+
+   
         

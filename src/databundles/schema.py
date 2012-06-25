@@ -10,10 +10,10 @@ class Schema(object):
     def __init__(self, bundle):
         self.bundle = bundle
         
-        if not self.bundle.identity.oid:
+        if not self.bundle.identity.id_:
             raise ValueError("self.bundle.identity.oid not set")
         
-        self.dataset_id = self.bundle.identity.oid
+        self.dataset_id = self.bundle.identity.id_
         
       
     def generate(self):
@@ -21,7 +21,8 @@ class Schema(object):
         from databundles.orm import Table, Column
       
         s = self.bundle.database.session
-
+       
+        
         s.query(Table).delete()
         s.query(Column).delete()
        
@@ -91,7 +92,5 @@ class Schema(object):
     @property
     def columns(self):
         '''Return a list of tables for this bundle'''
-        from databundles.orm import Column
-        return (self.bundle.database.session.query(Column)
-                .filter(Column.d_id==self.dataset_id)
-                .all())
+        
+        raise Exception("not implemented")

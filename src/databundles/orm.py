@@ -3,14 +3,20 @@ Created on Jun 21, 2012
 
 @author: eric
 '''
-from sqlalchemy.ext.declarative import declarative_base
-Base = declarative_base()
+from sqlalchemy import event
 from sqlalchemy import Column as SAColumn, Integer
 from sqlalchemy import Float as Real,  Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import TypeDecorator, TEXT
-import json
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.mutable import Mutable
+
+from sqlalchemy.sql import text
+from objectnumber import  ObjectNumber
+
+import json
+
+Base = declarative_base()
 
 class JSONEncodedDict(TypeDecorator):
     "Represents an immutable structure as a json-encoded string."
@@ -67,7 +73,7 @@ class SavableMixin(object):
 class Dataset(Base):
     __tablename__ = 'datasets'
     
-    oid = SAColumn('d_id',Text, primary_key=True)
+    id_ = SAColumn('d_id',Text, primary_key=True)
     name = SAColumn('d_name',Integer, unique=True)
     source = SAColumn('d_source',Text)
     dataset = SAColumn('d_dataset',Text)
@@ -79,11 +85,10 @@ class Dataset(Base):
 
     tables = relationship("Table", backref='dataset', cascade='all', 
                           passive_updates=False)
-    columns = relationship("Column", backref='dataset', cascade='all', 
-                           passive_updates=False)
+   
 
     def __init__(self,**kwargs):
-        self.oid = kwargs.get("oid",kwargs.get("id", None)) 
+        self.id_ = kwargs.get("oid",kwargs.get("id", None)) 
         self.name = kwargs.get("name",None) 
         self.source = kwargs.get("source",None) 
         self.dataset = kwargs.get("dataset",None) 
@@ -92,9 +97,9 @@ class Dataset(Base):
         self.creator = kwargs.get("creator",None) 
         self.revision = kwargs.get("revision",None) 
 
-        if not self.oid:
+        if not self.id_:
             from databundles.objectnumber import ObjectNumber
-            self.oid = str(ObjectNumber())
+            self.id_ = str(ObjectNumber())
 
     def init_id(self):
         '''Create a new dataset id'''
@@ -106,9 +111,9 @@ class Dataset(Base):
 class Column(Base):
     __tablename__ = 'columns'
 
-    sequence_id = SAColumn('c_id',Integer, primary_key=True)
-    t_id = SAColumn('c_t_id',Text,ForeignKey('tables.t_id'), primary_key=True)
-    d_id = SAColumn('c_d_id',Text,ForeignKey('datasets.d_id'), primary_key=True)
+    id_ = SAColumn('c_id',Text, primary_key=True)
+    sequence_id = SAColumn('c_sequence_id',Integer)
+    t_id = SAColumn('c_t_id',Text,ForeignKey('tables.t_id'))
     name = SAColumn('c_name',Text, unique=True)
     altname = SAColumn('c_altname',Text)
     datatype = SAColumn('c_datatype',Text)
@@ -133,9 +138,9 @@ class Column(Base):
 
 
     def __init__(self,**kwargs):
-        self.sequence_id = kwargs.get("id",None) 
-        self.t_id = kwargs.get("t_id",None) 
-        self.d_id = kwargs.get("d_id",None) 
+        self.id_ = kwargs.get("oid",None) 
+        self.sequence_id = kwargs.get("sequence_id",None) 
+        self.t_id = kwargs.get("t_id",None)  
         self.name = kwargs.get("name",None) 
         self.altname = kwargs.get("altname",None) 
         self.datatype = kwargs.get("datatype",None) 
@@ -153,14 +158,12 @@ class Column(Base):
         # the table_name attribute is not stored. It is only for
         # building the schema, linking the columns to tables. 
         self.table_name = kwargs.get("table_name",None) 
-        
-        
+
         if not self.name:
             raise ValueError('Must have a name')
 
     @property
     def oid(self):
-        from databundles.objectnumber import ObjectNumber
         return ObjectNumber(self.d_id, int(self.t_id),int(self.sequence_id))
 
     @staticmethod
@@ -171,19 +174,40 @@ class Column(Base):
         except TypeError:
             raise TypeError('Not a valid type for name '+str(type(name)))
 
+
+    @staticmethod
+    def before_insert(mapper, conn, target):
+        sql = text('''SELECT max(c_sequence_id)+1 FROM columns WHERE c_t_id = :tid''')
+
+        max_id, = conn.execute(sql, did=target.t_id).fetchone()
+  
+        if not max_id:
+            max_id = 1
+            
+        target.sequence_id = max_id
+        
+        Table.before_update(mapper, conn, target)
+
+    @staticmethod
+    def before_update(mapper, conn, target):
+        import uuid     
+        target.id_ = uuid.uuid4()
+   
     def __repr__(self):
         try :
             return "<columns: {}>".format(self.oid)
         except:
             return "<columns: {}>".format(self.name)
  
-   
-
+event.listen(Column, 'before_insert', Column.before_insert)
+event.listen(Column, 'before_update', Column.before_update)
+ 
 class Table(Base):
     __tablename__ ='tables'
 
-    sequence_id = SAColumn('t_id',Integer, primary_key=True)
+    id_ = SAColumn('t_id',Text, primary_key=True)
     d_id = SAColumn('t_d_id',Text,ForeignKey('datasets.d_id'))
+    sequence_id = SAColumn('t_sequence_id',Integer)
     name = SAColumn('t_name',Text, unique=True, nullable = False)
     altname = SAColumn('t_altname',Text)
     description = SAColumn('t_description',Text)
@@ -194,8 +218,9 @@ class Table(Base):
                             passive_updates=False)
 
     def __init__(self,**kwargs):
-        self.sequence_id = kwargs.get("id",None) 
-        self.d_id = kwargs.get("d_id",None) 
+        self.id_ = kwargs.get("id",None) 
+        self.d_id = kwargs.get("d_id",None)
+        self.sequence_id = kwargs.get("sequence_id",None)  
         self.name = kwargs.get("name",None) 
         self.altname = kwargs.get("altname",None) 
         self.description = kwargs.get("description",None) 
@@ -204,6 +229,26 @@ class Table(Base):
 
         if self.name:
             self.name = self.mangle_name(self.name)
+
+    @staticmethod
+    def before_insert(mapper, conn, target):
+        sql = text('''SELECT max(t_sequence_id)+1 FROM tables WHERE t_d_id = :did''')
+
+        max_id, = conn.execute(sql, did=target.d_id).fetchone()
+  
+        if not max_id:
+            max_id = 1
+            
+        target.sequence_id = max_id
+        
+        Table.before_update(mapper, conn, target)
+        
+    @staticmethod
+    def before_update(mapper, conn, target):
+        import uuid
+        on = uuid.uuid4() #ObjectNumber(target.d_id, max_id) 
+        
+        target.id_ = str(on)
 
     @staticmethod
     def mangle_name(name):
@@ -215,12 +260,12 @@ class Table(Base):
 
     @property
     def oid(self):
-        from databundles.objectnumber import ObjectNumber
+       
         return ObjectNumber(self.d_id, self.sequence_id)
 
     def add_column(self, name_or_column, **kwargs):
 
-        from sqlalchemy.sql import text
+       
         import sqlalchemy.orm.session
         s = sqlalchemy.orm.session.Session.object_session(self)
         conn = s.connection()
@@ -240,20 +285,8 @@ class Table(Base):
                    .filter(Column.d_id==self.d_id)
                    .filter(Column.t_id==self.sequence_id)
                    .one())
-        except:
-            
-            sql = text('''SELECT max(c_id)+1 FROM columns 
-                WHERE c_t_id = :tid AND c_d_id = :did''')
-   
-            max_id, = conn.execute(sql, tid=self.sequence_id, did=self.d_id).fetchone()
-            
-            if not max_id:
-                max_id = 1
-         
-            row = Column(name=name, 
-                        id = max_id,
-                        d_id=self.d_id,
-                        t_id=self.sequence_id)
+        except:      
+            row = Column(name=name, t_id=self.sequence_id)
             s.add(row)
             
         for key, value in kwargs.items():
@@ -261,12 +294,12 @@ class Table(Base):
                 setattr(row, key, value)
       
         return row
-        
-    
 
     def __repr__(self):
         return "<tables: {}>".format(self.oid)
      
+event.listen(Table, 'before_insert', Table.before_insert)
+event.listen(Table, 'before_update', Table.before_update)
 
 class Config(Base):
     __tablename__ = 'config'
@@ -313,13 +346,12 @@ class File(Base, SavableMixin):
 class Partition(Base):
     __tablename__ = 'partitions'
 
-    oid = SAColumn('p_id',Text, primary_key=True, nullable=False)
+    name = SAColumn('p_id',Text, primary_key=True, nullable=False)
     t_id = SAColumn('p_t_id',Integer,ForeignKey('tables.t_id'))
     d_id = SAColumn('p_d_id',Text,ForeignKey('datasets.d_id'))
     space = SAColumn('p_space',Text)
     time = SAColumn('p_time',Text)
-    name = SAColumn('p_name',Text)
-
+   
     table = relationship("Table", backref='partitions', cascade='all', 
                          passive_updates=False)
     dataset = relationship("Dataset", backref='partitions', cascade='all', 
