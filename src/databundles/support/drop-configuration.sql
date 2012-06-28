@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-06-24 17:42                                */
+/* Created on:            2012-06-25 13:33                                */
 /* ---------------------------------------------------------------------- */
 
 

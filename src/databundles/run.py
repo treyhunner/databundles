@@ -52,8 +52,8 @@ def run(argv, bundle_class):
         
     if 'build' in phases:
         if b.pre_build():
+            b.log("---- Build ---")
             if b.build():
-                b.log("---- Build ---")
                 b.post_build()
                 b.log("---- Done Building ---")
             else:

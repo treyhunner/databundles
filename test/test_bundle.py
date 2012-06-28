@@ -36,6 +36,9 @@ identity:
      
         self.bundle = Bundle(self.bundle_dir)
       
+    def test_new_bundle(self):
+        pass # Just create the bundle. 
+        
     def test_bundle_init(self):
         
         import yaml, time
@@ -57,9 +60,7 @@ identity:
         bundle =  Bundle(self.bundle_dir)     
         self.assertEquals('foobar', bundle.identity.creator)
         self.assertEquals(oid, bundle.identity.id_)
-        
-        self.bundle.database.session.commit() # Catch any dangling commits
-        
+
       
     def test_identity(self):
         self.assertEqual('census.gov', self.bundle.identity.source)
@@ -75,9 +76,7 @@ identity:
         
         self.assertEqual('foobar-2000_population_census-sf1-orig-a7d9-r1', 
                          self.bundle.identity.name)
-        
-        self.bundle.database.session.commit() # Catch any dangling commits
-
+     
     def test_schema_direct(self):
         '''Test adding tables directly to the schema'''
         s = self.bundle.schema
@@ -87,6 +86,7 @@ identity:
         
         self.bundle.identity.oid = 'foobar'
         
+        # Test that schema id changes propagate. 
         for table in self.bundle.schema.tables:
             self.assertEqual('foobar',table.d_id)
             print table.oid, table.name, table.altname
@@ -99,16 +99,13 @@ identity:
         t.add_column('col 3',altname='altname3')
         
         for column in t.columns:
-            print column.oid, column.name
-            
-        self.bundle.database.session.commit() # Catch any dangling commits
-            
+            print column.id_, column.name
+     
         
     def test_generate_schema(self):
         self.bundle.schema.generate()
         
         
-        self.bundle.database.session.commit() # Catch any dangling commits
         
     def test_data(self):
         ds = self.bundle.config.get_or_new_dataset()
@@ -119,10 +116,6 @@ identity:
         print ds.data['foo']
         
         s.commit()
-        
-        
-
-
 
 if __name__ == "__main__":
     if True:

@@ -51,7 +51,7 @@ class Config(object):
       
         q = (s.query(SAConfig)
              .filter(SAConfig.group == group)
-             .filter(SAConfig.d_id == ds.oid)
+             .filter(SAConfig.d_id == ds.id_)
              .all())
          
         gd = {} 
@@ -195,9 +195,12 @@ class Config(object):
             pass
 
         if not ds:
+            from identity import Identity
             c = self.config_dict
            
             ds = Dataset(**c['identity'])
+            ds.name = Identity.name_str(ds)
+            print repr(ds)
             s.add(ds)
             s.commit()
 

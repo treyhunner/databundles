@@ -6,6 +6,18 @@ Created on Jun 10, 2012
 
 import os.path
 
+class ValueInserter(object):
+    '''Inserts arrays of values into  database table'''
+    def __init__(self, bundle, table, db):
+        self.bundle = bundle
+        self.table = table
+        self.db = db
+        
+    def insert(self, values):    
+        con = self.db.engine.connect()
+        ins = self.table.insert().values(values).execution_options(autocommit=False)
+        con.execute(ins)
+           
 class Database(object):
     '''Represents a Sqlite database'''
 
@@ -24,7 +36,6 @@ class Database(object):
             self.file_path =  self.bundle.filesystem.path(bundle.filesystem.BUILD_DIR,self.name+".db")
         
         self.create() # Only creates if does not exist
-        
        
     @property
     def name(self):
@@ -59,6 +70,7 @@ class Database(object):
 
         return Inspector.from_engine(self.engine)
 
+
     @property
     def session(self):
         '''Return a SqlAlchemy session'''
@@ -69,44 +81,7 @@ class Database(object):
             self._session = Session()
             
         return self._session
-
-    def add_schema(self, ds):
-        '''Add schema from a databundles.config.database object'''
- 
-        import sqlalchemy
- 
-        from  databundles.orm import Column
-     
-        type_map = { 
-         None: sqlalchemy.types.Text,
-         Column.DATATYPE_TEXT: sqlalchemy.types.Text,
-         Column.DATATYPE_INTEGER:sqlalchemy.types.Integer,
-         Column.DATATYPE_REAL:sqlalchemy.types.Float,     
-         Column.DATATYPE_DATE: sqlalchemy.types.Date,
-         Column.DATATYPE_TIME:sqlalchemy.types.Time,
-         Column.DATATYPE_TIMESTAMP:sqlalchemy.types.DateTime,
-         }
-     
-        def translate_type(column):
-            # Creates a lot of unnecessary objects, but spped is not important here. 
-            
-            type_map[Column.DATATYPE_NUMERIC] = sqlalchemy.types.Numeric(column.precision, column.scale),
-            
-            return type_map[column.datatype]
-
-        metadata = self.metadata()
    
-        for table in ds.tables:
-            # Create the ID column
-            at = sqlalchemy.Table(table.name, metadata,sqlalchemy.Column('id',sqlalchemy.Integer, primary_key = True))
- 
-            for column in table.columns:
-                ac = sqlalchemy.Column(column.name, translate_type(column), primary_key = False)
-    
-                at.append_column(ac);
-        
-        metadata.create_all()
-        
     def exists(self):
         return os.path.exists( self.path)
     
@@ -129,22 +104,14 @@ class Database(object):
     def create(self):
         
         """Create the database from the base SQL"""
-        if not self.exists():
-            
-            import databundles
-           
+        if not self.exists():    
+            import databundles     
             script_str = os.path.join(os.path.dirname(databundles.__file__),
                                       Database.PROTO_SQL_FILE)
             self.load_sql(script_str)
-               
-           
-    def copy_table(self,table_name):
-        '''Copy a table from the prototype database to the current database, if it does not exist'''
-        
-        print table_name in self.inspector.get_table_names()
-        
-      
-    def table(self, table_name):  
+                   
+    def table(self, table_name): 
+        '''Get table metadata from the database''' 
         from sqlalchemy import Table
         metadata = self.metadata
         table = Table(table_name, metadata, autoload=True)
@@ -152,28 +119,28 @@ class Database(object):
         return table
         
 
-class PartitionDB(Database):
+class PartitionDb(Database):
     '''a database for a partition file. Partition databases don't have a full schema
     and can load tables as they are referenced, by copying them from the prototype. '''
 
-    def __init__(self, partition):
-        ''''''
-        super(PartitionDB, self).__init__(partition.bundle)  
-    
-    def table(self, table_name):
-        '''Return a table object, copying it from the protodb to thos one if it does not exist'''
-        
-        from sqlalchemy import Table
-        metadata = self.metadata
-        table = Table(table_name, metadata, autoload=True)
-        
-        return table
-    
+    def __init__(self, bundle, partition):
+        '''''' 
+        self.partition = partition
+        super(PartitionDb, self).__init__(bundle)  
+
     @property
     def name(self):
-        return Database.BUNDLE_DB_NAME
+        return self.partition.name
+    
+    def inserter(self, table_name):
+      
+        if not table_name in self.inspector.get_table_names():
+            raise Exception("Don't have table "+table_name)
+        
+        return ValueInserter(self.bundle, self.table(table_name), self)
     
     def create(self):
         '''Unlike the protodb, create() does not add tables. Tables are copied from the proto on demand''' 
       
     
+

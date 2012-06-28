@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-06-24 17:42                                */
+/* Created on:            2012-06-25 13:33                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -117,6 +117,7 @@ CREATE TABLE "partitions" (
     "p_time" TEXT,
     "p_t_id" TEXT,
     "p_data" TEXT,
+    "p_state" TEXT,
     CONSTRAINT "PK_partitions" PRIMARY KEY ("p_id"),
     FOREIGN KEY ("p_d_id") REFERENCES "datasets" ("d_id"),
     FOREIGN KEY ("p_t_id") REFERENCES "tables" ("t_id")

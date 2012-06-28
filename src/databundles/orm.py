@@ -37,8 +37,6 @@ class JSONEncodedDict(TypeDecorator):
             value = {}
         return value
 
-
-
 class MutationDict(Mutable, dict):
     @classmethod
     def coerce(cls, key, value): #@ReservedAssignment
@@ -74,17 +72,17 @@ class Dataset(Base):
     __tablename__ = 'datasets'
     
     id_ = SAColumn('d_id',Text, primary_key=True)
-    name = SAColumn('d_name',Integer, unique=True)
-    source = SAColumn('d_source',Text)
-    dataset = SAColumn('d_dataset',Text)
+    name = SAColumn('d_name',Integer, unique=True, nullable=False)
+    source = SAColumn('d_source',Text, nullable=False)
+    dataset = SAColumn('d_dataset',Text, nullable=False)
     subset = SAColumn('d_subset',Text)
     variation = SAColumn('d_variation',Text)
-    creator = SAColumn('d_creator',Text)
+    creator = SAColumn('d_creator',Text, nullable=False)
     revision = SAColumn('d_revision',Text)
     data = SAColumn('d_data', MutationDict.as_mutable(JSONEncodedDict))
 
-    tables = relationship("Table", backref='dataset', cascade='all', 
-                          passive_updates=False)
+    tables = relationship("Table", backref='dataset', cascade="delete")
+    partitions = relationship("Partition", backref='dataset', cascade="delete")
    
 
     def __init__(self,**kwargs):
@@ -98,15 +96,31 @@ class Dataset(Base):
         self.revision = kwargs.get("revision",None) 
 
         if not self.id_:
-            from databundles.objectnumber import ObjectNumber
             self.id_ = str(ObjectNumber())
 
+    
+    @property
+    def creatorcode(self):
+        from identity import Identity
+        return Identity._creatorcode(self)
+    
     def init_id(self):
         '''Create a new dataset id'''
         
     def __repr__(self):
-        return "<datasets: {}>".format(self.oid)
+        return """<datasets: id={} name={} source={} ds={} ss={} var={} creator={} rev={}>""".format(
+                    self.id_, self.name, self.source,
+                    self.dataset, self.subset, self.variation, 
+                    self.creator, self.revision)
+        
+    @staticmethod
+    def before_insert_update(mapper, conn, target):
+        pass
+        
+
      
+event.listen(Dataset, 'before_insert', Dataset.before_insert_update)
+event.listen(Dataset, 'before_update', Dataset.before_insert_update)
 
 class Column(Base):
     __tablename__ = 'columns'
@@ -162,10 +176,6 @@ class Column(Base):
         if not self.name:
             raise ValueError('Must have a name')
 
-    @property
-    def oid(self):
-        return ObjectNumber(self.d_id, int(self.t_id),int(self.sequence_id))
-
     @staticmethod
     def mangle_name(name):
         import re
@@ -179,19 +189,21 @@ class Column(Base):
     def before_insert(mapper, conn, target):
         sql = text('''SELECT max(c_sequence_id)+1 FROM columns WHERE c_t_id = :tid''')
 
-        max_id, = conn.execute(sql, did=target.t_id).fetchone()
+        max_id, = conn.execute(sql, tid=target.t_id).fetchone()
   
         if not max_id:
             max_id = 1
             
         target.sequence_id = max_id
         
-        Table.before_update(mapper, conn, target)
+        Column.before_update(mapper, conn, target)
 
     @staticmethod
     def before_update(mapper, conn, target):
-        import uuid     
-        target.id_ = uuid.uuid4()
+        table_on = ObjectNumber(target.t_id)
+        table_on.type = ObjectNumber.TYPE.COLUMN
+        table_on.column = target.sequence_id
+        target.id_ = str(table_on)
    
     def __repr__(self):
         try :
@@ -206,16 +218,16 @@ class Table(Base):
     __tablename__ ='tables'
 
     id_ = SAColumn('t_id',Text, primary_key=True)
-    d_id = SAColumn('t_d_id',Text,ForeignKey('datasets.d_id'))
-    sequence_id = SAColumn('t_sequence_id',Integer)
+    d_id = SAColumn('t_d_id',Text,ForeignKey('datasets.d_id'), nullable = False)
+    sequence_id = SAColumn('t_sequence_id',Integer, nullable = False)
     name = SAColumn('t_name',Text, unique=True, nullable = False)
     altname = SAColumn('t_altname',Text)
     description = SAColumn('t_description',Text)
     keywords = SAColumn('t_keywords',Text)
     data = SAColumn('t_data',MutationDict.as_mutable(JSONEncodedDict))
     
-    columns = relationship(Column, backref='table', cascade='all',
-                            passive_updates=False)
+    columns = relationship(Column, backref='table', cascade="delete")
+    partitions = relationship('Partition', backref='table', cascade="delete")
 
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",None) 
@@ -245,10 +257,11 @@ class Table(Base):
         
     @staticmethod
     def before_update(mapper, conn, target):
-        import uuid
-        on = uuid.uuid4() #ObjectNumber(target.d_id, max_id) 
         
-        target.id_ = str(on)
+        if isinstance(target,Column):
+            raise TypeError('Got a column instead of a table')
+                
+        target.id_ = str(ObjectNumber(target.d_id, target.sequence_id))
 
     @staticmethod
     def mangle_name(name):
@@ -282,12 +295,12 @@ class Table(Base):
         try:
             row = (s.query(Column)
                    .filter(Column.name==name)
-                   .filter(Column.d_id==self.d_id)
-                   .filter(Column.t_id==self.sequence_id)
+                   .filter(Column.t_id==self.id_)
                    .one())
         except:      
-            row = Column(name=name, t_id=self.sequence_id)
+            row = Column(name=name, t_id=self.id_)
             s.add(row)
+            s.commit()
             
         for key, value in kwargs.items():
             if key[0] != '_' and key not in ['d_id','t_id','name','sequence_id']:
@@ -346,26 +359,38 @@ class File(Base, SavableMixin):
 class Partition(Base):
     __tablename__ = 'partitions'
 
-    name = SAColumn('p_id',Text, primary_key=True, nullable=False)
+    id_ = SAColumn('p_id',Text, primary_key=True, nullable=False)
     t_id = SAColumn('p_t_id',Integer,ForeignKey('tables.t_id'))
     d_id = SAColumn('p_d_id',Text,ForeignKey('datasets.d_id'))
     space = SAColumn('p_space',Text)
     time = SAColumn('p_time',Text)
-   
-    table = relationship("Table", backref='partitions', cascade='all', 
-                         passive_updates=False)
-    dataset = relationship("Dataset", backref='partitions', cascade='all', 
-                           passive_updates=False)
+    state = SAColumn('p_state',Text)
+    data = SAColumn('p_data',MutationDict.as_mutable(JSONEncodedDict))
     
     def __init__(self,**kwargs):
-        self.id = kwargs.get("id",None) 
+        self.id_ = kwargs.get("id",kwargs.get("id_",None)) 
         self.t_id = kwargs.get("t_id",None) 
         self.d_id = kwargs.get("d_id",None) 
         self.space = kwargs.get("space",None) 
         self.time = kwargs.get("time",None) 
-        self.name = kwargs.get("name",None) 
+        self.data = kwargs.get('data',None)
+        self.state = kwargs.get('state',None)
+
+    def as_partition_id(self):
+        '''Return this partition information as a PartitionId'''
+        args = {'space':self.space, 'time':self.time}
+        
+        table = self.table
+        
+        if table is not None:
+            args['table'] = table.name
+        
+        
+        from partition import PartitionId
+        
+        return PartitionId(**args)
 
     def __repr__(self):
-        return "<partitions: {}>".format(self.oid)
+        return "<partitions: {}>".format(self.id_)
 
 

@@ -11,6 +11,7 @@ from filesystem import  Filesystem
 from config import Config
 from schema import Schema
 from partition import Partitions
+import os.path
 
 class Bundle(object):
     '''Represents a bundle, including all configuration 
@@ -39,12 +40,50 @@ class Bundle(object):
         self.identity = Identity(self)
         self.schema = Schema(self)
         self.partitions = Partitions(self)
-
         
+        self.ptick_count = 0;
 
     def log(self, message, **kwargs):
         '''Log the messsage'''
         print "LOG: ",message
+
+    def progress(self,message):
+        '''print message to terminal, in place'''
+        print 'PRG: ',message
+
+    def ptick(self,message):
+        '''Writes a tick to the stdout, without a space or newline'''
+        import sys
+        sys.stdout.write(message)
+        
+        self.ptick_count += 1
+       
+        if self.ptick_count % 72 == 0:
+            sys.stdout.write("\n")
+
+    from contextlib import contextmanager
+    @contextmanager
+    def extract_zip(self,path):
+        '''Context manager to extract a single file from a zip archive, and delete
+        it when finished'''
+        import zipfile
+        '''Extract a the files from a zip archive'''
+        
+        extractDir = self.filesystem.directory('extracts')
+
+        with zipfile.ZipFile(path) as zf:
+            for name in  zf.namelist():
+                extractFilename = os.path.join(extractDir,name)
+                
+                if os.path.exists(extractFilename):
+                    os.remove(extractFilename)
+                    
+                self.log('Extracting'+extractFilename+' from '+path)
+                name = name.replace('/','').replace('..','')
+                zf.extract(name,extractDir )
+                    
+                yield extractFilename
+                os.unlink(extractFilename)
 
     ###
     ### Process Methods
@@ -62,27 +101,7 @@ class Bundle(object):
     def post_prepare(self):
         return True
    
-    ### Download URLS from a list, hand coded, or from prepare() 
    
-    def pre_download(self):
-        return True  
-    
-    def download(self):
-        return True  
-    
-    def post_download(self):
-        return True  
-    
-    ### Transform to the database format
- 
-    def pre_transform(self):
-        return True
-    
-    def transform(self):
-        return True
-    
-    def post_transform(self):
-        return True
     
     ### Build the final package
 

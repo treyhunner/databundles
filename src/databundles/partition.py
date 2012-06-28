@@ -20,16 +20,18 @@ class PartitionId(object):
                                                 self.table])])
 
 class Partition(object):
-    '''Represents a bundle partition, part of the bunle data broken out in 
+    '''Represents a bundle partition, part of the bundle data broken out in 
     time, space, or by table. '''
     
-    def __init__(self, bundle, partition_id):
+    def __init__(self, bundle, partition_id, **kwargs):
         self.bundle = bundle
         self.pid= partition_id
+        self.data = kwargs.get('data',{})
+        self.state = kwargs.get('state', None)
       
     @property
     def name(self):
-        parts = self.bundle.identity.name_parts()
+        parts = self.bundle.identity.name_parts(self.bundle.identity)
         
         np = parts[:-1]+[str(self.pid)]+parts[-1:]
         
@@ -37,7 +39,11 @@ class Partition(object):
     
     @property
     def database(self):
-        pass
+        from database import PartitionDb
+        return PartitionDb(self.bundle, self)
+ 
+    def __repr__(self):
+        return "<partition: {}>".format(self.name)
  
 class Partitions(object):
     '''Continer and manager for the set of partitions. '''
@@ -45,34 +51,88 @@ class Partitions(object):
     def __init__(self, bundle):
         self.bundle = bundle
         
-    def new_parition(self, **kwargs):
-       
-        return Partition(self.bundle,  PartitionId(**kwargs))
+   
     
+    def partition(self, arg):
+        '''Get a local partition object from either a Partion ORM object, or
+        a partition name
         
-    def partition(self, partition_id):
+        Arguments:
+        arg    -- a orm.Partition or Partition object. 
         
-        if not self._partition:
-            p = self.config.get('partition',
-                                {'time':None, 'state': None, 'table': None})
-            self._partition=Partition(self,p.get('time', None),
-                                      p.get('space', None),p.get('table', None))
-       
-        return self._partition
+        
+        '''
+        
+        from databundles.orm import Partition as OrmPartition
+        
+        if isinstance(arg,OrmPartition):
+            orm_partition = arg
+        elif isinstance(arg, str):
+            s = self.bundle.database.session        
+            orm_partition = s.query(OrmPartition).filter(OrmPartition.id_==arg ).one
+            
+        else:
+            raise ValueError("Arg must be a Partition or")
+        
+        partition_id = orm_partition.as_partition_id()
+        
+        
+        return Partition(self.bundle, partition_id)
+      
+    
+    @property
+    def count(self):
+        from databundles.orm import Partition as OrmPartition
+        
+        s = self.bundle.database.session
+        return s.query(OrmPartition).count()
+    
+    @property
+    def query(self):
+        from databundles.orm import Partition as OrmPartition
+        
+        s = self.bundle.database.session
+        return s.query(OrmPartition)
+    
+    def find(self, time, space, table):
+        from databundles.orm import Partition as OrmPartition
+        q = self.query
+        
+        if time is not None:
+            q = q.filter(OrmPartition.time==time)
+
+        if space is not None:
+            q = q.filter(OrmPartition.space==space)
+    
+        if table is not None:
+            tr = self.bundle.schema.table(table)
+            q = q.filter(OrmPartition.t_id==tr.id_)
+        
+        return q.one()
     
     def generate(self):
         from databundles.orm import Partition as OrmPartition, Table
-      
+    
         s = self.bundle.database.session
-
+    
         s.query(OrmPartition).delete()
 
+        seen={}
         for i in self.bundle.partitionGenerator(): 
             table = None
-            p = OrmPartition(name = i.name,
+
+            if i.name in seen:
+                continue;
+            
+            seen[i.name]=True
+
+            p = OrmPartition(id = i.name,
                              space = i.pid.space,
-                             time=i.pid.time
-                             ) 
+                             time=i.pid.time,
+                             d_id = self.bundle.identity.id_,
+                             data=i.data,
+                             state=i.state) 
+            s.add(p)
             
             if i.pid.table:
                 try:
@@ -82,7 +142,7 @@ class Partitions(object):
             else:
                 table = None 
                 
-                
-            p.table=table.sequence_id
- 
+            if table is not None:
+                p.t_id = table.id_
+                  
         s.commit()

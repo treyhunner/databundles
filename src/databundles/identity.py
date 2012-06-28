@@ -32,47 +32,62 @@ class Identity(object):
         
     @property
     def creatorcode(self):
+        return self._creatorcode(self)
+    
+    @staticmethod
+    def _creatorcode(o):
         import hashlib
         # Create the creator code if it was not specified. 
-        return hashlib.sha1(self.creator).hexdigest()[0:4]
+        return hashlib.sha1(o.creator).hexdigest()[0:4]
+       
+    
        
     @property
     def name(self):
-        return  '-'.join(self.name_parts())
+        return  self.name_str(self)
     
-    def name_parts(self):
+    @classmethod
+    def name_str(cls,o):
+        return '-'.join(cls.name_parts(o))
+    
+    @staticmethod
+    def name_parts(o):
         """Return the parts of the name as a list, for additional processing. """
         name_parts = [];
      
+        if o is None:
+            o = self
+
+     
         try: 
-            name_parts.append(self.source)
-        except:
-            raise exceptions.ConfigurationError('Missing identity.source')
+            name_parts.append(o.source)
+        except Exception as e:
+            raise exceptions.ConfigurationError('Missing identity.source: '+str(e))  
   
         try: 
-            name_parts.append(self.dataset)
-        except:
-            raise exceptions.ConfigurationError('Missing identity.dataset')  
+            name_parts.append(o.dataset)
+        except Exception as e:
+            raise exceptions.ConfigurationError('Missing identity.dataset: '+str(e))  
         
         try: 
-            name_parts.append(self.subset)
-        except:
+            name_parts.append(o.subset)
+        except Exception as e:
             pass
         
         try: 
-            name_parts.append(self.variation)
-        except:
+            name_parts.append(o.variation)
+        except Exception as e:
             pass
         
         try: 
-            name_parts.append(self.creatorcode)
-        except:
-            raise exceptions.ConfigurationError('Missing identity.creatorcode')
+            name_parts.append(o.creatorcode)
+        except Exception as e:
+            raise exceptions.ConfigurationError('Missing identity.creatorcode: '+str(e))
    
         try: 
-            name_parts.append('r'+str(self.revision))
+            name_parts.append('r'+str(o.revision))
         except:
-            raise exceptions.ConfigurationError('Missing identity.revision')
+            raise exceptions.ConfigurationError('Missing identity.revision: '+str(e))  
         
         import re
         return [re.sub('[^\w\.]','_',s).lower() for s in name_parts]

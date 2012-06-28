@@ -84,7 +84,22 @@ class Filesystem(object):
         '''Resolve a path that is relative to the bundle root into an 
         absoulte path'''
      
-        return os.path.normpath(self.root_directory+'/'+os.path.join(*args))    
+        args = (self.root_directory,) +args
+
+        p = os.path.normpath(os.path.join(*args))    
+        dir_ = os.path.dirname(p)
+        if not os.path.exists(dir_):
+            os.makedirs(dir_)
+
+        return p
+
+    def build_path(self, *args):
+        
+        if args[0] == 'build':
+            raise ValueError("Adding build to existing build path "+os.path.join(*args))
+        
+        args = (self.BUILD_DIR,) + args
+        return self.path(*args)
 
     def directory(self, rel_path):
         '''Resolve a path that is relative to the bundle root into 

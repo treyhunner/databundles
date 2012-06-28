@@ -63,7 +63,7 @@ class ObjectNumber(object):
                     table = int(ObjectNumber.base62_decode(dataset[-4:-2]))
                 dataset = int(ObjectNumber.base62_decode(dataset[1:-4]))
             else:
-                raise ValueError('Unknow type character: '+dataset[0])
+                raise ValueError('Unknow type character: '+dataset[0]+ ' in '+str(dataset))
            
             
         elif dataset is None:

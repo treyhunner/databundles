@@ -39,9 +39,20 @@ class Schema(object):
         '''Return a list of tables for this bundle'''
         from databundles.orm import Table
         return (self.bundle.database.session.query(Table)
-                .filter(Table.d_id==self.bundle.identity.oid)
+                .filter(Table.d_id==self.bundle.identity.id_)
                 .all())
     
+    def table(self, name_or_id):
+        '''Return an orm.Table object, from either the id or name'''
+        from databundles.orm import Table
+        import sqlalchemy.orm.exc
+        
+        try:
+            return (self.bundle.database.session.query(Table)
+                    .filter(Table.id_==name_or_id).one)
+        except sqlalchemy.orm.exc.NoResultFound:
+            return (self.bundle.database.session.query(Table)
+                    .filter(Table.name==name_or_id).one)
     
     
     def add_table(self, name_or_table, **kwargs):
@@ -92,5 +103,52 @@ class Schema(object):
     @property
     def columns(self):
         '''Return a list of tables for this bundle'''
+        from databundles.orm import Column
+        return (self.bundle.database.session.query(Column).all())
         
-        raise Exception("not implemented")
+    def get_table_meta(self, name):
+        s = self.bundle.database.session
+        from databundles.orm import Table, Column
+        
+        import sqlalchemy
+        from sqlalchemy import MetaData   
+        from sqlalchemy import Column as SAColumn
+        from sqlalchemy import Table as SATable
+        
+        type_map = { 
+        None: sqlalchemy.types.Text,
+        Column.DATATYPE_TEXT: sqlalchemy.types.Text,
+        Column.DATATYPE_INTEGER:sqlalchemy.types.Integer,
+        Column.DATATYPE_REAL:sqlalchemy.types.Float,     
+        Column.DATATYPE_DATE: sqlalchemy.types.Date,
+        Column.DATATYPE_TIME:sqlalchemy.types.Time,
+        Column.DATATYPE_TIMESTAMP:sqlalchemy.types.DateTime,
+        }
+     
+        def translate_type(column):
+            # Creates a lot of unnecessary objects, but spped is not important here. 
+            
+            type_map[Column.DATATYPE_NUMERIC] = sqlalchemy.types.Numeric(column.precision, column.scale),
+            
+            return type_map[column.datatype]
+        
+        metadata = MetaData()
+        
+        q =  (s.query(Table)
+                   .filter(Table.name==name)
+                   .filter(Table.d_id==self.dataset_id))
+      
+       
+        table = q.one()
+        
+        at = SATable(table.name, metadata)
+ 
+        for column in table.columns:
+            ac = SAColumn(column.name, translate_type(column), primary_key = False)
+
+            at.append_column(ac);
+    
+        return metadata, at
+        
+        
+        
