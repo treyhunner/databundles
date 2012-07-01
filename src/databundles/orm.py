@@ -150,7 +150,6 @@ class Column(Base):
     DATATYPE_TIME = 'time'
     DATATYPE_TIMESTAMP = 'timestamp'
 
-
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("oid",None) 
         self.sequence_id = kwargs.get("sequence_id",None) 
@@ -174,7 +173,7 @@ class Column(Base):
         self.table_name = kwargs.get("table_name",None) 
 
         if not self.name:
-            raise ValueError('Must have a name')
+            raise ValueError('Column must have a name')
 
     @staticmethod
     def mangle_name(name):
@@ -183,7 +182,6 @@ class Column(Base):
             return re.sub('[^\w_]','_',name).lower()
         except TypeError:
             raise TypeError('Not a valid type for name '+str(type(name)))
-
 
     @staticmethod
     def before_insert(mapper, conn, target):

@@ -7,7 +7,10 @@ Created on Jun 23, 2012
 import os.path
 
 from databundles.orm import File
-
+from contextlib import contextmanager
+import zipfile
+import urllib
+    
 class FileRef(File):
     '''Extends the File orm class with awareness of the filsystem'''
     def __init__(self, bundle):
@@ -17,7 +20,6 @@ class FileRef(File):
         
         self.bundle = bundle
         
- 
     @property
     def abs_path(self):
         return self.bundle.filesystem.path(self.path)
@@ -31,10 +33,10 @@ class FileRef(File):
         self.content_hash = Filesystem.file_hash(self.abs_path)
         self.bundle.database.session.commit()
         
-
 class Filesystem(object):
     
     BUILD_DIR = 'build'
+    DOWNLOAD_DIR = 'downloads'
     
     def __init__(self, bundle, root_directory = None):
         self.bundle = bundle
@@ -55,7 +57,7 @@ class Filesystem(object):
         
         while os.path.isdir(d) and d != '/':
             test =  os.path.normpath(d+'/'+testFile)
-            print "D "+test
+
             if(os.path.isfile(test)):
                 return d
             d = os.path.dirname(d)
@@ -95,10 +97,19 @@ class Filesystem(object):
 
     def build_path(self, *args):
         
-        if args[0] == 'build':
+        if args[0] == self.BUILD_DIR:
             raise ValueError("Adding build to existing build path "+os.path.join(*args))
         
         args = (self.BUILD_DIR,) + args
+        return self.path(*args)
+
+
+    def downloads_path(self, *args):
+        
+        if args[0] == self.DOWNLOAD_DIR:
+            raise ValueError("Adding download to existing download path "+os.path.join(*args))
+        
+        args = (self.DOWNLOAD_DIR,) + args
         return self.path(*args)
 
     def directory(self, rel_path):
@@ -119,3 +130,46 @@ class Filesystem(object):
                 md5.update(chunk)
         return md5.hexdigest()
  
+ 
+    @contextmanager
+    def unzip(self,path):
+        '''Context manager to extract a single file from a zip archive, and delete
+        it when finished'''
+        
+        extractDir = os.path.dirname(path)
+
+        with zipfile.ZipFile(path) as zf:
+            for name in  zf.namelist():
+                extractFilename = os.path.join(extractDir,name)
+                
+                if os.path.exists(extractFilename):
+                    os.remove(extractFilename)
+                    
+                self.bundle.log('Extracting'+extractFilename+' from '+path)
+                name = name.replace('/','').replace('..','')
+                zf.extract(name,extractDir )
+                    
+                yield extractFilename
+                os.unlink(extractFilename)
+              
+                
+            
+    
+    
+    @contextmanager
+    def download(self,url, **kwargs):
+        '''Context manager to download a file, return it for us, 
+        and delete it when done'''
+        
+        file_path = None
+        try:    
+            
+            file_name = urllib.quote_plus(url)
+            file_path = self.downloads_path(file_name)
+            if not kwargs.get('cache',False):
+                urllib.urlretrieve(url,file_path)
+            yield file_path
+        finally:
+            if file_path and os.path.exists(file_path) and not kwargs.get('cache',False):
+                os.unlink(file_path)
+        

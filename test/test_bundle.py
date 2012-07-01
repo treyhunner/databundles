@@ -79,17 +79,20 @@ identity:
      
     def test_schema_direct(self):
         '''Test adding tables directly to the schema'''
+        
+        # If we don't explicitly set the id_, it will change for every run. 
+        self.bundle.identity.id_ = 'aTest'
+        
+        print "Path", self.bundle.database.path
+        
         s = self.bundle.schema
         s.add_table('table 1', altname='alt name a')
         s.add_table('table 2', altname='alt name b')
         s.add_table('table 1', altname='alt name c')
         
-        self.bundle.identity.oid = 'foobar'
-        
-        # Test that schema id changes propagate. 
-        for table in self.bundle.schema.tables:
-            self.assertEqual('foobar',table.d_id)
-            print table.oid, table.name, table.altname
+        self.assertIn('bTest01', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('bTest02', [t.id_ for t in self.bundle.schema.tables])
+        self.assertNotIn('bTest03', [t.id_ for t in self.bundle.schema.tables])
         
         t = s.add_table('table 3', altname='alt name')
         
@@ -98,14 +101,13 @@ identity:
         t.add_column('col 3',altname='altname3')
         t.add_column('col 3',altname='altname3')
         
-        for column in t.columns:
-            print column.id_, column.name
-     
+        self.assertIn('cTest0301', [c.id_ for c in t.columns])
+        self.assertIn('cTest0302', [c.id_ for c in t.columns])
+        self.assertIn('cTest0303', [c.id_ for c in t.columns])
         
     def test_generate_schema(self):
+        '''Uses the generateSchema method in the bundle'''
         self.bundle.schema.generate()
-        
-        
         
     def test_data(self):
         ds = self.bundle.config.get_or_new_dataset()
@@ -116,6 +118,18 @@ identity:
         print ds.data['foo']
         
         s.commit()
+
+    def test_names_paths(self):
+        from databundles.partition import Partition, PartitionId
+        
+        self.bundle.identity.id_ = 'aTest'
+        
+        print self.bundle.identity.path
+        
+        p = Partition(self.bundle, PartitionId(table='table1', space='space1') )
+        
+        print p.path
+        
 
 if __name__ == "__main__":
     if True:

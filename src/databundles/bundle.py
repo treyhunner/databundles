@@ -6,9 +6,9 @@ Created on Jun 9, 2012
 
 from database import Database
 from identity import Identity
-from partition import Partition
+
 from filesystem import  Filesystem
-from config import Config
+from bundleconfig import BundleConfig
 from schema import Schema
 from partition import Partitions
 import os.path
@@ -17,7 +17,7 @@ class Bundle(object):
     '''Represents a bundle, including all configuration 
     and top level operations. '''
  
-    def __init__(self, directory=None):
+    def __init__(self, bundle_dir=None):
         '''Initialize a bundle and all of its sub-components. 
         
         If it does not exist, creates the bundle database and initializes the
@@ -29,19 +29,32 @@ class Bundle(object):
             Create bundle.db if it does not exist
         '''
         
-        if not directory:
-            directory = Filesystem.find_root_dir()
+        if not bundle_dir:
+            bundle_dir = Filesystem.find_root_dir()
+
+        self.bundle_dir = bundle_dir
+
+        self.filesystem = Filesystem(self, bundle_dir)
         
-        self.filesystem = Filesystem(self, directory)
         self.database = Database(self)
         
-        self.config = Config(self,directory)
-        
-        self.identity = Identity(self)
+        self.config = BundleConfig(self)
+
         self.schema = Schema(self)
         self.partitions = Partitions(self)
         
         self.ptick_count = 0;
+
+    @property
+    def identity(self):
+        if hasattr(self,'config'):
+            # Return the database-based identity object
+            return self.config.identity
+        else:
+            # Return the dict backed identity
+            bcd = BundleConfig.get_config_dict(self.bundle_dir)
+            return Identity(**bcd.get('identity'))
+
 
     def log(self, message, **kwargs):
         '''Log the messsage'''
@@ -101,7 +114,6 @@ class Bundle(object):
     def post_prepare(self):
         return True
    
-   
     
     ### Build the final package
 
@@ -115,6 +127,17 @@ class Bundle(object):
         return True
     
         
+    ### Submit the package to the library
+ 
+    def pre_install(self):
+        return True
+    
+    def install(self):
+        return True
+        
+    def post_install(self):
+        return True
+    
     ### Submit the package to the repository
  
     def pre_submit(self):

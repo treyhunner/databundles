@@ -12,8 +12,7 @@ class Schema(object):
         
         if not self.bundle.identity.id_:
             raise ValueError("self.bundle.identity.oid not set")
-        
-        self.dataset_id = self.bundle.identity.id_
+
         
       
     def generate(self):
@@ -74,11 +73,11 @@ class Schema(object):
         try:    
             row = (s.query(Table)
                    .filter(Table.name==name)
-                   .filter(Table.d_id==self.dataset_id).one())
+                   .filter(Table.d_id==self.bundle.identity.id_).one())
  
         except sqlalchemy.orm.exc.NoResultFound:
 
-            row = Table(name=name, d_id=self.dataset_id)
+            row = Table(name=name, d_id=self.bundle.identity.id_)
             s.add(row)
             
         for key, value in kwargs.items():    
@@ -86,6 +85,8 @@ class Schema(object):
                 #print 'Setting', self.dataset_id, key,value
                 setattr(row, key, value)
       
+        s.commit()
+        
         return row
         
     def add_column(self, table_name, name, **kwargs):
@@ -99,7 +100,6 @@ class Schema(object):
        
         return t.add_column(name, **kwargs)
         
-    
     @property
     def columns(self):
         '''Return a list of tables for this bundle'''
@@ -136,7 +136,7 @@ class Schema(object):
         
         q =  (s.query(Table)
                    .filter(Table.name==name)
-                   .filter(Table.d_id==self.dataset_id))
+                   .filter(Table.d_id==self.bundle.identity.id_))
       
        
         table = q.one()

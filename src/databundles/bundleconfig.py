@@ -5,38 +5,58 @@ Created on Jun 23, 2012
 '''
 import os.path
 from databundles.filesystem import Filesystem
-
+from databundles.identity import Identity
+from databundles.properties import DbRowProperty 
 from exceptions import  ConfigurationError
 
+class BundleConfigIdentity(Identity):
+    
+    id_ = DbRowProperty("id_",None,ascii=True)
+    source = DbRowProperty("source",None)
+    dataset = DbRowProperty("dataset",None)
+    subset = DbRowProperty("subset",None)
+    variation = DbRowProperty("variation",None)
+    creator = DbRowProperty("creator",None)
+    revision = DbRowProperty("revision",None)
+    
+    def __init__(self, bundle):
+        self.super_ = super(BundleConfigIdentity, self)
+        # Don't call super constructor. It will construct from dict. 
+        self.bundle = bundle
 
-class Config(object):
+    @property
+    def row(self):
+        '''Return the dataset row object for this bundle'''
+        from databundles.orm import Dataset
+        session = self.bundle.database.session
+        return session.query(Dataset).first()
+
+class BundleConfig(object):
     '''Binds configuration items to the database, and processes the bundle.yaml file'''
     
     BUNDLE_CONFIG_FILE = 'bundle.yaml'
 
-    def __init__(self, bundle, directory):
+    def __init__(self, bundle):
         '''Maintain link between bundle.yam file and Config record in database'''
         
         self.bundle = bundle
+        self.directory = self.bundle.filesystem.path()
         
-        if not directory or not os.path.isdir(directory):
-            raise ConfigurationError("Is not a directory: "+str(directory))
-        
-        config_file = self.bundle.filesystem.path(Config.BUNDLE_CONFIG_FILE)
+
+        config_file = BundleConfig.get_config_path(self.directory)
         
         if not os.path.exists(config_file):
             raise ConfigurationError("Can't find bundle config file: "+config_file)
         
         self.config_file = config_file
-        self.directory = directory
+        
 
-        bfr = self.filerec(Config.BUNDLE_CONFIG_FILE, True)
+        bfr = self.filerec(BundleConfig.BUNDLE_CONFIG_FILE, True)
              
-
         if bfr._is_new or self.file_changed(bfr):
             self.get_or_new_dataset(delete=True)
             self.reload_config()
-            self.bundle.filesystem.ref(Config.BUNDLE_CONFIG_FILE).update()
+            self.bundle.filesystem.ref(BundleConfig.BUNDLE_CONFIG_FILE).update()
             
         else:
             self.get_or_new_dataset()
@@ -72,7 +92,7 @@ class Config(object):
         # bundle.yaml file as a source. 
         (s.query(SAConfig)
          .filter(SAConfig.d_id == ds.id_)
-         .filter(SAConfig.source == Config.BUNDLE_CONFIG_FILE )
+         .filter(SAConfig.source == BundleConfig.BUNDLE_CONFIG_FILE )
          .delete())
         
          
@@ -91,7 +111,7 @@ class Config(object):
                     o = SAConfig(
                                group=group,
                                key=key,
-                               source=Config.BUNDLE_CONFIG_FILE,
+                               source=BundleConfig.BUNDLE_CONFIG_FILE,
                                d_id=ds.id_,
                                value = value
                                )
@@ -200,7 +220,7 @@ class Config(object):
            
             ds = Dataset(**c['identity'])
             ds.name = Identity.name_str(ds)
-            print repr(ds)
+           
             s.add(ds)
             s.commit()
 
@@ -211,7 +231,7 @@ class Config(object):
                 yaml.dump(c, file(self.config_file, 'w'), 
                           indent=4, default_flow_style=False)
             
-                bfr = self.bundle.filesystem.ref(Config.BUNDLE_CONFIG_FILE)
+                bfr = self.bundle.filesystem.ref(BundleConfig.BUNDLE_CONFIG_FILE)
               
                 bfr.update()
 
@@ -220,15 +240,25 @@ class Config(object):
     @property
     def config_dict(self):
         '''Return a dict/array object tree for the bundle configuration'''
-     
-        import yaml
+        return BundleConfig.get_config_dict(self.directory)
 
+    @property
+    def identity(self):
+        return BundleConfigIdentity(self.bundle)
+
+    @classmethod
+    def get_config_path(cls,directory):
+        return os.path.join(directory, BundleConfig.BUNDLE_CONFIG_FILE)
+        
+    @classmethod
+    def get_config_dict(cls,directory):
+        import yaml
         try:
-            return  yaml.load(file(self.config_file, 'r'))  
+            return  yaml.load(file(BundleConfig.get_config_path(directory), 'r'))  
         except:
             raise NotImplementedError,''' Bundle.yaml missing. 
             Auto-creation not implemented'''
-            
-
+        
+    
          
             

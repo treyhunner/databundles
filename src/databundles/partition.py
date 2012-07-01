@@ -38,6 +38,17 @@ class Partition(object):
         return  '-'.join(np)
     
     @property
+    def path(self):
+        import os.path
+        parts = self.bundle.identity.name_parts(self.bundle.identity)
+        source = parts.pop(0)
+        p = self.pid
+        pparts = [ i for i in [p.time,p.space,p.table] if i is not None]
+        
+        
+        return  os.path.join(source, '-'.join(parts), *pparts )
+    
+    @property
     def database(self):
         from database import PartitionDb
         return PartitionDb(self.bundle, self)
@@ -50,9 +61,7 @@ class Partitions(object):
     
     def __init__(self, bundle):
         self.bundle = bundle
-        
-   
-    
+
     def partition(self, arg):
         '''Get a local partition object from either a Partion ORM object, or
         a partition name
@@ -109,6 +118,9 @@ class Partitions(object):
             q = q.filter(OrmPartition.t_id==tr.id_)
         
         return q.one()
+    
+    def add_partition(self, p):
+        pass
     
     def generate(self):
         from databundles.orm import Partition as OrmPartition, Table

@@ -5,7 +5,6 @@ build:
 identity:
     creator: clarinova.com
     dataset: 2000 Population Census
-    id: a124zT
     revision: 1
     source: census.gov
     subset: SF1

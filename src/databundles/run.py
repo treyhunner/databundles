@@ -18,10 +18,8 @@ def get_args(argv):
     return opts, args 
 
 def run(argv, bundle_class):
-    
-    print argv
-    
-    opts, args = get_args(argv)
+   
+    opts, args = get_args(argv) #@UnusedVariable
 
     if len(args) == 0:
         args.append('all')
@@ -31,7 +29,7 @@ def run(argv, bundle_class):
     b = bundle_class()
 
     if phase == 'all':
-        phases = ['prepare','build']
+        phases = ['prepare','build', 'install']
     else:
         phases = [phase]
  
@@ -62,6 +60,31 @@ def run(argv, bundle_class):
             b.log("---- Skipping Build ---- ")
     else:
         b.log("---- Skipping Build ---- ") 
-                
+    
+    if 'install' in phases:
+        if b.pre_install():
+            b.log("---- Install ---")
+            if b.install():
+                b.post_install()
+                b.log("---- Done Installing ---")
+            else:
+                b.log("---- Install exited with failure ---")
+        else:
+            b.log("---- Skipping Install ---- ")
+    else:
+        b.log("---- Skipping Install ---- ")      
+     
+    if 'submit' in phases:
+        if b.pre_submit():
+            b.log("---- Submit ---")
+            if b.submit():
+                b.post_submit()
+                b.log("---- Done Submitting ---")
+            else:
+                b.log("---- Submit exited with failure ---")
+        else:
+            b.log("---- Skipping Submit ---- ")
+    else:
+        b.log("---- Skipping Submit ---- ")            
                 
     

@@ -5,14 +5,14 @@
 <PROJECTSETTINGS>
 <COMMONSETTINGS>
 <PROJECTFILENAME>\\psf\Storage\proj\github.com\databundles\configuration.dez</PROJECTFILENAME>
-<MODIFIED>2012-06-25</MODIFIED>
+<MODIFIED>2012-06-29</MODIFIED>
 <CREATED>2012-06-10</CREATED>
 <CREATED2></CREATED2>
 <PROJECTNAME></PROJECTNAME>
 <DESCRIPTION></DESCRIPTION>
 <AUTHOR></AUTHOR>
 <COPYRIGHT></COPYRIGHT>
-<LASTGENERATEDFILES>Y:\proj\github.com\databundles\src\databundles\support\configuration.sql;Y:\proj\github.com\databundles\src\databundles\support\drop-configuration.sql;C:\Users\eric\Documents\CreateDBLog_2012062412.txt</LASTGENERATEDFILES>
+<LASTGENERATEDFILES>Y:\proj\github.com\databundles\src\databundles\support\configuration.sql;Y:\proj\github.com\databundles\src\databundles\support\drop-configuration.sql;C:\Users\eric\Documents\CreateDBLog_201206251.txt</LASTGENERATEDFILES>
 <PRINTORIENTATION>PORTRAIT</PRINTORIENTATION>
 <PRINTPAGETYPE>A4</PRINTPAGETYPE>
 <DEFTABLEOPTIONS></DEFTABLEOPTIONS>
@@ -517,7 +517,7 @@
 <DESC></DESC>
 <NOTE></NOTE>
 <ABBR>c</ABBR>
-<ATTRLASTID>30</ATTRLASTID>
+<ATTRLASTID>32</ATTRLASTID>
 <IDXLASTID>1</IDXLASTID>
 <TRGLASTID>1</TRGLASTID>
 <CONLASTID>3</CONLASTID>

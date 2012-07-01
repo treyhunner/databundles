@@ -15,7 +15,8 @@ class ValueInserter(object):
         
     def insert(self, values):    
         con = self.db.engine.connect()
-        ins = self.table.insert().values(values).execution_options(autocommit=False)
+        ins = self.table.insert().values(values)
+        #ins.execution_options(autocommit=False)
         con.execute(ins)
            
 class Database(object):
@@ -33,7 +34,7 @@ class Database(object):
         if file_path:
             self.file_path = file_path
         else:
-            self.file_path =  self.bundle.filesystem.path(bundle.filesystem.BUILD_DIR,self.name+".db")
+            self.file_path = None
         
         self.create() # Only creates if does not exist
        
@@ -43,7 +44,13 @@ class Database(object):
 
     @property 
     def path(self):
-        return self.file_path
+        
+        if self.file_path:
+            return self.file_path
+        else:
+            return self.bundle.filesystem.path(
+                                self.bundle.filesystem.BUILD_DIR,
+                                self.bundle.identity.path+".db")
      
     @property
     def metadata(self):
@@ -92,6 +99,17 @@ class Database(object):
         except:
             pass
         
+    def inserter(self, table_name):
+      
+        if not table_name in self.inspector.get_table_names():
+            t_meta, table = self.bundle.schema.get_table_meta(table_name) #@UnusedVariable
+            t_meta.create_all(bind=self.engine)
+            
+            if not table_name in self.inspector.get_table_names():
+                raise Exception("Don't have table "+table_name)
+        
+        return ValueInserter(self.bundle, self.table(table_name), self)
+        
     def load_sql(self, sql_file):
         import sqlite3
         conn = sqlite3.connect( self.path)
@@ -132,12 +150,13 @@ class PartitionDb(Database):
     def name(self):
         return self.partition.name
     
-    def inserter(self, table_name):
-      
-        if not table_name in self.inspector.get_table_names():
-            raise Exception("Don't have table "+table_name)
-        
-        return ValueInserter(self.bundle, self.table(table_name), self)
+
+    @property
+    def path(self):
+        return self.bundle.filesystem.path(
+                    self.bundle.filesystem.BUILD_DIR,
+                    self.partition.path+".db")
+
     
     def create(self):
         '''Unlike the protodb, create() does not add tables. Tables are copied from the proto on demand''' 
