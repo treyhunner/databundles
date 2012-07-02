@@ -10,7 +10,7 @@ import os.path
 import shutil
 import databundles.database 
 
-from databundles.exceptions import ResultCountError, ConfigurationError
+from databundles.exceptions import ResultCountError
 
 
 class LibraryDb(databundles.database.Database):
@@ -19,6 +19,7 @@ class LibraryDb(databundles.database.Database):
       
         super(LibraryDb, self).__init__(None, path)  
 
+   
 class Library(object):
     '''
     classdocs
@@ -38,7 +39,7 @@ class Library(object):
             self.directory = self.config.group('library').get('root',None)
             
         if not self.directory:
-            raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
+            raise ValueError("Must specify a root directory")
             
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)

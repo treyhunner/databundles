@@ -1,0 +1,13 @@
+Metadata-Version: 1.0
+Name: databundles
+Version: 0.0.2
+Summary: Databundles Management Library
+Home-page: UNKNOWN
+Author: Eric Busboom
+Author-email: eric@clarinova.com
+License: http://www.opensource.org/licenses/ISC
+Description: databundles
+        ===========
+        
+        Data Bundles are packages of data that simplify the process of finding, cleaning, transforming and loading popular datasets. http://clarinova.com/bundles
+Platform: UNKNOWN

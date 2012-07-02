@@ -5,7 +5,6 @@ Created on Jun 10, 2012
 '''
 
 import os.path
-from contextlib import contextmanager
 
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''
@@ -13,20 +12,12 @@ class ValueInserter(object):
         self.bundle = bundle
         self.table = table
         self.db = db
-        self.session = self.db.session
         
     def insert(self, values):    
-
-        ins = self.table.insert().values(values).execution_options(autocommit=True)
-        self.session.execute(ins) 
-
-    def __enter__(self): 
-        return self
-        
-    def __exit__(self, type_, value, traceback):
-        self.session.commit()
-        
-        
+        con = self.db.engine.connect()
+        ins = self.table.insert().values(values)
+        #ins.execution_options(autocommit=False)
+        con.execute(ins)
            
 class Database(object):
     '''Represents a Sqlite database'''
@@ -108,7 +99,6 @@ class Database(object):
         except:
             pass
         
-
     def inserter(self, table_name):
       
         if not table_name in self.inspector.get_table_names():

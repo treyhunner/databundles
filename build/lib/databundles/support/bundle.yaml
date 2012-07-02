@@ -1,0 +1,16 @@
+
+identity: 
+  source: 
+  dataset: 
+  subset: 
+  creator: 
+  revision: 
+  
+partition:
+   time: 
+   space:
+   table:
+   
+build:
+  rootUrl: 
+  headers: 
