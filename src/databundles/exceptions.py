@@ -14,3 +14,6 @@ class BundleError(Exception):
 
 class ConfigurationError(BundleError):
     '''Error in the configuration files'''
+    
+class ResultCountError(BundleError):
+    '''Got too many or too few results'''

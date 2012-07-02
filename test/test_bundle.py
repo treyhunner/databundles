@@ -41,12 +41,9 @@ identity:
         
     def test_bundle_init(self):
         
-        import yaml, time
-        
-        cd = self.bundle.config.config_dict
-        cf = self.bundle.config.config_file
-     
-        self.assertIn('id', cd['identity'])
+        import time
+
+        self.assertIn('id', self.bundle.config.group('identity'))
         self.assertEquals('clarinova.com', self.bundle.identity.creator)
         oid = self.bundle.identity.id_
     
@@ -54,8 +51,11 @@ identity:
        
         # Test that the build.yaml file is reloaded, but that the
         # id value does not change. 
-        cd['identity']['creator'] = 'foobar'
-        yaml.dump(cd, file(cf, 'w'), indent=4, default_flow_style=False)
+        bcf = self.bundle.config.config_file
+        bcf.config_dict['identity']['creator'] = 'foobar'
+        self.assertFalse(self.bundle.config.config_file_changed())
+        bcf.rewrite()
+        self.assertTrue(self.bundle.config.config_file_changed())
 
         bundle =  Bundle(self.bundle_dir)     
         self.assertEquals('foobar', bundle.identity.creator)
@@ -82,9 +82,7 @@ identity:
         
         # If we don't explicitly set the id_, it will change for every run. 
         self.bundle.identity.id_ = 'aTest'
-        
-        print "Path", self.bundle.database.path
-        
+    
         s = self.bundle.schema
         s.add_table('table 1', altname='alt name a')
         s.add_table('table 2', altname='alt name b')
@@ -108,27 +106,15 @@ identity:
     def test_generate_schema(self):
         '''Uses the generateSchema method in the bundle'''
         self.bundle.schema.generate()
-        
-    def test_data(self):
-        ds = self.bundle.config.get_or_new_dataset()
-        s = self.bundle.database.session
-    
-        ds.data['foo'] = 'bat'
-        
-        print ds.data['foo']
-        
-        s.commit()
 
-    def test_names_paths(self):
-        from databundles.partition import Partition, PartitionId
+    def test_db_bundle(self):
         
-        self.bundle.identity.id_ = 'aTest'
+        db_path = self.bundle.database.path
         
-        print self.bundle.identity.path
+        bundle = Bundle(db_path)
         
-        p = Partition(self.bundle, PartitionId(table='table1', space='space1') )
-        
-        print p.path
+        for i in bundle.schema.tables:
+            print i.name
         
 
 if __name__ == "__main__":

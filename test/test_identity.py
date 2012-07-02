@@ -6,8 +6,8 @@ Created on Jul 1, 2012
 import unittest
 import yaml
 import os.path
-from databundles.identity import Identity
-from databundles.bundleconfig import BundleConfig
+from databundles.identity import Identity #@UnusedImport
+from databundles.bundleconfig import BundleConfig, BundleConfigFile #@UnusedImport
 
 class Test(unittest.TestCase):
 
@@ -31,20 +31,18 @@ identity:
 
         self.config = yaml.load(bundle_yaml)
 
-
     def test_bundle(self):
         
-        bcd = BundleConfig.get_config_dict(self.bundle_dir)
+        bcf = BundleConfigFile(self.bundle_dir)
         
-        id = Identity(**bcd.get('identity'))
+        print bcf.config_dict
+        
+        return True
+         
+        #id = Identity(**bcd.get('identity'))
               
         print id.name
         print id.path
-        
-        
-        
-        
-        
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

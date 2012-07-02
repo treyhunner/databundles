@@ -24,13 +24,14 @@ class Schema(object):
         
         s.query(Table).delete()
         s.query(Column).delete()
-       
+      
         for i in self.bundle.schemaGenerator():       
             if isinstance(i, Table):
                 self.add_table(i)
             elif isinstance(i, Column):
                 self.add_column(i.table_name, i)
-        
+                
+      
         s.commit()
         
     @property
@@ -149,6 +150,15 @@ class Schema(object):
             at.append_column(ac);
     
         return metadata, at
+        
+    def create_tables(self):
+        '''Create the defined tables as database tables.'''
+        
+        for t in self.tables:
+            if not t.name in self.bundle.database.inspector.get_table_names():
+                t_meta, table = self.bundle.schema.get_table_meta(t.name) #@UnusedVariable
+                t_meta.create_all(bind=self.bundle.database.engine)
+        
         
         
         

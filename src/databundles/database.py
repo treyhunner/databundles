@@ -44,7 +44,7 @@ class Database(object):
 
     @property 
     def path(self):
-        
+     
         if self.file_path:
             return self.file_path
         else:
@@ -161,5 +161,9 @@ class PartitionDb(Database):
     def create(self):
         '''Unlike the protodb, create() does not add tables. Tables are copied from the proto on demand''' 
       
-    
+class BundleDb(Database):
+    '''Represents the database version of a bundle that is installed in a library'''
+    def __init__(self, path):
+      
+        super(BundleDb, self).__init__(None, path)  
 

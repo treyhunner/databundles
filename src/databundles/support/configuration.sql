@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-06-25 13:33                                */
+/* Created on:            2012-07-01 15:44                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -27,6 +27,7 @@ CREATE TABLE "datasets" (
     "d_creator" TEXT,
     "d_revision" TEXT,
     "d_data" TEXT,
+    "d_path" TEXT,
     CONSTRAINT "PK_datasets" PRIMARY KEY ("d_id")
 );
 

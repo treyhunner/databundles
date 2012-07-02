@@ -9,7 +9,7 @@ import os.path
 
 class Identity(object):
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.from_dict(kwargs)
         
         self.name # Will trigger errors if anything is wrong
@@ -23,7 +23,8 @@ class Identity(object):
         self.revision =  d.get('revision',1)
 
     def to_dict(self):
-        return {
+        '''Returns the itentity as a dict. values that are empty are removed'''
+        d =  {
              'source':self.source,
              'dataset':self.dataset,
              'subset':self.subset,
@@ -32,6 +33,7 @@ class Identity(object):
              'revision':self.revision
              }
 
+        return { k:v for k,v in d.items() if v}
  
     @property
     def creatorcode(self):
@@ -59,9 +61,6 @@ class Identity(object):
     def path_str(cls,o=None):
         '''Return the path name for this bundle'''
 
-        if o is None:
-            o = self
-        
         parts = cls.name_parts(o)
         source = parts.pop(0)
         
@@ -70,9 +69,6 @@ class Identity(object):
     @classmethod
     def name_str(cls,o=None):
         
-        if o is None:
-            o = self
-        
         return '-'.join(cls.name_parts(o))
     
     @staticmethod
@@ -80,9 +76,7 @@ class Identity(object):
         """Return the parts of the name as a list, for additional processing. """
         name_parts = [];
      
-        if o is None:
-            o = self
-     
+
         try: 
             if o.source is None:
                 raise exceptions.ConfigurationError('Source is None ')  

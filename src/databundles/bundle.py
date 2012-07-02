@@ -5,10 +5,10 @@ Created on Jun 9, 2012
 '''
 
 from database import Database
-from identity import Identity
-
+from identity import Identity #@UnusedImport
+from library import Library
 from filesystem import  Filesystem
-from bundleconfig import BundleConfig
+from bundleconfig import BundleConfig, BundleConfigFile
 from schema import Schema
 from partition import Partitions
 import os.path
@@ -17,7 +17,7 @@ class Bundle(object):
     '''Represents a bundle, including all configuration 
     and top level operations. '''
  
-    def __init__(self, bundle_dir=None):
+    def __init__(self, bundle_dir_or_db_file=None):
         '''Initialize a bundle and all of its sub-components. 
         
         If it does not exist, creates the bundle database and initializes the
@@ -29,14 +29,24 @@ class Bundle(object):
             Create bundle.db if it does not exist
         '''
         
-        if not bundle_dir:
-            bundle_dir = Filesystem.find_root_dir()
-
-        self.bundle_dir = bundle_dir
-
-        self.filesystem = Filesystem(self, bundle_dir)
+        bundle_dir = None
         
-        self.database = Database(self)
+        if not bundle_dir_or_db_file:
+            # Completely empty, walk the tree to find the root. 
+            bundle_dir = Filesystem.find_root_dir()
+        elif os.path.isdir(bundle_dir_or_db_file):
+            #If it is a dir it is a bundle directory.
+            bundle_dir = bundle_dir_or_db_file
+        elif os.path.isfile(bundle_dir_or_db_file):
+            # If it is a file, it is the database file 
+            pass
+        
+        if bundle_dir:
+            self.bundle_dir = bundle_dir
+            self.filesystem = Filesystem(self, bundle_dir)
+            self.database = Database(self)
+        else:
+            self.database = Database(self, bundle_dir_or_db_file)
         
         self.config = BundleConfig(self)
 
@@ -47,14 +57,19 @@ class Bundle(object):
 
     @property
     def identity(self):
+        '''Return an identity object. If the config object exists in the
+        bundle, return an Identity that is backed by the database. If not, 
+        load the bundle.yaml file and create an Identity from that'''
         if hasattr(self,'config'):
             # Return the database-based identity object
             return self.config.identity
         else:
             # Return the dict backed identity
-            bcd = BundleConfig.get_config_dict(self.bundle_dir)
-            return Identity(**bcd.get('identity'))
+            return BundleConfigFile(self.bundle_dir).identity
 
+    @property
+    def library(self):
+        return Library(requires=self.config.group('requires'))
 
     def log(self, message, **kwargs):
         '''Log the messsage'''

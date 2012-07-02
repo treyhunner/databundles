@@ -5,22 +5,25 @@ of the bundles that have been installed into it.
 
 from databundles.runconfig import  RunConfig
 
+import os
 import os.path
 import shutil
 import databundles.database 
 
+from databundles.exceptions import ResultCountError
+
+
 class LibraryDb(databundles.database.Database):
-    
+    '''Represents the Sqlite database that holds metadata for all installed bundles'''
     def __init__(self, path):
       
         super(LibraryDb, self).__init__(None, path)  
-   
 
+   
 class Library(object):
     '''
     classdocs
     '''
-
 
     def __init__(self, directory=None, **kwargs):
         '''
@@ -40,7 +43,8 @@ class Library(object):
             
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
-            
+     
+        self._requires = kwargs.get('requires',None)
         
     @property
     def root(self):
@@ -55,7 +59,10 @@ class Library(object):
         self.remove_bundle(bundle)
 
         src = bundle.database.path
-        dst = os.path.join(self.directory, bundle.identity.name+".db")
+        dst = os.path.join(self.directory, bundle.identity.path+".db")
+        
+        if not os.path.isdir(os.path.dirname(dst)):
+            os.makedirs(os.path.dirname(dst))
         
         bundle.log("Copy {} to {}".format(src,dst))
         shutil.copyfile(src,dst)
@@ -68,7 +75,7 @@ class Library(object):
         
         self.database_remove(bundle)
         
-        path = os.path.join(self.directory, bundle.identity.name+".db")
+        path = os.path.join(self.directory, bundle.identity.path+".db")
         
         if os.path.exists(path):
             os.remove(path)
@@ -124,9 +131,75 @@ class Library(object):
             
         s.commit()
         
+    def queryByIdentity(self, identity):
+        from databundles.orm import Dataset
+        from databundles.identity import Identity
+        from sqlalchemy import desc
+        
+        s = self.database.session
+        
+        if isinstance(identity, str) or isinstance(identity, unicode) : 
+            query = (s.query(Dataset)
+                     .filter( (Dataset.id_==identity) | (Dataset.name==identity)) )
+        elif isinstance(identity, Identity):
+            
+            query = s.query(Dataset)
+            
+            for k,v in identity.to_dict().items():
+                d = {}
+                d[k] = v
+                query = query.filter_by(**d)
+           
+        elif isinstance(identity, dict):
+            query = s.query(Dataset)
+            
+            for k,v in identity.items():
+                d = {}
+                d[k] = v
+                query = query.filter_by(**d)
+      
+        else:
+            raise ValueError("Invalid type for identit")
+    
+        query.order_by(desc(Dataset.revision))
+    
+        return query
+    
+    def findByIdentity(self,identity):
+        
+        out = []
+        for d in self.queryByIdentity(identity).all():
+            id_ = d.identity
+            d.path = os.path.join(self.directory,id_.path+'.db')
+            out.append(d)
+            
+        return out
+        
+    def findByKey(self,key):
+        '''Find a bundle in the library by the shorthand name given in the
+        'requires' section of the configuration '''    
+        
+        if not self._requires:
+            raise ValueError("Didn't get 'requires' configuration from the constructor")
+         
+        if key not in self._requires:
+            raise ValueError("Require key {} not specified in configuration".format(key))
 
-    def findByName(self, name):
-        pass
-    
-    
+        return self.findByIdentity(self._requires[key])
+
+    def require(self,key):
+        from databundles.bundle import Bundle as BaseBundle
+        '''Like 'require' but returns a Bundle object. '''
+        set = self.findByKey(key)
+        
+        if len(set) > 1:
+            raise ResultCountError('Got to many results for query')
+        
+        if len(set) == 0:
+            raise ResultCountError('Got no results')       
+        
+        return BaseBundle(set.pop(0).path)
+
+    def bundle_db(self,name):
+        '''Return a bundle database from the library'''
     

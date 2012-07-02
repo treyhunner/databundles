@@ -7,7 +7,7 @@ from sqlalchemy import event
 from sqlalchemy import Column as SAColumn, Integer
 from sqlalchemy import Float as Real,  Text, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.types import TypeDecorator, TEXT
+from sqlalchemy.types import TypeDecorator, TEXT, PickleType
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.mutable import Mutable
 
@@ -81,6 +81,8 @@ class Dataset(Base):
     revision = SAColumn('d_revision',Text)
     data = SAColumn('d_data', MutationDict.as_mutable(JSONEncodedDict))
 
+    path = None  # Set by the LIbrary and other queries. 
+
     tables = relationship("Table", backref='dataset', cascade="delete")
     partitions = relationship("Partition", backref='dataset', cascade="delete")
    
@@ -112,6 +114,20 @@ class Dataset(Base):
                     self.id_, self.name, self.source,
                     self.dataset, self.subset, self.variation, 
                     self.creator, self.revision)
+    @property
+    def identity(self):
+        from databundles.identity import Identity
+        return Identity(
+                        id_ = self.id_, 
+                        name = self.name, 
+                        source = self.source,
+                        dataset = self.dataset, 
+                        subset = self.subset, 
+                        variation = self.variation, 
+                        creator = self.creator, 
+                        revision = self.revision
+                        )
+        
         
     @staticmethod
     def before_insert_update(mapper, conn, target):
@@ -276,10 +292,9 @@ class Table(Base):
 
     def add_column(self, name_or_column, **kwargs):
 
-       
         import sqlalchemy.orm.session
         s = sqlalchemy.orm.session.Session.object_session(self)
-        conn = s.connection()
+
 
         # Determine if the variable arg is a name or a column
         if isinstance(name_or_column, Column):
@@ -318,7 +333,7 @@ class Config(Base):
     d_id = SAColumn('co_d_id',Text, primary_key=True)
     group = SAColumn('co_group',Text, primary_key=True)
     key = SAColumn('co_key',Text, primary_key=True)
-    value = SAColumn('co_value',Text)
+    value = SAColumn('co_value', PickleType)
     source = SAColumn('co_source',Text)
 
     def __init__(self,**kwargs):
