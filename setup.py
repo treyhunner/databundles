@@ -18,6 +18,10 @@ setup(name='databundles',
       zip_safe=False,
       install_requires=[
         'sqlalchemy>=0.7',
+<<<<<<< HEAD
         'pyyaml'
+=======
+		'pyyaml'
+>>>>>>> 25693f0f90021208a35af8dce8da3d6175699f23
       ]
      )
