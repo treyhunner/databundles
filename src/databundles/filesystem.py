@@ -151,24 +151,31 @@ class Filesystem(object):
                     
                 yield extractFilename
                 os.unlink(extractFilename)
-              
-                
-            
-    
-    
+
     @contextmanager
     def download(self,url, **kwargs):
         '''Context manager to download a file, return it for us, 
         and delete it when done'''
-        
+
         file_path = None
         try:    
             
             file_name = urllib.quote_plus(url)
             file_path = self.downloads_path(file_name)
-            if not kwargs.get('cache',False):
-                urllib.urlretrieve(url,file_path)
+            
+            cache = kwargs.get('cache',False)
+            
+            if not cache or not os.path.exists(file_path):
+                self.bundle.log("Downloading "+url)
+                file_path, headers = urllib.urlretrieve(url,file_path) #@UnusedVariable
+                
+                if not os.path.exists(file_path):
+                    raise Exception("Failed to download "+url)
+
             yield file_path
+        except Exception as e:
+            self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
+            
         finally:
             if file_path and os.path.exists(file_path) and not kwargs.get('cache',False):
                 os.unlink(file_path)

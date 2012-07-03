@@ -5,7 +5,7 @@ Created on Jun 10, 2012
 '''
 
 import os.path
-from contextlib import contextmanager
+
 
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''

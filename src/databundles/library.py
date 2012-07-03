@@ -5,13 +5,11 @@ of the bundles that have been installed into it.
 
 from databundles.runconfig import  RunConfig
 
-import os
 import os.path
 import shutil
 import databundles.database 
 
 from databundles.exceptions import ResultCountError, ConfigurationError
-
 
 class LibraryDb(databundles.database.Database):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
@@ -189,15 +187,15 @@ class Library(object):
     def require(self,key):
         from databundles.bundle import Bundle as BaseBundle
         '''Like 'require' but returns a Bundle object. '''
-        set = self.findByKey(key)
+        set_ = self.findByKey(key)
         
-        if len(set) > 1:
+        if len(set_) > 1:
             raise ResultCountError('Got to many results for query')
         
-        if len(set) == 0:
+        if len(set_) == 0:
             raise ResultCountError('Got no results')       
         
-        return BaseBundle(set.pop(0).path)
+        return BaseBundle(set_.pop(0).path)
 
     def bundle_db(self,name):
         '''Return a bundle database from the library'''
