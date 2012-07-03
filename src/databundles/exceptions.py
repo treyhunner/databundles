@@ -17,3 +17,6 @@ class ConfigurationError(BundleError):
     
 class ResultCountError(BundleError):
     '''Got too many or too few results'''
+    
+class FilesystemError(BundleError):
+    '''Missing file, etc. '''
