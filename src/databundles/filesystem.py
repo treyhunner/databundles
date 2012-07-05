@@ -173,8 +173,13 @@ class Filesystem(object):
                     raise Exception("Failed to download "+url)
 
             yield file_path
-        except Exception as e:
+            
+            if not cache:
+                os.remove(file_path)
+            
+        except IOError as e:
             self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
+            raise e
             
         finally:
             if file_path and os.path.exists(file_path) and not kwargs.get('cache',False):

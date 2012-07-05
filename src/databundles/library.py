@@ -190,10 +190,10 @@ class Library(object):
         set_ = self.findByKey(key)
         
         if len(set_) > 1:
-            raise ResultCountError('Got to many results for query')
+            raise ResultCountError('Got to many results for library require query for key: '+key)
         
         if len(set_) == 0:
-            raise ResultCountError('Got no results')       
+            raise ResultCountError('Got no results for library require query for key: '+key)       
         
         return BaseBundle(set_.pop(0).path)
 

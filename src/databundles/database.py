@@ -145,6 +145,14 @@ class Database(object):
                 script_str = resource_string(databundles.__name__, Database.PROTO_SQL_FILE)
          
             self.load_sql(script_str)
+        
+    def create_table(self, table_name):
+        if not table_name in self.inspector.get_table_names():
+            t_meta, table = self.bundle.schema.get_table_meta(table_name) #@UnusedVariable
+            t_meta.create_all(bind=self.engine)
+            
+            if not table_name in self.inspector.get_table_names():
+                raise Exception("Don't have table "+table_name)
                    
     def table(self, table_name): 
         '''Get table metadata from the database''' 

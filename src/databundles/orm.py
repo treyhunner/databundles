@@ -386,6 +386,7 @@ class Partition(Base):
         self.d_id = kwargs.get("d_id",None) 
         self.space = kwargs.get("space",None) 
         self.time = kwargs.get("time",None) 
+        self.table = kwargs.get("table",None) 
         self.data = kwargs.get('data',None)
         self.state = kwargs.get('state',None)
 

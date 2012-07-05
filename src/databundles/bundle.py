@@ -79,7 +79,6 @@ class Bundle(object):
         '''Log the messsage'''
         print "ERR: ",message
 
-
     def progress(self,message):
         '''print message to terminal, in place'''
         print 'PRG: ',message

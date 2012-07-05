@@ -25,11 +25,19 @@ class Schema(object):
         s.query(Table).delete()
         s.query(Column).delete()
       
+        last_table = None
         for i in self.bundle.schemaGenerator():       
             if isinstance(i, Table):
                 self.add_table(i)
+                last_table = i
             elif isinstance(i, Column):
-                self.add_column(i.table_name, i)
+                
+                if  i.table_name:
+                    table_name = i.table_name
+                else:
+                    table_name = last_table.name
+                
+                self.add_column(table_name, i)
                 
       
         s.commit()
@@ -49,10 +57,10 @@ class Schema(object):
         
         try:
             return (self.bundle.database.session.query(Table)
-                    .filter(Table.id_==name_or_id).one)
+                    .filter(Table.id_==name_or_id).one())
         except sqlalchemy.orm.exc.NoResultFound:
             return (self.bundle.database.session.query(Table)
-                    .filter(Table.name==name_or_id).one)
+                    .filter(Table.name==name_or_id).one())
     
     
     def add_table(self, name_or_table, **kwargs):

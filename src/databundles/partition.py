@@ -15,7 +15,7 @@ class PartitionId(object):
     def __str__(self):
         '''Return the parttion component of the name'''
         import re
-        return '.'.join([re.sub('[^\w\.]','_',s).lower() 
+        return '.'.join([re.sub('[^\w\.]','_',s)
                          for s in filter(None, [self.time, self.space, 
                                                 self.table])])
 
@@ -103,7 +103,12 @@ class Partitions(object):
         s = self.bundle.database.session
         return s.query(OrmPartition)
     
-    def find(self, time, space, table):
+    def find(self, **kwargs):
+        
+        time = kwargs.get('time',None)
+        space = kwargs.get('space', None)
+        table = kwargs.get('table', None)
+                
         from databundles.orm import Partition as OrmPartition
         q = self.query
         
@@ -117,44 +122,78 @@ class Partitions(object):
             tr = self.bundle.schema.table(table)
             q = q.filter(OrmPartition.t_id==tr.id_)
         
-        return q.one()
+        p =  q.one()
+        
+        if not p:
+            return None
+        else:
+            return Partition(self.bundle, p.as_partition_id())
     
-    def add_partition(self, p):
-        pass
-    
-    def generate(self):
+    table_cache = {}
+    def new_orm_partition(self, pid, **kwargs):
         from databundles.orm import Partition as OrmPartition, Table
+        
+
+        if pid.table:
+            if pid.table in self.table_cache:
+                table = self.table_cache[pid.table]
+            else:
+                try:
+                    s = self.bundle.database.session
+                    table = s.query(Table).filter(Table.name==pid.table).one()
+                    self.table_cache[pid.table] = table
+                   
+                except:
+                    table = None
+        else:
+            table = None 
+        
+        pid.table = table.id_ if table else None
+     
+        p = Partition(self.bundle, pid) 
+        
+        op = OrmPartition(id = p.name,
+             space = pid.space,
+             time = pid.time,
+             t_id = pid.table,
+             d_id = self.bundle.identity.id_,
+             data=kwargs.get('data',None),
+             state=kwargs.get('state',None),)  
+
+        return op
+
+
+    def delete_all(self):
+        from databundles.orm import Partition as OrmPartition
+        s = self.bundle.database.session
+        s.query(OrmPartition).delete()
+        
+    def new_partition(self, pid, **kwargs):
+      
+        op = self.new_orm_partition(pid, **kwargs)
+        s = self.bundle.database.session
+        s.add(op)        
+        s.commit()
+        
+        return self.partition(op)
+
+
+    def generate(self):
+        '''Call the partitionGenerator() method on a Bundle to get partitions'''
+        from databundles.orm import Partition as OrmPartition
     
         s = self.bundle.database.session
     
         s.query(OrmPartition).delete()
 
-        seen={}
+        partitions = {}
         for i in self.bundle.partitionGenerator(): 
-            table = None
+            p = self.new_orm_partition(i.pid,data=i.data, state=i.state)
+     
+            partitions[i.pid] = p
+          
+        for pid,p in partitions.items():
+            s.add(p)        
+            s.commit()
+              
 
-            if i.name in seen:
-                continue;
-            
-            seen[i.name]=True
-
-            p = OrmPartition(id = i.name,
-                             space = i.pid.space,
-                             time=i.pid.time,
-                             d_id = self.bundle.identity.id_,
-                             data=i.data,
-                             state=i.state) 
-            s.add(p)
-            
-            if i.pid.table:
-                try:
-                    table = s.query(Table).filter(Table.name==i.pid.table).one()
-                except:
-                    table = None
-            else:
-                table = None 
-                
-            if table is not None:
-                p.t_id = table.id_
-                  
-        s.commit()
