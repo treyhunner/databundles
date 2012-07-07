@@ -17,6 +17,7 @@ class LibraryDb(databundles.database.Database):
       
         super(LibraryDb, self).__init__(None, path)  
 
+
 class Library(object):
     '''
     classdocs
@@ -28,15 +29,6 @@ class Library(object):
         If the directory does not exist, it will be created. 
         '''
 
-        self.config = kwargs.get('config',RunConfig())
-
-        if directory is not None:
-            self.directory = directory
-        else:
-            self.directory = self.config.group('library').get('root',None)
-            
-        if not self.directory:
-            raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
             
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
@@ -47,7 +39,7 @@ class Library(object):
     def root(self):
         return self.directory
         
-    def install_bundle(self, bundle):
+    def install(self, bundle, **kwargs):
         '''Install a bundle file, and all of its partitions, into the library.
         Copies in the files that don't exist, and loads data into the library
         database'''
@@ -66,11 +58,12 @@ class Library(object):
         
         self.install_database(bundle)
         
-    def remove_bundle(self, bundle):
+        
+    def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
         it from the library database'''
         
-        self.database_remove(bundle)
+        self.remove_database(bundle)
         
         path = os.path.join(self.directory, bundle.identity.path+".db")
         
@@ -81,8 +74,31 @@ class Library(object):
     def database(self):
         '''Return databundles.database.Database object'''
         return LibraryDb(os.path.join(self.directory,'library.db'))
+  
+    def install_database(self, bundle):
+        '''Copy the schema and partitions lists into the library database'''
+        from databundles.orm import Dataset
+        bdbs = bundle.database.session
         
-    def database_remove(self, bundle):
+        s = self.database.session
+        
+        dataset = bdbs.query(Dataset).one()
+        s.merge(dataset)
+        s.commit()
+        
+        for t in dataset.tables:
+            s.merge(t)
+            
+            for c in t.columns:
+                s.merge(c)
+            
+        for p in dataset.partitions:
+            s.merge(p)
+            
+        s.commit()
+        
+          
+    def remove_database(self, bundle):
         '''remove a bundle from the database'''
         
         from databundles.orm import Dataset
@@ -106,27 +122,6 @@ class Library(object):
         except sqlalchemy.orm.exc.NoResultFound: 
             pass
 
-    def install_database(self, bundle):
-        '''Copy the schema and partitions lists into the library database'''
-        from databundles.orm import Dataset
-        bdbs = bundle.database.session
-        
-        s = self.database.session
-        
-        dataset = bdbs.query(Dataset).one()
-        s.merge(dataset)
-        s.commit()
-        
-        for t in dataset.tables:
-            s.merge(t)
-            
-            for c in t.columns:
-                s.merge(c)
-            
-        for p in dataset.partitions:
-            s.merge(p)
-            
-        s.commit()
         
     def queryByIdentity(self, identity):
         from databundles.orm import Dataset
@@ -199,4 +194,27 @@ class Library(object):
 
     def bundle_db(self,name):
         '''Return a bundle database from the library'''
+    
+    
+class LocalLibrary(Library):
+    
+    def __init__(self, directory=None, **kwargs):
+        
+        if directory is not None:
+            self.directory = directory
+        else:
+            self.config = kwargs.get('config',RunConfig())
+            self.directory = self.config.group('library').get('root',None)
+            
+        if not self.directory:
+            raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
+        
+
+
+class RemoteLibrary(Library):
+    '''A remote library has its files stored on a remote server.  This class 
+    will download and cache the library databse file, keeping it up to date
+    when it changes. '''
+    
+    
     

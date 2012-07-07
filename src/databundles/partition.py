@@ -15,7 +15,7 @@ class PartitionId(object):
     def __str__(self):
         '''Return the parttion component of the name'''
         import re
-        return '.'.join([re.sub('[^\w\.]','_',s)
+        return '.'.join([re.sub('[^\w\.]','_',str(s))
                          for s in filter(None, [self.time, self.space, 
                                                 self.table])])
 
@@ -85,9 +85,9 @@ class Partitions(object):
         
         partition_id = orm_partition.as_partition_id()
         
-        
-        return Partition(self.bundle, partition_id)
-      
+        return Partition(self.bundle, partition_id, data=orm_partition.data, 
+                      state = orm_partition.state)
+    
     
     @property
     def count(self):
@@ -96,6 +96,13 @@ class Partitions(object):
         s = self.bundle.database.session
         return s.query(OrmPartition).count()
     
+    @property 
+    def all(self):
+        '''Return an iterator of all partitions'''
+        from databundles.orm import Partition as OrmPartition
+        s = self.bundle.database.session      
+        return [self.partition(op) for op in s.query(OrmPartition).all()]
+    
     @property
     def query(self):
         from databundles.orm import Partition as OrmPartition
@@ -103,11 +110,19 @@ class Partitions(object):
         s = self.bundle.database.session
         return s.query(OrmPartition)
     
-    def find(self, **kwargs):
+    def find_orm(self, pid=None, **kwargs):
+        '''Return a Partition object from the database based on a PartitionId.
+        An ORM object is returned, so changes can be persisted. '''
+        import sqlalchemy.orm.exc
         
-        time = kwargs.get('time',None)
-        space = kwargs.get('space', None)
-        table = kwargs.get('table', None)
+        if not pid: 
+            time = kwargs.get('time',None)
+            space = kwargs.get('space', None)
+            table = kwargs.get('table', None)
+        else:
+            time = pid.time
+            space = pid.space
+            table = pid.table
                 
         from databundles.orm import Partition as OrmPartition
         q = self.query
@@ -121,13 +136,22 @@ class Partitions(object):
         if table is not None:
             tr = self.bundle.schema.table(table)
             q = q.filter(OrmPartition.t_id==tr.id_)
-        
-        p =  q.one()
-        
-        if not p:
+
+        try:
+            return q.one()   
+        except sqlalchemy.orm.exc.NoResultFound: 
             return None
+    
+    def find(self, pid=None, **kwargs):
+        '''Return a Partition object from the database based on a PartitionId.
+        The object returned is immutable; changes are not persisted'''
+        op = self.find_orm(pid, **kwargs)
+        
+        if op is not None:
+            return self.partition(op)
         else:
-            return Partition(self.bundle, p.as_partition_id())
+            return None
+    
     
     table_cache = {}
     def new_orm_partition(self, pid, **kwargs):
@@ -170,11 +194,16 @@ class Partitions(object):
         
     def new_partition(self, pid, **kwargs):
       
+        p = self.find(pid)
+        
+        if p is not None:
+            return p
+      
         op = self.new_orm_partition(pid, **kwargs)
         s = self.bundle.database.session
         s.add(op)        
         s.commit()
-        
+
         return self.partition(op)
 
 

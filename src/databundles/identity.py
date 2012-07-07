@@ -23,7 +23,7 @@ class Identity(object):
         self.revision =  d.get('revision',1)
 
     def to_dict(self):
-        '''Returns the itentity as a dict. values that are empty are removed'''
+        '''Returns the identity as a dict. values that are empty are removed'''
         d =  {
              'source':self.source,
              'dataset':self.dataset,
@@ -76,6 +76,9 @@ class Identity(object):
         """Return the parts of the name as a list, for additional processing. """
         name_parts = [];
      
+        if o is None:
+            raise exceptions.ConfigurationError('name_parts must be given an object')  
+
 
         try: 
             if o.source is None:

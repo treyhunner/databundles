@@ -116,7 +116,56 @@ identity:
         for i in bundle.schema.tables:
             print i.name
         
+    def test_partition(self):
+        
+        ##
+        ## TODO THis does does not test the 'table' parameter of the ParitionId
+        ##
+        
+        self.bundle.partitions.delete_all()
+        
+        print self.bundle.database.path
+        
+        from  databundles.partition import Partition, PartitionId
+        pid1 = PartitionId(time=1, space=1)
+        pid2 = PartitionId(time=2, space=2)
+        pid3 = PartitionId(space=3,)
+        
+        self.bundle.partitions.new_partition(pid1, data={'pid':'pid1'})
+        self.bundle.partitions.new_partition(pid2, data={'pid':'pid2'})
+        self.bundle.partitions.new_partition(pid3, data={'pid':'pid3'})
+        self.bundle.partitions.new_partition(pid1, data={'pid':'pid1'})
+        self.bundle.partitions.new_partition(pid2, data={'pid':'pid2'})
+        self.bundle.partitions.new_partition(pid3, data={'pid':'pid3'})
+        
+        self.assertEqual(3, len(self.bundle.partitions.all))
+        
+        p = self.bundle.partitions.new_partition(pid1)   
+        self.assertEquals('pid1',p.data['pid'] )
+      
+        p = self.bundle.partitions.new_partition(pid2)   
+        self.assertEquals('pid2',p.data['pid'] ) 
 
+        p = self.bundle.partitions.new_partition(pid3)   
+        self.assertEquals('pid3',p.data['pid'] ) 
+
+        p = self.bundle.partitions.find(pid1)   
+        self.assertEquals('pid1',p.data['pid'] )
+      
+        p = self.bundle.partitions.find(pid2)   
+        self.assertEquals('pid2',p.data['pid'] ) 
+
+        p = self.bundle.partitions.find(pid3)   
+        self.assertEquals('pid3',p.data['pid'] ) 
+         
+        p = self.bundle.partitions.find_orm(pid3)   
+        s = self.bundle.database.session
+        p.data['foo'] = 'bar'
+        s.commit()
+        
+        p = self.bundle.partitions.find(pid3)   
+        self.assertEquals('bar',p.data['foo'] ) 
+        
 if __name__ == "__main__":
     if True:
         unittest.main()

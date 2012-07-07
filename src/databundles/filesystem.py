@@ -122,7 +122,7 @@ class Filesystem(object):
  
     @staticmethod
     def file_hash(path):
-        '''Compute hash of a file in chuncks'''
+        '''Compute hash of a file in chunks'''
         import hashlib
         md5 = hashlib.md5()
         with open(path,'rb') as f: 

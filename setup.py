@@ -2,8 +2,9 @@
 
 from setuptools import setup, find_packages
 import sys
-if sys.version < '2.7':
-    sys.exit('ERROR: Sorry, python 2.7 is required for this application.')
+#if sys.version < '2.7':
+#    sys.exit('ERROR: Sorry, python 2.7 is required for this application.')
+
 
 # zip_save=False  : database.Database.create uses __file__
 setup(name='databundles',
@@ -15,8 +16,9 @@ setup(name='databundles',
       author_email='eric@clarinova.com',
       url='',
       keywords='',
-      packages = find_packages('src'), 
-      package_dir = {'':'src'},
+      packages = ['databundles'],
+      package_dir = {'databundles':'src/databundles'},
+      include_package_data = True,
       package_data = { 'databundles' : ['support/*']},
       zip_safe=False,
       install_requires=[
@@ -26,3 +28,5 @@ setup(name='databundles',
         'beautifulsoup4'
       ]
      )
+
+

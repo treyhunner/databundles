@@ -32,9 +32,7 @@ def run(argv, bundle_class):
         phases = ['prepare','build', 'install']
     else:
         phases = [phase]
- 
-    
- 
+
     if 'prepare' in phases:
         if b.pre_prepare():
             b.log("---- Preparing ----")

@@ -187,9 +187,12 @@ class BundleConfig(object):
             o = (s.query(File).filter(File.source_url==source_url).one())
          
         except sqlalchemy.orm.exc.NoResultFound:
-          
-            o = File(source_url=source_url,process='none' )
-            s.add(o)
+            if create:
+                o = File(source_url=source_url,path=source_url,process='none' )
+                s.add(o)
+                s.commit()
+            else:
+                return None
           
           
         o.session = s # Files have SavableMixin

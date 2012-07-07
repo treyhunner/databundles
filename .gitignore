@@ -1,3 +1,5 @@
 # gcc coverage testing tool files
 *.pyc
 
+databundles.egg-info
+dist
