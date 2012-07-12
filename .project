@@ -3,6 +3,7 @@
 	<name>databundles</name>
 	<comment></comment>
 	<projects>
+		<project>petl</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-07-01 15:44                                */
+/* Created on:            2012-07-11 09:39                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -27,7 +27,6 @@ CREATE TABLE "datasets" (
     "d_creator" TEXT,
     "d_revision" TEXT,
     "d_data" TEXT,
-    "d_path" TEXT,
     CONSTRAINT "PK_datasets" PRIMARY KEY ("d_id")
 );
 
@@ -113,13 +112,16 @@ CREATE TABLE "config" (
 
 CREATE TABLE "partitions" (
     "p_id" TEXT,
+    "p_name" TEXT NOT NULL,
     "p_d_id" TEXT NOT NULL,
+    "p_sequence_id" INTEGER NOT NULL,
     "p_space" TEXT,
     "p_time" TEXT,
     "p_t_id" TEXT,
     "p_data" TEXT,
     "p_state" TEXT,
     CONSTRAINT "PK_partitions" PRIMARY KEY ("p_id"),
+    CONSTRAINT "TUC_partitions_1" UNIQUE ("p_name"),
     FOREIGN KEY ("p_d_id") REFERENCES "datasets" ("d_id"),
     FOREIGN KEY ("p_t_id") REFERENCES "tables" ("t_id")
 );

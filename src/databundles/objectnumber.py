@@ -6,7 +6,8 @@ Created on Jun 11, 2012
 
 class ObjectNumber(object):
     '''
-    classdocs
+    Static class for holding constants and static methods related 
+    to object numbers
     '''
     class _const:
         class ConstError(TypeError): pass
@@ -17,101 +18,59 @@ class ObjectNumber(object):
 
     TYPE=_const()
     TYPE.DATASET = 'a'
-    TYPE.TABLE ='b'
-    TYPE.COLUMN = 'c'
+    TYPE.PARTITION = 'b'
+    TYPE.TABLE ='c'
+    TYPE.COLUMN = 'd'
 
     TCMAXVAL = 62*62 -1; # maximum for table and column values. 
-    
+    PARTMAXVAL = 62*62*62 -1; # maximum for table and column values. 
+     
     EPOCH = 1325376000 # Jan 1, 2012 in UNIX time
 
-    def __init__(self, dataset=None, table = None, column=None):
+    @classmethod
+    def parse(self, input):
+        '''Parse a string into one of the object number classes. '''
+        
+        if input is None:
+            return None
+        
+        if  isinstance(input, unicode):
+            dataset = input.encode('ascii')
+      
+        if input[0] == self.TYPE.DATASET:
+            dataset = int(ObjectNumber.base62_decode(input[1:]))
+            return DatasetNumber(dataset)
+        elif input[0] == self.TYPE.TABLE:   
+            table = int(ObjectNumber.base62_decode(input[-2:]))
+            dataset = int(ObjectNumber.base62_decode(input[1:-2]))
+            return TableNumber(DatasetNumber(dataset), table)
+        elif input[0] == self.TYPE.PARTITION:
+            partition = int(ObjectNumber.base62_decode(input[-3:]))
+            dataset = int(ObjectNumber.base62_decode(input[1:-3]))  
+            return PartitionNumber(DatasetNumber(dataset), partition)              
+        elif input[0] == self.TYPE.COLUMN:       
+            column = int(ObjectNumber.base62_decode(input[-2:]))
+            table = int(ObjectNumber.base62_decode(input[-4:-2]))
+            dataset = int(ObjectNumber.base62_decode(input[1:-4]))
+            return ColumnNumber(TableNumber(DatasetNumber(dataset), table), column)
+        else:
+            raise ValueError('Unknow type character: '+input[0]+ ' in '+str(dataset))
+       
+    
+    def __init__(self, primary, suffix=None):
         '''
         Constructor
         '''
         
-        if isinstance(dataset, ObjectNumber):
-            # Copy constructor
-            if table is None: 
-                table = dataset.table
-                
-            if column is None:
-                column = dataset.column
-            
-            dataset = dataset.dataset
-                 
-        elif isinstance(dataset, int):
-            
-            # This calc is OK until 31 Dec 2053 00:00:00 GMT
-            if dataset > self.EPOCH:
-                dataset = dataset - self.EPOCH
-          
-        elif isinstance(dataset, str) or isinstance(dataset, unicode):
-            
-            if  isinstance(dataset, unicode):
-                dataset = dataset.encode('ascii')
-          
-            if dataset[0] == self.TYPE.DATASET:
-                dataset = int(ObjectNumber.base62_decode(dataset[1:]))
-            elif dataset[0] == self.TYPE.TABLE:
-                if table is None:
-                    table = int(ObjectNumber.base62_decode(dataset[-2:]))
-                dataset = int(ObjectNumber.base62_decode(dataset[1:-2]))
-            elif dataset[0] == self.TYPE.COLUMN:       
-                if column is None:
-                    column = int(ObjectNumber.base62_decode(dataset[-2:]))
-                if table is None:
-                    table = int(ObjectNumber.base62_decode(dataset[-4:-2]))
-                dataset = int(ObjectNumber.base62_decode(dataset[1:-4]))
-            else:
-                raise ValueError('Unknow type character: '+dataset[0]+ ' in '+str(dataset))
-           
-            
-        elif dataset is None:
-            import time
-            dataset = int(time.time())-self.EPOCH
-        else:
-            raise TypeError('dataset value must be an integer or a string. got: '
-                            +str(type(dataset)))
-
-        if table is None and column is None:
-            self.type = self.TYPE.DATASET
-            
-        elif table is not None and column is None:
-            self.type = self.TYPE.TABLE
-            
-        elif table is not None and column is not None:  
-            self.type = self.TYPE.COLUMN
-            
-        else:
-            raise "Bad Arguments";
-
-        if table is not None:
-            self._table = table
-        else:
-            self._table = None
-            
-        if column is not None:
-            self._column = column
-        else:
-            self._column = None
-
-        if isinstance(dataset, str):
-            self.dataset =ObjectNumber.base62_decode(dataset)
-        elif isinstance(dataset, int):
-            self.dataset = dataset
-        else:
-            raise ValueError('Data set must end up as a string or an int')
+        # If the primary is the same as this class, it is a copy constructor
+        if isinstance(primary, self.__class__) and suffix is None:
+            pass
         
-        if self._table >  self.TCMAXVAL:
-            raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
-        
-        if self._column >  self.TCMAXVAL:
-            raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
-        
-       
- 
-    def normalize_id(self):
-        pass
+        else:
+            self.primary = primary
+            self.suffix = suffix
+    
+    
   
     @classmethod
     def base62_encode(cls, num):
@@ -158,77 +117,97 @@ class ObjectNumber(object):
             idx += 1
     
         return num
-       
-    @property
-    def object_type(self):
-        return self.type
-     
-    
-    @property
-    def dataset_number(self):
-        return ObjectNumber.base62_decode(self.dataset)
- 
-    @property 
-    def table(self):
-        
-        if self._table >  self.TCMAXVAL:
-            raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
-        
-        return self._table
-    
-    @table.setter
-    def table(self, value): #@DuplicatedSignature         
-        if isinstance(value, int):
-            if value < 0 or value > self.TCMAXVAL:
-                raise ValueError, "table argument must be between 0 and {0} ".format(self.TCMAXVAL)
-            self._table = value 
-        elif isinstance(value, str) or isinstance(value, unicode) :
-            self._table = ObjectNumber.base62_decode(value)
-        elif value is None:
-            self._table = None
-        else:
-            raise TypeError, "table argument must be an int or str. Got "+type(value).__name__
-   
-    @property 
-    def column(self):
-        
-        if self._column >  self.TCMAXVAL:
-            raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
-        
-        return self._column
-    
-    @column.setter
-    def column(self, value): #@DuplicatedSignature
-        if isinstance(value, int):              
-            if value < 0 or value > self.TCMAXVAL:
-                raise ValueError, "column argument must be between 0 and {0} ".format(self.TCMAXVAL)
-            self._column = value
-        elif isinstance(value, str):
-            self._column =  ObjectNumber.base62_decode(value)
-        elif value is None:
-            self._column = None
-        else:
-            raise TypeError, "column argument must be an int or str. Got "+type(value).__name__
- 
-    
-    
-    def __str__(self):
-        if self.type == self.TYPE.COLUMN:
-  
-            return (self.type+
-                    ObjectNumber.base62_encode(self.dataset)+
-                    ObjectNumber.base62_encode(self.table).rjust(2,'0')+
-                    ObjectNumber.base62_encode(self.column).rjust(2,'0'))
-            
-        elif self.type == self.TYPE.TABLE:
-            return (self.type+
-                    ObjectNumber.base62_encode(self.dataset)+
-                    ObjectNumber.base62_encode(self.table).rjust(2,'0'))
-        else:
-            return (self.type+ObjectNumber.base62_encode(self.dataset))
-           
-    def __repr__(self):
-        return "<ObjectNumber:{}:{}:{}:{}>".format(self.type, self.dataset, self._table, self._column)
 
-   
+
+
+class DatasetNumber():
+    '''An identifier for a dataset'''
+    def __init__(self, dataset=None):
+        '''
+        Constructor
+        '''
+      
+        if dataset is None:
+            import time
+            dataset = int(time.time())
+    
+        # For Datasets, integer values are time 
+        # This calc is OK until 31 Dec 2053 00:00:00 GMT
+        if dataset > ObjectNumber.EPOCH:
+            dataset = dataset - ObjectNumber.EPOCH
+          
+        self.dataset = dataset
+
+    def __str__(self):        
+        return (ObjectNumber.TYPE.DATASET+
+                ObjectNumber.base62_encode(self.dataset))
+           
+ 
+
+class TableNumber(ObjectNumber):
+    '''An identifier for a table'''
+    def __init__(self, dataset, table):
+        if not isinstance(dataset, DatasetNumber):
+            raise ValueError("Constructor requires a DatasetNumber")
+
+        if table > ObjectNumber.TCMAXVAL:
+            raise ValueError("Value is too large")
+
+
+        self.dataset = dataset
+        self.table = table;
+         
+         
+    def __str__(self):        
+        return (ObjectNumber.TYPE.TABLE+
+                ObjectNumber.base62_encode(self.dataset.dataset)+
+                ObjectNumber.base62_encode(self.table).rjust(2,'0'))
+                  
+         
+class ColumnNumber(ObjectNumber):
+    '''An identifier for a column'''
+    def __init__(self, table, column):
+        if not isinstance(table, TableNumber):
+            raise ValueError("Constructor requires a TableNumber")
+
+        if column > ObjectNumber.TCMAXVAL:
+            raise ValueError("Value is too large")
+
+        self.table = table
+        self.column = column
+         
+         
+    def __str__(self):        
+        return (ObjectNumber.TYPE.COLUMN+
+                ObjectNumber.base62_encode(self.table.dataset.dataset)+
+                ObjectNumber.base62_encode(self.table.table).rjust(2,'0')+
+                ObjectNumber.base62_encode(self.column).rjust(2,'0')
+                )
+           
+
+class PartitionNumber(ObjectNumber):
+    '''An identifier for a partition'''
+    def __init__(self, dataset, partition):
+        '''
+        Arguments:
+        dataset -- Must be a DatasetNumber
+        partition -- an integer, from 0 to 62^3
+        '''
+        if not isinstance(dataset, DatasetNumber):
+            raise ValueError("Constructor requires a DatasetNumber")
+
+        if partition > ObjectNumber.PARTMAXVAL:
+            raise ValueError("Value is too large")
+
+        self.dataset = dataset
+        self.partition = partition;
+         
+         
+    def __str__(self):        
+        return (ObjectNumber.TYPE.PARTITION+
+                ObjectNumber.base62_encode(self.dataset.dataset)+
+                ObjectNumber.base62_encode(self.partition).rjust(3,'0'))
+
+  
+
         

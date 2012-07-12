@@ -1,12 +1,8 @@
-build:
-    headers: sf1headers.csv
-    rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/
-    statesFile: States
 identity:
     creator: clarinova.com
-    dataset: 2000 Population Census
-    id: a162Va
+    dataset: Foobar Example File
+    id: a18hfD
     revision: 1
-    source: census.gov
+    source: example.com
     subset: SF1
     variation: orig

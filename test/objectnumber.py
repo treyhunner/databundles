@@ -4,11 +4,37 @@ Created on Jun 13, 2012
 @author: eric
 '''
 import unittest
-from databundles.objectnumber import ObjectNumber
+from databundles.objectnumber import *
 
 class Test(unittest.TestCase):
 
     def test_basic(self):
+        
+        
+        values = ['a17PY5','c17PY50a','d17PY50a0a','b17PY500a']
+        
+        for v in values:
+            x = ObjectNumber.parse(v)   
+            self.assertEquals(v, str(x))
+            print x
+        
+        dn = DatasetNumber()
+        
+        print dn
+        
+        tn = TableNumber(dn, 10)
+        
+        print tn
+        
+        cn = ColumnNumber(tn, 10)
+        
+        print cn
+        
+        pn = PartitionNumber(dn, 10)
+        
+        print pn
+        
+        return True
       
         self.assertEquals('a1',str(ObjectNumber(1)))
         self.assertEquals('b101',str(ObjectNumber(1,1)))

@@ -5,12 +5,19 @@ Created on Jun 23, 2012
 '''
 
 class PartitionId(object):
-
+    '''Has a similar interface to Identity'''
+    
+    partition = None
+    
     def __init__(self, **kwargs):
-     
+    
+        self.partition = None # Gets set externally
+        self._id = kwargs.get('id',None)
         self.time = kwargs.get('time',None)
         self.space = kwargs.get('space',None)
         self.table = kwargs.get('table',None)
+
+     
 
     def __str__(self):
         '''Return the parttion component of the name'''
@@ -18,6 +25,42 @@ class PartitionId(object):
         return '.'.join([re.sub('[^\w\.]','_',str(s))
                          for s in filter(None, [self.time, self.space, 
                                                 self.table])])
+        
+    @property
+    def source(self):
+        return self.partition.bundle.source
+        
+    @property
+    def dataset(self):
+        return self.partition.bundle.dataset
+            
+    @property
+    def subset(self):
+        return self.partition.bundle.subset
+            
+    @property
+    def variation(self):
+        return self.partition.bundle.variation
+              
+    @property
+    def creator(self):
+        return self.partition.bundle.creator
+            
+    @property
+    def revision(self):
+        return self.partition.bundle.revision
+            
+    @property
+    def path(self):
+        return self.partition.path
+
+    @property
+    def name(self):
+        return self.partition.name
+
+    @property
+    def id_(self):
+        return self._id
 
 class Partition(object):
     '''Represents a bundle partition, part of the bundle data broken out in 
@@ -29,23 +72,38 @@ class Partition(object):
         self.data = kwargs.get('data',{})
         self.state = kwargs.get('state', None)
       
-    @property
-    def name(self):
-        parts = self.bundle.identity.name_parts(self.bundle.identity)
+        self.pid.partition = self
         
-        np = parts[:-1]+[str(self.pid)]+parts[-1:]
+        self.init()
+      
+    def init(self):
+        '''Initialize the partition, loading in any SQL, etc. '''
+        if not self.database.exists():
+            self.database.create()
+            
+        pass
+    
+    
+    @classmethod
+    def name_string(cls,bundle, pid):
+        parts = bundle.identity.name_parts(bundle.identity)
+        
+        np = parts[:-1]+[str(pid)]+parts[-1:]
         
         return  '-'.join(np)
+    @property
+    def name(self):
+        return self.name_string(self.bundle, self.pid)
     
     @property
     def path(self):
         import os.path
         parts = self.bundle.identity.name_parts(self.bundle.identity)
+       
         source = parts.pop(0)
         p = self.pid
-        pparts = [ i for i in [p.time,p.space,p.table] if i is not None]
-        
-        
+        pparts = [ str(i) for i in [p.time,p.space,p.table] if i is not None]
+       
         return  os.path.join(source, '-'.join(parts), *pparts )
     
     @property
@@ -56,6 +114,11 @@ class Partition(object):
     def __repr__(self):
         return "<partition: {}>".format(self.name)
  
+    @property
+    def identity(self):
+        return self.pid
+        
+        
 class Partitions(object):
     '''Continer and manager for the set of partitions. '''
     
@@ -85,8 +148,10 @@ class Partitions(object):
         
         partition_id = orm_partition.as_partition_id()
         
-        return Partition(self.bundle, partition_id, data=orm_partition.data, 
-                      state = orm_partition.state)
+        return Partition(self.bundle, 
+                         partition_id, 
+                         data=orm_partition.data, 
+                         state = orm_partition.state)
     
     
     @property
@@ -174,9 +239,7 @@ class Partitions(object):
         
         pid.table = table.id_ if table else None
      
-        p = Partition(self.bundle, pid) 
-        
-        op = OrmPartition(id = p.name,
+        op = OrmPartition(name = Partition.name_string(self.bundle, pid),
              space = pid.space,
              time = pid.time,
              t_id = pid.table,
@@ -204,7 +267,9 @@ class Partitions(object):
         s.add(op)        
         s.commit()
 
-        return self.partition(op)
+        p = self.partition(op)
+        p.init()
+        return p
 
 
     def generate(self):

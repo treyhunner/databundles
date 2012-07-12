@@ -25,8 +25,6 @@ class SimpleProperty(object):
         try:
             v =  obj.__dict__['_'+self.name]
             return v
-        
-
             
         except KeyError:
             # We return none because the fact that we are in this function means

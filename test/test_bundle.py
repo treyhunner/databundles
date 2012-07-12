@@ -6,26 +6,21 @@ Created on Jun 22, 2012
 import unittest
 from  testbundle.bundle import Bundle
 
+
 class Test(unittest.TestCase):
 
     def setUp(self):
         
         import os.path, yaml
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-        db_file = os.path.join(self.bundle_dir,'build/bundle.db')
-        if os.path.exists(db_file):
-            os.remove(db_file)
+        Bundle(self.bundle_dir).clean()
         
         bundle_yaml = '''
-build:
-    headers: sf1headers.csv
-    rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/
-    statesFile: States
 identity:
     creator: clarinova.com
-    dataset: 2000 Population Census
+    dataset: Foobar Example File
     revision: 1
-    source: census.gov
+    source: example.com
     subset: SF1
     variation: orig '''
      
@@ -63,18 +58,18 @@ identity:
 
       
     def test_identity(self):
-        self.assertEqual('census.gov', self.bundle.identity.source)
-        self.assertEqual('2000 Population Census', self.bundle.identity.dataset)
+        self.assertEqual('example.com', self.bundle.identity.source)
+        self.assertEqual('Foobar Example File', self.bundle.identity.dataset)
         self.assertEqual('SF1', self.bundle.identity.subset)
         self.assertEqual('orig', self.bundle.identity.variation)
         self.assertEqual('clarinova.com', self.bundle.identity.creator)
         self.assertEqual(1, int(self.bundle.identity.revision))
-        self.assertEqual('census.gov-2000_population_census-sf1-orig-a7d9-r1', 
+        self.assertEqual('example.com-foobar_example_file-sf1-orig-a7d9-r1', 
                          self.bundle.identity.name)
       
         self.bundle.identity.source = 'foobar'
         
-        self.assertEqual('foobar-2000_population_census-sf1-orig-a7d9-r1', 
+        self.assertEqual('foobar-foobar_example_file-sf1-orig-a7d9-r1', 
                          self.bundle.identity.name)
      
     def test_schema_direct(self):
@@ -88,9 +83,9 @@ identity:
         s.add_table('table 2', altname='alt name b')
         s.add_table('table 1', altname='alt name c')
         
-        self.assertIn('bTest01', [t.id_ for t in self.bundle.schema.tables])
-        self.assertIn('bTest02', [t.id_ for t in self.bundle.schema.tables])
-        self.assertNotIn('bTest03', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('cTest01', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('cTest02', [t.id_ for t in self.bundle.schema.tables])
+        self.assertNotIn('cTest03', [t.id_ for t in self.bundle.schema.tables])
         
         t = s.add_table('table 3', altname='alt name')
         
@@ -99,9 +94,9 @@ identity:
         t.add_column('col 3',altname='altname3')
         t.add_column('col 3',altname='altname3')
         
-        self.assertIn('cTest0301', [c.id_ for c in t.columns])
-        self.assertIn('cTest0302', [c.id_ for c in t.columns])
-        self.assertIn('cTest0303', [c.id_ for c in t.columns])
+        self.assertIn('dTest0301', [c.id_ for c in t.columns])
+        self.assertIn('dTest0302', [c.id_ for c in t.columns])
+        self.assertIn('dTest0303', [c.id_ for c in t.columns])
         
     def test_generate_schema(self):
         '''Uses the generateSchema method in the bundle'''
@@ -121,12 +116,9 @@ identity:
         ##
         ## TODO THis does does not test the 'table' parameter of the ParitionId
         ##
-        
-        self.bundle.partitions.delete_all()
-        
-        print self.bundle.database.path
-        
-        from  databundles.partition import Partition, PartitionId
+ 
+       
+        from  databundles.partition import  PartitionId
         pid1 = PartitionId(time=1, space=1)
         pid2 = PartitionId(time=2, space=2)
         pid3 = PartitionId(space=3,)
@@ -165,6 +157,10 @@ identity:
         
         p = self.bundle.partitions.find(pid3)   
         self.assertEquals('bar',p.data['foo'] ) 
+        
+        
+        print p.database.path
+        self.bundle.library.put(p)
         
 if __name__ == "__main__":
     if True:

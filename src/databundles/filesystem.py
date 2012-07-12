@@ -96,8 +96,8 @@ class Filesystem(object):
         return p
 
     def build_path(self, *args):
-        
-        if args[0] == self.BUILD_DIR:
+    
+        if len(args) > 0 and args[0] == self.BUILD_DIR:
             raise ValueError("Adding build to existing build path "+os.path.join(*args))
         
         args = (self.BUILD_DIR,) + args
@@ -106,7 +106,8 @@ class Filesystem(object):
 
     def downloads_path(self, *args):
         
-        if args[0] == self.DOWNLOAD_DIR:
+        
+        if len(args) > 0 and args[0] == self.DOWNLOAD_DIR:
             raise ValueError("Adding download to existing download path "+os.path.join(*args))
         
         args = (self.DOWNLOAD_DIR,) + args

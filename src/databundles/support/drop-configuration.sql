@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-07-01 15:44                                */
+/* Created on:            2012-07-11 09:39                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -19,7 +19,13 @@
 
 /* Drop constraints */
 
+ALTER TABLE "partitions" DROP CONSTRAINT "NN_partitions_p_name";
+
+ALTER TABLE "partitions" DROP CONSTRAINT "NN_partitions_p_sequence_id";
+
 ALTER TABLE "partitions" DROP CONSTRAINT "PK_partitions";
+
+ALTER TABLE "partitions" DROP CONSTRAINT "TUC_partitions_1";
 
 /* Drop table */
 

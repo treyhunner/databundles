@@ -17,47 +17,177 @@ class LibraryDb(databundles.database.Database):
       
         super(LibraryDb, self).__init__(None, path)  
 
+class BundleQueryCommand(object):
+    '''An object that contains and transfers a query for a bundle
+    
+    Components of the query can include. 
+    
+    Identity
+        source
+        dataset
+        subset
+        variation
+        creator
+        revision
+
+    
+    Column 
+        name, altname
+        description
+        keywords
+        datatype
+        measure 
+        units
+        universe
+    
+    Table
+        name, altname
+        description
+        keywords
+    
+    
+    Partition
+        time
+        space
+        table
+        other
+        
+    When the Partition search is included, the other three components are used
+    to find a bundle, then the pretition information is used to select a bundle
+
+    All of the  values are text, except for revision, which is numeric. The text
+    values are used in an SQL LIKE phtase, with '%' replaced by '*', so some 
+    example values are: 
+    
+        word    Matches text field, that is, in it entirety, 'word'
+        word*   Matches a text field that begins with 'word'
+        *word   Matches a text fiels that
+    
+    '''
+
+    def __init__(self):
+        pass
+
+
+    @property
+    def identity(self):
+        '''Return an array of terms for identity searches''' 
+        pass
+    
+    @property
+    def table(self):
+        '''Return an array of terms for table searches'''
+        pass
+    
+    @property
+    def column(self):
+        '''Return an array of terms for column searches'''
+        pass
+    
+    @property
+    def partition(self):
+        '''Return an array of terms for partition searches'''
+        pass   
 
 class Library(object):
+    
+    def __init__(self, **kwargs):
+        raise NotImplementedError()
+    
+    def get(self):
+        raise NotImplementedError()
+    
+    def put(self):
+        raise NotImplementedError()
+    
+    def search(self):
+        raise NotImplementedError()
+    
+    def connect_upsream(self, url):
+        '''Connect this library to an upstream library'''
+        raise NotImplementedError()
+    
+    def push(self):
+        raise NotImplementedError()
+    
+    def pull(self, url):
+        '''Synchronize the database for a remote library to this library.'''
+        raise NotImplementedError()
+    
+class LocalLibrary(Library):
     '''
     classdocs
     '''
 
     def __init__(self, directory=None, **kwargs):
         '''
-        Libraries are constructed on te root directory name for the library. 
+        Libraries are constructed on the root directory name for the library. 
         If the directory does not exist, it will be created. 
         '''
-
+        if directory is not None:
+            self.directory = directory
+        else:
+            # Try to get the library directory name from the 
+            self.config = kwargs.get('config',RunConfig())
+            self.directory = self.config.group('library').get('root',None)
             
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
-     
-        self._requires = kwargs.get('requires',None)
-        
+            
+        if not self.directory:
+            raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
+
+        self._named_bundles = kwargs.get('named_bundles', None)
+
+
     @property
     def root(self):
         return self.directory
         
-    def install(self, bundle, **kwargs):
+    def put(self, bundle, **kwargs):
         '''Install a bundle file, and all of its partitions, into the library.
         Copies in the files that don't exist, and loads data into the library
         database'''
         
         # First, check if the bundle is already installed. If so, remove it. 
-        self.remove_bundle(bundle)
+        self.remove(bundle)
 
         src = bundle.database.path
         dst = os.path.join(self.directory, bundle.identity.path+".db")
         
         if not os.path.isdir(os.path.dirname(dst)):
             os.makedirs(os.path.dirname(dst))
-        
-        bundle.log("Copy {} to {}".format(src,dst))
+     
         shutil.copyfile(src,dst)
         
         self.install_database(bundle)
         
+    def get(self,bundle_id):
+        from databundles.bundle import Bundle as BaseBundle
+        datasets = self.findByIdentity(bundle_id)
+        
+        if len(datasets) == 0:
+            raise ResultCountError("Didn't get a result for identity search of: "+
+                                   str(bundle_id))
+        
+        
+        return BaseBundle(datasets.pop(0).path)
+        
+    
+    def require(self,key):
+        from databundles.bundle import Bundle as BaseBundle
+        '''Like 'require' but returns a Bundle object. '''
+        set_ =  self.findByKey(key)
+        
+        if len(set_) > 1:
+            raise ResultCountError('Got to many results for library require query for key: '+key)
+        
+        if len(set_) == 0:
+            raise ResultCountError('Got no results for library require query for key: '+key)       
+        
+        return BaseBundle(set_.pop(0).path)
+
+    
         
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -78,10 +208,9 @@ class Library(object):
     def install_database(self, bundle):
         '''Copy the schema and partitions lists into the library database'''
         from databundles.orm import Dataset
-        bdbs = bundle.database.session
-        
+        from databundles.orm import Partition as OrmPartition
+        bdbs = bundle.database.session 
         s = self.database.session
-        
         dataset = bdbs.query(Dataset).one()
         s.merge(dataset)
         s.commit()
@@ -93,6 +222,10 @@ class Library(object):
                 s.merge(c)
             
         for p in dataset.partitions:
+            from sqlalchemy import or_
+            s.query(OrmPartition).filter(
+                or_(OrmPartition.id_ == p.id_,OrmPartition.name == p.name)
+                ).delete()
             s.merge(p)
             
         s.commit()
@@ -130,6 +263,7 @@ class Library(object):
         
         s = self.database.session
         
+        # If it is a string, it is a name or a dataset id
         if isinstance(identity, str) or isinstance(identity, unicode) : 
             query = (s.query(Dataset)
                      .filter( (Dataset.id_==identity) | (Dataset.name==identity)) )
@@ -154,7 +288,7 @@ class Library(object):
             raise ValueError("Invalid type for identit")
     
         query.order_by(desc(Dataset.revision))
-    
+     
         return query
     
     def findByIdentity(self,identity):
@@ -171,44 +305,17 @@ class Library(object):
         '''Find a bundle in the library by the shorthand name given in the
         'requires' section of the configuration '''    
         
-        if not self._requires:
-            raise ValueError("Didn't get 'requires' configuration from the constructor")
+        if  self._named_bundles is None:
+            raise ValueError("Didn't get 'named_bundles' configuration from the constructor")
          
-        if key not in self._requires:
-            raise ValueError("Require key {} not specified in configuration".format(key))
+        if key not in self._named_bundles:
+            raise ValueError("named_bundles key {} not specified in configuration".format(key))
 
-        return self.findByIdentity(self._requires[key])
-
-    def require(self,key):
-        from databundles.bundle import Bundle as BaseBundle
-        '''Like 'require' but returns a Bundle object. '''
-        set_ = self.findByKey(key)
-        
-        if len(set_) > 1:
-            raise ResultCountError('Got to many results for library require query for key: '+key)
-        
-        if len(set_) == 0:
-            raise ResultCountError('Got no results for library require query for key: '+key)       
-        
-        return BaseBundle(set_.pop(0).path)
+        return self.findByIdentity(self._named_bundles[key])
 
     def bundle_db(self,name):
         '''Return a bundle database from the library'''
     
-    
-class LocalLibrary(Library):
-    
-    def __init__(self, directory=None, **kwargs):
-        
-        if directory is not None:
-            self.directory = directory
-        else:
-            self.config = kwargs.get('config',RunConfig())
-            self.directory = self.config.group('library').get('root',None)
-            
-        if not self.directory:
-            raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
-        
 
 
 class RemoteLibrary(Library):

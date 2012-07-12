@@ -13,7 +13,7 @@ import shutil
 def new_command(args):
   
     from databundles.identity import Identity
-    from databundles.objectnumber import ObjectNumber
+    from databundles.objectnumber import DatasetNumber
     
     # Remove the creator code and version. 
     name = '-'.join(Identity.name_parts(args)[:-2])
@@ -23,10 +23,8 @@ def new_command(args):
     elif not os.path.isdir(name):
         raise IOError("Directory already exists: "+name)
 
-    on = ObjectNumber()
-
     config ={'identity':{
-         'id': str(on),
+         'id': str(DatasetNumber()),
          'source': args.source,
          'creator': args.creator,
          'dataset':args.dataset,

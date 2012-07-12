@@ -12,7 +12,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.mutable import Mutable
 
 from sqlalchemy.sql import text
-from objectnumber import  ObjectNumber
+from objectnumber import  DatasetNumber, ColumnNumber
+from objectnumber import TableNumber, PartitionNumber, ObjectNumber
 
 import json
 
@@ -98,7 +99,7 @@ class Dataset(Base):
         self.revision = kwargs.get("revision",None) 
 
         if not self.id_:
-            self.id_ = str(ObjectNumber())
+            self.id_ = str(DatasetNumber())
 
     
     @property
@@ -201,6 +202,8 @@ class Column(Base):
 
     @staticmethod
     def before_insert(mapper, conn, target):
+        '''event.listen method for Sqlalchemy to set the seqience_id for this  
+        object and create an ObjectNumber value for the id_'''
         sql = text('''SELECT max(c_sequence_id)+1 FROM columns WHERE c_t_id = :tid''')
 
         max_id, = conn.execute(sql, tid=target.t_id).fetchone()
@@ -214,10 +217,10 @@ class Column(Base):
 
     @staticmethod
     def before_update(mapper, conn, target):
-        table_on = ObjectNumber(target.t_id)
-        table_on.type = ObjectNumber.TYPE.COLUMN
-        table_on.column = target.sequence_id
-        target.id_ = str(table_on)
+        '''Set the column id number based on the table number and the 
+        sequence id for the column'''
+        table_on = ObjectNumber.parse(target.t_id)
+        target.id_ = str(ColumnNumber(table_on, target.sequence_id))
    
     def __repr__(self):
         try :
@@ -258,6 +261,8 @@ class Table(Base):
 
     @staticmethod
     def before_insert(mapper, conn, target):
+        '''event.listen method for Sqlalchemy to set the seqience_id for this  
+        object and create an ObjectNumber value for the id_'''
         sql = text('''SELECT max(t_sequence_id)+1 FROM tables WHERE t_d_id = :did''')
 
         max_id, = conn.execute(sql, did=target.d_id).fetchone()
@@ -271,11 +276,13 @@ class Table(Base):
         
     @staticmethod
     def before_update(mapper, conn, target):
-        
+        '''Set the Table ID based on the dataset number and the sequence number
+        for the table '''
         if isinstance(target,Column):
             raise TypeError('Got a column instead of a table')
                 
-        target.id_ = str(ObjectNumber(target.d_id, target.sequence_id))
+        dataset_id = ObjectNumber.parse(target.d_id)
+        target.id_ = str(TableNumber(dataset_id, target.sequence_id))
 
     @staticmethod
     def mangle_name(name):
@@ -286,9 +293,8 @@ class Table(Base):
             raise TypeError('Not a valid type for name '+str(type(name)))
 
     @property
-    def oid(self):
-       
-        return ObjectNumber(self.d_id, self.sequence_id)
+    def oid(self):   
+        return TableNumber(self.d_id, self.sequence_id)
 
     def add_column(self, name_or_column, **kwargs):
 
@@ -373,6 +379,8 @@ class Partition(Base):
     __tablename__ = 'partitions'
 
     id_ = SAColumn('p_id',Text, primary_key=True, nullable=False)
+    name = SAColumn('p_name',Text, nullable=False)
+    sequence_id = SAColumn('p_sequence_id',Integer)
     t_id = SAColumn('p_t_id',Integer,ForeignKey('tables.t_id'))
     d_id = SAColumn('p_d_id',Text,ForeignKey('datasets.d_id'))
     space = SAColumn('p_space',Text)
@@ -382,6 +390,7 @@ class Partition(Base):
     
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",kwargs.get("id_",None)) 
+        self.name = kwargs.get("name",kwargs.get("name",None)) 
         self.t_id = kwargs.get("t_id",None) 
         self.d_id = kwargs.get("d_id",None) 
         self.space = kwargs.get("space",None) 
@@ -392,7 +401,7 @@ class Partition(Base):
 
     def as_partition_id(self):
         '''Return this partition information as a PartitionId'''
-        args = {'space':self.space, 'time':self.time}
+        args = {'id': self.id_, 'space':self.space, 'time':self.time}
         
         table = self.table
         
@@ -407,4 +416,30 @@ class Partition(Base):
     def __repr__(self):
         return "<partitions: {}>".format(self.id_)
 
+    @staticmethod
+    def before_insert(mapper, conn, target):
+        '''event.listen method for Sqlalchemy to set the seqience_id for this  
+        object and create an ObjectNumber value for the id_'''
+        sql = text('''SELECT max(p_sequence_id)+1 FROM Partitions WHERE p_d_id = :did''')
+
+        max_id, = conn.execute(sql, did=target.d_id).fetchone()
+  
+        if not max_id:
+            max_id = 1
+            
+        target.sequence_id = max_id
+        
+        Partition.before_update(mapper, conn, target)
+
+    @staticmethod
+    def before_update(mapper, conn, target):
+        '''Set the column id number based on the table number and the 
+        sequence id for the column'''
+        dataset = ObjectNumber.parse(target.d_id)
+        target.id_ = str(PartitionNumber(dataset, target.sequence_id))
+        
+
+event.listen(Partition, 'before_insert', Partition.before_insert)
+event.listen(Partition, 'before_update', Partition.before_update)
+ 
 
