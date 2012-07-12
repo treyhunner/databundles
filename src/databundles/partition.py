@@ -110,6 +110,7 @@ class Partition(object):
     def database(self):
         from database import PartitionDb
         return PartitionDb(self.bundle, self)
+    
  
     def __repr__(self):
         return "<partition: {}>".format(self.name)
