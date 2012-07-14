@@ -23,13 +23,20 @@ class BundleConfigIdentity(Identity):
         self.super_ = super(BundleConfigIdentity, self)
         # Don't call super constructor. It will construct from dict. 
         self.bundle = bundle
-
+        
+        self._row = None
+    
     @property
     def row(self):
         '''Return the dataset row object for this bundle'''
-        from databundles.orm import Dataset
-        session = self.bundle.database.session
-        return session.query(Dataset).first()
+        
+        if not self._row:
+            from databundles.orm import Dataset
+            session = self.bundle.database.session
+            self._row = session.query(Dataset).first()
+        
+        return self._row
+        
 
 class BundleConfigFile(object):
     

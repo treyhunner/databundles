@@ -162,6 +162,8 @@ class LocalLibrary(Library):
         
         self.install_database(bundle)
         
+        return dst
+        
     def get(self,bundle_id):
         from databundles.bundle import Bundle as BaseBundle
         datasets = self.findByIdentity(bundle_id)

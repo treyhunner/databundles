@@ -163,7 +163,7 @@ class Partitions(object):
         return s.query(OrmPartition).count()
     
     @property 
-    def all(self):
+    def all(self): #@ReservedAssignment
         '''Return an iterator of all partitions'''
         from databundles.orm import Partition as OrmPartition
         s = self.bundle.database.session      
@@ -219,10 +219,33 @@ class Partitions(object):
             return None
     
     
+    def get(self, id_):
+        '''Get a partition by the id number 
+        
+        Arguments:
+            id_ -- a partition id value
+            
+        Returns:
+            A partitions.Partition object
+            
+        Throws:
+            a Sqlalchemy exception if the partition either does not exist or
+            is not unique
+        ''' 
+        from databundles.orm import Partition as OrmPartition
+        
+        # This is needed to flush newly created partitions, I think ... 
+        self.bundle.database.session.close()
+        
+        q = (self.bundle.database.session
+             .query(OrmPartition)
+             .filter(OrmPartition.id_==id_.encode('ascii')))
+      
+        return self.partition(q.one())
+    
     table_cache = {}
     def new_orm_partition(self, pid, **kwargs):
         from databundles.orm import Partition as OrmPartition, Table
-        
 
         if pid.table:
             if pid.table in self.table_cache:
@@ -238,12 +261,10 @@ class Partitions(object):
         else:
             table = None 
         
-        pid.table = table.id_ if table else None
-     
         op = OrmPartition(name = Partition.name_string(self.bundle, pid),
              space = pid.space,
              time = pid.time,
-             t_id = pid.table,
+             t_id = table.id_ if table else None,
              d_id = self.bundle.identity.id_,
              data=kwargs.get('data',None),
              state=kwargs.get('state',None),)  
@@ -257,19 +278,21 @@ class Partitions(object):
         s.query(OrmPartition).delete()
         
     def new_partition(self, pid, **kwargs):
-      
+    
         p = self.find(pid)
         
         if p is not None:
             return p
-      
+       
         op = self.new_orm_partition(pid, **kwargs)
         s = self.bundle.database.session
         s.add(op)        
         s.commit()
-
+       
         p = self.partition(op)
-        p.init()
+      
+        #p.init()
+       
         return p
 
 
@@ -287,7 +310,7 @@ class Partitions(object):
      
             partitions[i.pid] = p
           
-        for pid,p in partitions.items():
+        for pid,p in partitions.items(): #@UnusedVariable
             s.add(p)        
             s.commit()
               

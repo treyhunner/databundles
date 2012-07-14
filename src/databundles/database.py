@@ -86,7 +86,6 @@ class Database(object):
 
         return Inspector.from_engine(self.engine)
 
-
     @property
     def session(self):
         '''Return a SqlAlchemy session'''
@@ -97,6 +96,11 @@ class Database(object):
             self._session = Session()
             
         return self._session
+   
+    def close(self):
+        if self._session:    
+            self._session.close()
+            self._session = None
    
     def exists(self):
         return os.path.exists( self.path)

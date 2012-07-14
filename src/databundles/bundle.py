@@ -54,6 +54,11 @@ class Bundle(object):
         self.partitions = Partitions(self)
         
         self.ptick_count = 0;
+        
+
+        import base64
+        self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
+        
 
     @property
     def identity(self):
@@ -76,14 +81,16 @@ class Bundle(object):
         '''Get a bundle from the local library. Throws an exception if it does not exist'''
         self.library.get()
         
+
+        
     
     def log(self, message, **kwargs):
         '''Log the messsage'''
-        print "LOG: ",message
+        print self.logid, "LOG: ",message
 
     def error(self, message, **kwargs):
         '''Log an error messsage'''
-        print "ERR: ",message
+        print self.logid, "ERR: ",message
 
     def progress(self,message):
         '''print message to terminal, in place'''
@@ -94,10 +101,11 @@ class Bundle(object):
         import sys
         sys.stdout.write(message)
         
-        self.ptick_count += 1
+        self.ptick_count += len(message)
        
-        if self.ptick_count % 72 == 0:
+        if self.ptick_count > 72:
             sys.stdout.write("\n")
+            self.ptick_count = 0
 
     @classmethod
     def rm_rf(cls, d):
@@ -143,8 +151,7 @@ class Bundle(object):
 
     def table_data(self, query):
         '''Return a petl container for a data table'''
-        import petl.fluent
-        
+        import petl 
         query = query.strip().lower()
         
         if 'select' not in query:
