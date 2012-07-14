@@ -80,17 +80,15 @@ class Bundle(object):
     def get_bundle(self,bundle_id):
         '''Get a bundle from the local library. Throws an exception if it does not exist'''
         self.library.get()
-        
 
-        
     
     def log(self, message, **kwargs):
         '''Log the messsage'''
-        print self.logid, "LOG: ",message
+        print "LOG: ",message
 
     def error(self, message, **kwargs):
         '''Log an error messsage'''
-        print self.logid, "ERR: ",message
+        print "ERR: ",message
 
     def progress(self,message):
         '''print message to terminal, in place'''

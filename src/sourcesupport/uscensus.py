@@ -29,11 +29,11 @@ class UsCensusBundle(Bundle):
         self.headers_file =  self.filesystem.path(bg.get('headersFile'))
         self.states_file =  self.filesystem.path(bg.get('statesFile'))
         self.partitions_file =  self.filesystem.path(bg.get('partitionsFile'))
-    def schemaGenerator(self):
-        '''Return schema rows from the  columns.csv file'''
+        
+    def geoSchemaGenerator(self):
         from databundles.orm import Table, Column
         import csv
-    
+        
         self.log("Create GEO schema")
         yield Table(name='sf1geo',description='Geo header')
       
@@ -43,6 +43,12 @@ class UsCensusBundle(Bundle):
         for row in reader: 
             yield Column(name=row['column'],datatype=types[row['datatype'].strip()])
     
+    def tableSchemaGenerator(self):
+        '''Return schema rows from the  columns.csv file'''
+        from databundles.orm import Table, Column
+        import csv
+    
+
         self.log("Generating main table schemas")
         self.log("T = Table, C = Column, 5 = Five geo columns")
     
@@ -165,8 +171,7 @@ class UsCensusBundle(Bundle):
                     
                     if link.get('href') and  '.zip' in link.get('href'):
                         final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
-                        path = urlparse.urlparse(final_url).path
-                
+                    
                         if 'geo_uf1' in final_url:
                             self.ptick('g')
                             state = re.match('.*/(\w{2})geo_uf1', final_url).group(1)
@@ -282,9 +287,7 @@ class UsCensusBundle(Bundle):
             construct a regular expresstion to parse the lines.'''
             import csv, re
                     
-            def_file = self.filesystem.path(self.config.group('build').get('geoheaderFile'))
-    
-            reader  = csv.DictReader(open(def_file, 'rbU') )
+            reader  = csv.DictReader(open(self.geoheaders_file, 'rbU') )
             pos = 0;
             regex = ''
             header = []
