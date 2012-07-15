@@ -168,7 +168,7 @@ class ColumnNumber(ObjectNumber):
     '''An identifier for a column'''
     def __init__(self, table, column):
         if not isinstance(table, TableNumber):
-            raise ValueError("Constructor requires a TableNumber")
+            raise ValueError("Constructor requires a TableNumber. got: "+str(type(table)))
 
         if column > ObjectNumber.TCMAXVAL:
             raise ValueError("Value is too large")

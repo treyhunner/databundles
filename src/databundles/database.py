@@ -44,8 +44,6 @@ class Database(object):
             self.file_path = file_path
         else:
             self.file_path = None
-        
-        self.create() # Only creates if does not exist
        
     @property
     def name(self):
@@ -57,9 +55,18 @@ class Database(object):
         if self.file_path:
             return self.file_path
         else:
+            
+            # This if breaks a recursion loop. Getting the path from the database
+            # config required determining the path to open the database. 
+            if self.bundle._config is None:
+                from bundleconfig import  BundleConfigFile
+                identity = BundleConfigFile(self.bundle.bundle_dir).identity
+            else:
+                identity = self.bundle.identity
+            
             return self.bundle.filesystem.path(
                                 self.bundle.filesystem.BUILD_DIR,
-                                self.bundle.identity.path+".db")
+                                identity.path+".db")
      
     @property
     def metadata(self):
@@ -210,7 +217,7 @@ class PartitionDb(Database):
             
             # Copy the partition record
             from databundles.orm import Partition as OrmPartition 
-           
+        
             orm_p = bdbs.query(OrmPartition).filter(
                             OrmPartition.id_ == self.partition.identity.id_).one()
             s.merge(orm_p)

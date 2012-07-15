@@ -15,22 +15,25 @@ class Identity(object):
         self.name # Will trigger errors if anything is wrong
  
     def from_dict(self,d):
+        self.id_ = d.get('id', d.get('id_'))
         self.source = d.get('source')
         self.dataset =  d.get('dataset')
         self.subset =  d.get('subset',None)
         self.variation =  d.get('variation','orig')
         self.creator =  d.get('creator')
-        self.revision =  d.get('revision',1)
+        self.revision =  int(d.get('revision',1))
 
     def to_dict(self):
         '''Returns the identity as a dict. values that are empty are removed'''
         d =  {
+             'id':self.id_,
              'source':self.source,
              'dataset':self.dataset,
              'subset':self.subset,
              'variation':self.variation,
              'creator':self.creator,
-             'revision':self.revision
+             'revision':self.revision,
+             'name' : self.name
              }
 
         return { k:v for k,v in d.items() if v}
@@ -55,6 +58,7 @@ class Identity(object):
     
     @property
     def path(self):
+        '''The name is a form suitable for use in a filesystem'''
         return self.path_str(self)
     
     @classmethod

@@ -9,34 +9,6 @@ from databundles.identity import Identity
 from databundles.properties import DbRowProperty 
 from exceptions import  ConfigurationError
 
-class BundleConfigIdentity(Identity):
-    
-    id_ = DbRowProperty("id_",None,ascii=True)
-    source = DbRowProperty("source",None)
-    dataset = DbRowProperty("dataset",None)
-    subset = DbRowProperty("subset",None)
-    variation = DbRowProperty("variation",None)
-    creator = DbRowProperty("creator",None)
-    revision = DbRowProperty("revision",None)
-    
-    def __init__(self, bundle):
-        self.super_ = super(BundleConfigIdentity, self)
-        # Don't call super constructor. It will construct from dict. 
-        self.bundle = bundle
-        
-        self._row = None
-    
-    @property
-    def row(self):
-        '''Return the dataset row object for this bundle'''
-        
-        if not self._row:
-            from databundles.orm import Dataset
-            session = self.bundle.database.session
-            self._row = session.query(Dataset).first()
-        
-        return self._row
-        
 
 class BundleConfigFile(object):
     
@@ -48,6 +20,8 @@ class BundleConfigFile(object):
         self.directory = directory
         self.config_file = BundleConfigFile.get_config_path(directory)
         self._config_dict = None
+        
+        self._identity = None
         
         if not os.path.exists(self.config_file):
             raise ConfigurationError("Can't find bundle config file: "+self.config_file)
@@ -73,7 +47,10 @@ class BundleConfigFile(object):
   
     @property
     def identity(self):
-        return Identity(**self.config_dict.get('identity'))
+        if self._identity is None:        
+            self._identity = Identity(**self.config_dict.get('identity'))
+        
+        return self._identity
   
     def changed(self,filerec):
 
@@ -110,14 +87,20 @@ class BundleConfig(object):
         
         self.bundle = bundle
         self._bundle_config_file = None
-        if hasattr(self.bundle,'filesystem'):
+        if hasattr(self.bundle,'filesystem') and self.bundle.database.exists():
             self.update_from_file()
+            
+        self._identity = None
+            
 
     def update_from_file(self):
 
         config_file = BundleConfigFile(self.bundle.filesystem.path())
 
         bfr = self.filerec(BundleConfigFile.BUNDLE_CONFIG_FILE, True)
+           
+        if not bfr:
+            return
              
         if bfr._is_new or config_file.changed(bfr):
             self.get_or_new_dataset(delete=True)
@@ -251,7 +234,25 @@ class BundleConfig(object):
 
     @property
     def identity(self):
-        return BundleConfigIdentity(self.bundle)
+        
+        from databundles.orm import Dataset
+        session = self.bundle.database.session
+        row = session.query(Dataset).first()
+        
+        if row is None:
+            raise Exception("can't get identity from database, no Dataset row")
+        
+        return row.identity
+    
+    def update_identity(self, identity):
+        print identity.name
+        from databundles.orm import Dataset
+        session = self.bundle.database.session
+        row = session.query(Dataset).first()
+        
+        row.__init__(**identity.to_dict())
+        session.commit()
+        
       
     def config_file_changed(self):
         return self.config_file.changed(self.filerec(BundleConfigFile.BUNDLE_CONFIG_FILE, True))
@@ -264,7 +265,7 @@ class BundleConfig(object):
     
         from databundles.orm import File
         import sqlalchemy.orm.exc
- 
+
         s = self.bundle.database.session
         
         if not rel_path:
@@ -288,6 +289,9 @@ class BundleConfig(object):
             s.commit()
             o._is_new = True
             
+        except Exception as e:
+            return None
+        
         return o
 
     @property

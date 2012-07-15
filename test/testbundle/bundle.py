@@ -13,27 +13,6 @@ class Bundle(Base):
         self.super_ = super(Bundle, self)
         self.super_.__init__(directory)
         
-    def schemaGenerator(self):
-        '''Return schema rows'''
-        
-        from databundles.orm import Table, Column
-        
-        yield Table(name='table1')
-        yield Table(name='table2')
-        yield Column(table_name='table1', name='col1')
-        yield Column(table_name='table2', name='col2')
-        yield Column(table_name='table3', name='col3')
-        yield Table(name='table3')
-        yield Table(name='table1', altname='altname')
-        
-        
-        yield Table(name='random')
-        yield Column(name='rand1',datatype=Column.DATATYPE_REAL)
-        yield Column(name='rand2',datatype=Column.DATATYPE_REAL)
-        yield Column(name='rand3',datatype=Column.DATATYPE_REAL)
-        yield Column(name='rand4',datatype=Column.DATATYPE_REAL)
-        yield Column(name='rand5',datatype=Column.DATATYPE_REAL)
-
     
     def prepare(self):
         self.schema.generate()

@@ -4,63 +4,98 @@ Created on Jun 23, 2012
 @author: eric
 '''
 
-class PartitionId(object):
+import os
+
+from identity import Identity
+
+class PartitionIdentity(Identity):
     '''Has a similar interface to Identity'''
     
-    partition = None
+    time = None
+    space = None
+    table = None
     
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
+
+        got_id = False
+        for arg in args:
+            if isinstance(arg, Identity):
+                self.from_dict(arg.to_dict())
+                got_id = True
     
-        self.partition = None # Gets set externally
-        self._id = kwargs.get('id',None)
+        if not got_id:
+            super(PartitionIdentity, self).__init__(**kwargs)
+    
         self.time = kwargs.get('time',None)
         self.space = kwargs.get('space',None)
         self.table = kwargs.get('table',None)
+    
+        from objectnumber import ObjectNumber
+        if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
+            self.id_ = None
+            
+    def from_dict(self,d):
+        
+        return super(PartitionIdentity, self).from_dict(d)
+        
+        self.time = d.get('time',None)
+        self.space = d.get('space',None)
+        self.table = d.get('table',None)
+        
+        from objectnumber import ObjectNumber
+        if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
+            self.id_ = None
+        
 
-     
+    def to_dict(self):
+        '''Returns the identity as a dict. values that are empty are removed'''
+        
+        d =  super(PartitionIdentity, self).to_dict()
+        
+        d['time'] = self.time
+        d['space'] = self.space
+        d['table'] = self.table
 
-    def __str__(self):
-        '''Return the parttion component of the name'''
+        return { k:v for k,v in d.items() if v}
+    
+    
+    @classmethod
+    def path_str(cls,o=None):
+        '''Return the path name for this bundle'''
         import re
-        return '.'.join([re.sub('[^\w\.]','_',str(s))
-                         for s in filter(None, [self.time, self.space, 
-                                                self.table])])
         
-    @property
-    def source(self):
-        return self.partition.bundle.source
+        id_path = Identity.path_str(o)
+
+        partition_parts = [re.sub('[^\w\.]','_',str(s))
+                         for s in filter(None, [o.time, o.space, 
+                                                o.table])]
+    
+       
+        return  os.path.join(id_path ,  *partition_parts )
         
-    @property
-    def dataset(self):
-        return self.partition.bundle.dataset
-            
-    @property
-    def subset(self):
-        return self.partition.bundle.subset
-            
-    @property
-    def variation(self):
-        return self.partition.bundle.variation
-              
-    @property
-    def creator(self):
-        return self.partition.bundle.creator
-            
-    @property
-    def revision(self):
-        return self.partition.bundle.revision
-            
-    @property
-    def path(self):
-        return self.partition.path
-
-    @property
-    def name(self):
-        return self.partition.name
-
-    @property
-    def id_(self):
-        return self._id
+    
+    @classmethod
+    def name_str(cls,o=None):
+        
+        return '-'.join(cls.name_parts(o))
+    
+    @classmethod
+    def name_parts(cls,o=None):
+        import re
+       
+        parts = Identity.name_parts(o)
+    
+        rev = parts.pop()
+        
+        partition_component = '.'.join([re.sub('[^\w\.]','_',str(s))
+                         for s in filter(None, [o.time, o.space, 
+                                                o.table])])
+        
+        parts.append(partition_component)
+        parts.append(rev)
+        
+        return parts
+    
 
 class Partition(object):
     '''Represents a bundle partition, part of the bundle data broken out in 
@@ -71,18 +106,17 @@ class Partition(object):
         self.pid= partition_id
         self.data = kwargs.get('data',{})
         self.state = kwargs.get('state', None)
+        
+        self.pid.id_ = kwargs.get('id',kwargs.get('id_',None))
       
         self.pid.partition = self
-        
-        self.init()
+
       
     def init(self):
         '''Initialize the partition, loading in any SQL, etc. '''
         if not self.database.exists():
             self.database.create()
-            
-        pass
-    
+
     
     @classmethod
     def name_string(cls,bundle, pid):
@@ -149,8 +183,10 @@ class Partitions(object):
         
         partition_id = orm_partition.as_partition_id()
         
+
         return Partition(self.bundle, 
                          partition_id, 
+                         id=orm_partition.id_,
                          data=orm_partition.data, 
                          state = orm_partition.state)
     
@@ -243,23 +279,21 @@ class Partitions(object):
       
         return self.partition(q.one())
     
-    table_cache = {}
+    table_cache = None
     def new_orm_partition(self, pid, **kwargs):
         from databundles.orm import Partition as OrmPartition, Table
 
+        if self.table_cache is None:
+            self.table_cache = {}
+            s = self.bundle.database.session
+            for table in s.query(Table).filter(Table.name==pid.table).all():
+                self.table_cache[table.name] = table
+                self.table_cache[table.id_] = table
+                
+        table = None
         if pid.table:
             if pid.table in self.table_cache:
                 table = self.table_cache[pid.table]
-            else:
-                try:
-                    s = self.bundle.database.session
-                    table = s.query(Table).filter(Table.name==pid.table).one()
-                    self.table_cache[pid.table] = table
-                   
-                except:
-                    table = None
-        else:
-            table = None 
         
         op = OrmPartition(name = Partition.name_string(self.bundle, pid),
              space = pid.space,
@@ -287,12 +321,9 @@ class Partitions(object):
         op = self.new_orm_partition(pid, **kwargs)
         s = self.bundle.database.session
         s.add(op)        
-        s.commit()
        
         p = self.partition(op)
-      
-        #p.init()
-       
+    
         return p
 
 

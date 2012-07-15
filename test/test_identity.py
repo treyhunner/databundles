@@ -4,45 +4,52 @@ Created on Jul 1, 2012
 @author: eric
 '''
 import unittest
-import yaml
-import os.path
-from databundles.identity import Identity #@UnusedImport
-from databundles.bundleconfig import BundleConfig, BundleConfigFile #@UnusedImport
+
+from databundles.identity import Identity 
+from databundles.partition import PartitionIdentity 
+import copy
 
 class Test(unittest.TestCase):
-
+    
 
     def setUp(self):
-        
-        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-        
-        bundle_yaml = '''
-build:
-    headers: sf1headers.csv
-    rootUrl: http://www2.census.gov/census_2000/datasets/Summary_File_1/
-    statesFile: States
-identity:
-    creator: clarinova.com
-    dataset: 2000 Population Census
-    revision: 1
-    source: census.gov
-    subset: SF1
-    variation: orig '''
+        self.id_config = {
+                        'creator': 'creator',
+                        'dataset': 'dataset',
+                        'revision': 1,
+                        'source': 'source',
+                        'subset': 'subset',
+                        'variation': 'variation' 
+                       }
 
-        self.config = yaml.load(bundle_yaml)
+
+        self.pid_config = copy.copy( self.id_config )
+        
+        self.pid_config['table'] = 'table'
+        self.pid_config['space'] = 'space'
+        self.pid_config['time'] = 'time'
 
     def test_bundle(self):
+        id = Identity(**self.id_config); #@ReservedAssignment
+      
+        for k, v in self.id_config.items():
+            self.assertEquals(v, getattr(id, k));
+       
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1', id.name)
         
-        bcf = BundleConfigFile(self.bundle_dir)
+        pid = PartitionIdentity(**self.pid_config);
+      
+        for k, v in self.pid_config.items():
+            self.assertEquals(v, getattr(pid, k));
+       
+        self.assertEquals('source-dataset-subset-variation-ca0d-time.space.table-r1', pid.name)
+       
+        pid = PartitionIdentity(id, time='time', space='space')
         
-        print bcf.config_dict
-        
-        return True
-         
-        #id = Identity(**bcd.get('identity'))
-              
-        print id.name
-        print id.path
+        self.assertEquals('source-dataset-subset-variation-ca0d-time.space-r1', pid.name)
+       
+        self.assertEquals('source/dataset-subset-variation-ca0d-r1/time/space', pid.path)
+      
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

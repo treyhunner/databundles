@@ -250,7 +250,6 @@ class UsCensusBundle(Bundle):
         import csv
         import yaml
 
-   
         if os.path.exists(self.segmap_file):
             self.log("Re-using segment map")
             return;
@@ -272,8 +271,7 @@ class UsCensusBundle(Bundle):
                 
         yaml.dump(map_, 
                   file(self.segmap_file, 'w'),indent=4, default_flow_style=False)  
-   
-           
+
     def build_schema(self):
         if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
             self.log("Reusing schema")
@@ -321,14 +319,15 @@ class UsCensusBundle(Bundle):
             self.ptick(state+' '+str(count))
             count = count - 1
             for seg_number, sub2 in sub1.iteritems(): #@UnusedVariable
-                self.ptick('.')
+                self.ptick('s')
                 for table, data in sub2.iteritems(): # table is the id, not the name @UnusedVariable
-               
+                    self.ptick('t')
                     pid = PartitionId(table=data['table'], space=state)
                   
                     # Will not re-create the partition if it already exists. 
                     self.partitions.new_partition(pid)
                    
+        self.database.session.commit()
         import subprocess
         output = subprocess.check_output(
                     ['sqlite3',self.database.path, '.dump partitions'])

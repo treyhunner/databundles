@@ -28,7 +28,7 @@ setup(name='databundles',
         'sqlalchemy>=0.7',
 		'pyyaml',
         'petl',
-        'beautifulsoup4'
+        'beautifulsoup4',
       ]
      )
 

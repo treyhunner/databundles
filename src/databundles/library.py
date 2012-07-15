@@ -95,9 +95,11 @@ class Library(object):
         raise NotImplementedError()
     
     def get(self):
+        '''Get a bundle by id or name'''
         raise NotImplementedError()
     
     def put(self):
+        '''Store a bundle in the library'''
         raise NotImplementedError()
     
     def search(self):
@@ -112,6 +114,14 @@ class Library(object):
     
     def pull(self, url):
         '''Synchronize the database for a remote library to this library.'''
+        raise NotImplementedError()
+    
+    def datasets(self):
+        '''Return an array of all of the dataset identities in the library'''
+        raise NotImplementedError()
+    
+    def dataset(self, id_):
+        '''Return an array of all of the dataset identities in the library'''
         raise NotImplementedError()
     
 class LocalLibrary(Library):
@@ -318,6 +328,13 @@ class LocalLibrary(Library):
     def bundle_db(self,name):
         '''Return a bundle database from the library'''
     
+    @property
+    def datasets(self):
+        '''Return an array of all of the dataset identities in the library'''
+        from databundles.orm import Dataset
+       
+        return [d.identity for d in self.database.session.query(Dataset).all()]
+
 
 
 class RemoteLibrary(Library):

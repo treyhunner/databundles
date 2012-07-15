@@ -10,37 +10,22 @@ class Schema(object):
     def __init__(self, bundle):
         self.bundle = bundle
         
+    
         if not self.bundle.identity.id_:
             raise ValueError("self.bundle.identity.oid not set")
 
-        
+        self.d_id=self.bundle.identity.id_
+        self._seen_tables = {}
       
-    def generate(self):
-        '''Load the schema from the bundle.schemaGenerator() generator'''
+        self.table_sequence = 1
+        self.col_sequence = 1 
+
+        
+    def clean(self):
         from databundles.orm import Table, Column
-      
-        s = self.bundle.database.session
-       
-        
+        s = self.bundle.database.session 
         s.query(Table).delete()
-        s.query(Column).delete()
-      
-        last_table = None
-        for i in self.bundle.schemaGenerator():       
-            if isinstance(i, Table):
-                self.add_table(i)
-                last_table = i
-            elif isinstance(i, Column):
-                
-                if  i.table_name:
-                    table_name = i.table_name
-                else:
-                    table_name = last_table.name
-                
-                self.add_column(table_name, i)
-                
-      
-        s.commit()
+        s.query(Column).delete()        
         
     @property
     def tables(self):
@@ -61,53 +46,48 @@ class Schema(object):
         except sqlalchemy.orm.exc.NoResultFound:
             return (self.bundle.database.session.query(Table)
                     .filter(Table.name==name_or_id).one())
-    
-    
-    def add_table(self, name_or_table, **kwargs):
+
+    def add_table(self, name, **kwargs):
         '''Add a table to the schema'''
         from databundles.orm import Table
-        import sqlalchemy.orm.exc
-
-        # if name is a Table object, extract the dict and name
-        if isinstance(name_or_table, Table):
-            kwargs = name_or_table.__dict__
-            name = kwargs.get("name",None) 
-        else:
-            name = name_or_table
-            
+        from databundles.objectnumber import TableNumber, ObjectNumber
+           
         name = Table.mangle_name(name)
+     
+        if name in self._seen_tables:
+            raise Exception("Already got "+name)
         
-        s = self.bundle.database.session
+        id_ = str(TableNumber(ObjectNumber.parse(self.d_id), self.table_sequence))
+      
+        row = Table(id = id_,
+                    name=name, 
+                    d_id=self.d_id, 
+                    sequence_id=self.table_sequence)
         
-        try:    
-            row = (s.query(Table)
-                   .filter(Table.name==name)
-                   .filter(Table.d_id==self.bundle.identity.id_).one())
- 
-        except sqlalchemy.orm.exc.NoResultFound:
-
-            row = Table(name=name, d_id=self.bundle.identity.id_)
-            s.add(row)
+  
+        self.bundle.database.session.add(row)
             
         for key, value in kwargs.items():    
-            if key[0] != '_' and key not in ['d_id','name','sequence_id']:
-                #print 'Setting', self.dataset_id, key,value
+            if key[0] != '_' and key not in ['id','id_', 'd_id','name','sequence_id']:
                 setattr(row, key, value)
-      
-        s.commit()
-        
+     
+        self._seen_tables[name] = row
+     
+        self.table_sequence += 1
+        self.col_sequence = 1
+     
         return row
         
-    def add_column(self, table_name, name, **kwargs):
+    def add_column(self, table, name,**kwargs):
         '''Add a column to the schema'''
     
-        if not table_name:
-            raise ValueError("Must supply a table_name")
+        kwargs['sequence_id'] =self.col_sequence
     
-        # Will fetch the table, or create if not exists
-        t = self.add_table(table_name)
-       
-        return t.add_column(name, **kwargs)
+        c =  table.add_column(name, **kwargs)
+        
+        self.col_sequence += 1
+        
+        return c
         
     @property
     def columns(self):

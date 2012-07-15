@@ -85,9 +85,8 @@ class Dataset(Base):
     path = None  # Set by the LIbrary and other queries. 
 
     tables = relationship("Table", backref='dataset', cascade="delete")
-    partitions = relationship("Partition", backref='dataset', cascade="delete")
+    partitions = relationship("Partition", cascade="delete")
    
-
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("oid",kwargs.get("id", None)) 
         self.name = kwargs.get("name",None) 
@@ -100,16 +99,13 @@ class Dataset(Base):
 
         if not self.id_:
             self.id_ = str(DatasetNumber())
-
-    
+ 
     @property
     def creatorcode(self):
         from identity import Identity
         return Identity._creatorcode(self)
     
-    def init_id(self):
-        '''Create a new dataset id'''
-        
+   
     def __repr__(self):
         return """<datasets: id={} name={} source={} ds={} ss={} var={} creator={} rev={}>""".format(
                     self.id_, self.name, self.source,
@@ -119,7 +115,7 @@ class Dataset(Base):
     def identity(self):
         from databundles.identity import Identity
         return Identity(
-                        id_ = self.id_, 
+                        id = self.id_, 
                         name = self.name, 
                         source = self.source,
                         dataset = self.dataset, 
@@ -129,12 +125,11 @@ class Dataset(Base):
                         revision = self.revision
                         )
         
-        
     @staticmethod
     def before_insert_update(mapper, conn, target):
         pass
-        
-
+    
+   
      
 event.listen(Dataset, 'before_insert', Dataset.before_insert_update)
 event.listen(Dataset, 'before_update', Dataset.before_insert_update)
@@ -204,14 +199,16 @@ class Column(Base):
     def before_insert(mapper, conn, target):
         '''event.listen method for Sqlalchemy to set the seqience_id for this  
         object and create an ObjectNumber value for the id_'''
-        sql = text('''SELECT max(c_sequence_id)+1 FROM columns WHERE c_t_id = :tid''')
-
-        max_id, = conn.execute(sql, tid=target.t_id).fetchone()
-  
-        if not max_id:
-            max_id = 1
-            
-        target.sequence_id = max_id
+        
+        if target.sequence_id is None:
+            sql = text('''SELECT max(c_sequence_id)+1 FROM columns WHERE c_t_id = :tid''')
+    
+            max_id, = conn.execute(sql, tid=target.t_id).fetchone()
+      
+            if not max_id:
+                max_id = 1
+                
+            target.sequence_id = max_id
         
         Column.before_update(mapper, conn, target)
 
@@ -219,8 +216,10 @@ class Column(Base):
     def before_update(mapper, conn, target):
         '''Set the column id number based on the table number and the 
         sequence id for the column'''
-        table_on = ObjectNumber.parse(target.t_id)
-        target.id_ = str(ColumnNumber(table_on, target.sequence_id))
+       
+        if target.id_  is None:
+            table_on = ObjectNumber.parse(target.t_id)
+            target.id_ = str(ColumnNumber(table_on, target.sequence_id))
    
     def __repr__(self):
         try :
@@ -263,14 +262,15 @@ class Table(Base):
     def before_insert(mapper, conn, target):
         '''event.listen method for Sqlalchemy to set the seqience_id for this  
         object and create an ObjectNumber value for the id_'''
-        sql = text('''SELECT max(t_sequence_id)+1 FROM tables WHERE t_d_id = :did''')
-
-        max_id, = conn.execute(sql, did=target.d_id).fetchone()
-  
-        if not max_id:
-            max_id = 1
-            
-        target.sequence_id = max_id
+        if target.sequence_id is None:
+            sql = text('''SELECT max(t_sequence_id)+1 FROM tables WHERE t_d_id = :did''')
+    
+            max_id, = conn.execute(sql, did=target.d_id).fetchone()
+      
+            if not max_id:
+                max_id = 1
+                
+            target.sequence_id = max_id
         
         Table.before_update(mapper, conn, target)
         
@@ -280,9 +280,10 @@ class Table(Base):
         for the table '''
         if isinstance(target,Column):
             raise TypeError('Got a column instead of a table')
-                
-        dataset_id = ObjectNumber.parse(target.d_id)
-        target.id_ = str(TableNumber(dataset_id, target.sequence_id))
+        
+        if target.id_ is None:
+            dataset_id = ObjectNumber.parse(target.d_id)
+            target.id_ = str(TableNumber(dataset_id, target.sequence_id))
 
     @staticmethod
     def mangle_name(name):
@@ -296,35 +297,24 @@ class Table(Base):
     def oid(self):   
         return TableNumber(self.d_id, self.sequence_id)
 
-    def add_column(self, name_or_column, **kwargs):
+    def add_column(self, name, **kwargs):
 
         import sqlalchemy.orm.session
         s = sqlalchemy.orm.session.Session.object_session(self)
-
-
-        # Determine if the variable arg is a name or a column
-        if isinstance(name_or_column, Column):
-            kwargs = name_or_column.__dict__
-            name = kwargs.get("name",None) 
-        else:
-            name = name_or_column
         
         name = Column.mangle_name(name)
-        
-        try:
-            row = (s.query(Column)
-                   .filter(Column.name==name)
-                   .filter(Column.t_id==self.id_)
-                   .one())
-        except:      
-            row = Column(name=name, t_id=self.id_)
-            s.add(row)
-            s.commit()
-            
+   
+        row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_), 
+                                         kwargs.get('sequence_id'))),
+                     name=name, 
+                     t_id=self.id_)
+         
         for key, value in kwargs.items():
-            if key[0] != '_' and key not in ['d_id','t_id','name','sequence_id']:
+            if key[0] != '_' and key not in ['d_id','t_id','name']:
                 setattr(row, key, value)
       
+        s.add(row)
+    
         return row
 
     def __repr__(self):
@@ -388,6 +378,8 @@ class Partition(Base):
     state = SAColumn('p_state',Text)
     data = SAColumn('p_data',MutationDict.as_mutable(JSONEncodedDict))
     
+    dataset = relationship("Dataset")
+    
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",kwargs.get("id_",None)) 
         self.name = kwargs.get("name",kwargs.get("name",None)) 
@@ -401,6 +393,9 @@ class Partition(Base):
 
     def as_partition_id(self):
         '''Return this partition information as a PartitionId'''
+        from sqlalchemy.orm import object_session
+        from partition import PartitionIdentity
+        
         args = {'id': self.id_, 'space':self.space, 'time':self.time}
         
         table = self.table
@@ -408,10 +403,15 @@ class Partition(Base):
         if table is not None:
             args['table'] = table.name
         
-        
-        from partition import PartitionId
-        
-        return PartitionId(**args)
+        if self.dataset is None:
+            # The relationship will be null until the object is committed
+            s = object_session(self)
+            ds = s.query(Dataset).filter(Dataset.id_ == self.d_id).one()
+            id_ = ds.identity
+        else:
+            id_ = self.dataset.identity
+
+        return PartitionIdentity(id_, **args)
 
     def __repr__(self):
         return "<partitions: {}>".format(self.id_)
