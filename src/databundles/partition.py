@@ -117,17 +117,10 @@ class Partition(object):
         if not self.database.exists():
             self.database.create()
 
-    
-    @classmethod
-    def name_string(cls,bundle, pid):
-        parts = bundle.identity.name_parts(bundle.identity)
-        
-        np = parts[:-1]+[str(pid)]+parts[-1:]
-        
-        return  '-'.join(np)
+  
     @property
     def name(self):
-        return self.name_string(self.bundle, self.pid)
+        return self.pid.name
     
     @property
     def path(self):
@@ -285,17 +278,18 @@ class Partitions(object):
 
         if self.table_cache is None:
             self.table_cache = {}
-            s = self.bundle.database.session
-            for table in s.query(Table).filter(Table.name==pid.table).all():
-                self.table_cache[table.name] = table
-                self.table_cache[table.id_] = table
+            
+        s = self.bundle.database.session
+        for table in s.query(Table).filter(Table.name==pid.table).all():
+            self.table_cache[table.name] = table
+            self.table_cache[table.id_] = table
                 
         table = None
         if pid.table:
             if pid.table in self.table_cache:
                 table = self.table_cache[pid.table]
         
-        op = OrmPartition(name = Partition.name_string(self.bundle, pid),
+        op = OrmPartition(name = pid.name,
              space = pid.space,
              time = pid.time,
              t_id = table.id_ if table else None,
@@ -306,7 +300,7 @@ class Partitions(object):
         return op
 
 
-    def delete_all(self):
+    def clean(self):
         from databundles.orm import Partition as OrmPartition
         s = self.bundle.database.session
         s.query(OrmPartition).delete()
@@ -327,22 +321,5 @@ class Partitions(object):
         return p
 
 
-    def generate(self):
-        '''Call the partitionGenerator() method on a Bundle to get partitions'''
-        from databundles.orm import Partition as OrmPartition
-    
-        s = self.bundle.database.session
-    
-        s.query(OrmPartition).delete()
-
-        partitions = {}
-        for i in self.bundle.partitionGenerator(): 
-            p = self.new_orm_partition(i.pid,data=i.data, state=i.state)
-     
-            partitions[i.pid] = p
-          
-        for pid,p in partitions.items(): #@UnusedVariable
-            s.add(p)        
-            s.commit()
               
 

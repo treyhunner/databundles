@@ -8,7 +8,7 @@ from database import Database
 from identity import Identity #@UnusedImport
 from library import LocalLibrary
 from filesystem import  Filesystem
-from bundleconfig import BundleConfig, BundleConfigFile
+from bundleconfig import BundleDbConfig, BundleFileConfig
 from schema import Schema
 from partition import Partitions
 import os.path
@@ -17,62 +17,13 @@ class Bundle(object):
     '''Represents a bundle, including all configuration 
     and top level operations. '''
  
-    def __init__(self, bundle_dir_or_db_file=None):
-        '''Initialize a bundle and all of its sub-components. 
-        
-        If it does not exist, creates the bundle database and initializes the
-        Dataset record and COnfig records from the bundle.yaml file. Through the
-        config object, will trigger a re-load of the bundle.yaml file if it
-        has changed. 
-        
-        Order of operations is:
-            Create bundle.db if it does not exist
+    def __init__(self):
         '''
-        
-        bundle_dir = None
-        
-        if not bundle_dir_or_db_file:
-            # Completely empty, walk the tree to find the root. 
-            bundle_dir = Filesystem.find_root_dir()
-        elif os.path.isdir(bundle_dir_or_db_file):
-            #If it is a dir it is a bundle directory.
-            bundle_dir = bundle_dir_or_db_file
-        elif os.path.isfile(bundle_dir_or_db_file):
-            # If it is a file, it is the database file 
-            pass
-        
-        self._database = None
-        
-        if bundle_dir:
-            self.bundle_dir = bundle_dir
-            self.filesystem = Filesystem(self, bundle_dir)
-            self._database_dir = None
-            
-        else:
-            self._database_dir = bundle_dir_or_db_file
-            
-            if not os.path.exists(self._database_dir):
-                raise Exception("If a database file is specified, it must exist: "+
-                                self._database_dir)
-            self.database # Connect the database object
-                
- 
-        self._config = None
+        '''
+    
         self._schema = None
         self._partitions = None
-        
-        self.ptick_count = 0;
-
-        import base64
-        self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
-    
-    @property
-    def database(self):
-
-        if self._database is None:
-            self._database = Database(self, self._database_dir)
-            
-        return self._database
+ 
     
     @property
     def schema(self):
@@ -81,16 +32,9 @@ class Bundle(object):
             
         return self._schema
     
+
     @property
-    def config(self):
-        if self._config is None:
-            self._config = BundleConfig(self)
-            
-        return self._config
-    
-    @property
-    def partitions(self):
-        
+    def partitions(self):     
         if self._partitions is None:
             self._partitions = Partitions(self)  
             
@@ -98,24 +42,102 @@ class Bundle(object):
 
     @property
     def identity(self):
-        '''Return an identity object. If the config object exists in the
-        bundle, return an Identity that is backed by the database. If not, 
-        load the bundle.yaml file and create an Identity from that'''
-        if self._database is not None:
-            # Return the database-based identity object
-            return self.config.identity
-        else:
-            # Return the dict backed identity
-            return BundleConfigFile(self.bundle_dir).identity
+        '''Return an identity object. '''
+        
+        return Identity(**self.config.dict.get('identity'))
+    
 
     @property
-    def library(self):
-      
-        return LocalLibrary(named_bundles=self.config.group('named_bundles'))
+    def library(self):    
+        return LocalLibrary(named_bundles=self.config.dict.get('named_bundles',None))
+
     
-    def get_bundle(self,bundle_id):
-        '''Get a bundle from the local library. Throws an exception if it does not exist'''
-        self.library.get()
+class DbBundle(Bundle):
+
+    def __init__(self, database_file):
+        '''Initialize a bundle and all of its sub-components. 
+        
+        If it does not exist, creates the bundle database and initializes the
+        Dataset record and Config records from the bundle.yaml file. Through the
+        config object, will trigger a re-load of the bundle.yaml file if it
+        has changed. 
+        
+        Order of operations is:
+            Create bundle.db if it does not exist
+        '''
+        
+        super(DbBundle, self).__init__()
+       
+        
+       
+        self.database = Database(self, database_file)
+        self.config = BundleDbConfig(self.database)
+
+    def table_data(self, query):
+        '''Return a petl container for a data table'''
+        import petl 
+        query = query.strip().lower()
+        
+        if 'select' not in query:
+            query = "select * from {} ".format(query)
+ 
+        
+        return petl.fromsqlite3(self.database.path, query)
+        
+
+class BuildBundle(Bundle):
+    '''A bundle class for building bund files. Uses the bundle.yaml file for
+    identity configuration '''
+
+    def __init__(self, bundle_dir=None):
+        '''
+        '''
+        
+        super(BuildBundle, self).__init__()
+        
+        if bundle_dir is None:
+            bundle_dir = Filesystem.find_root_dir()
+        
+        if not os.path.isdir(bundle_dir):
+            from exceptions import BundleError
+            raise BundleError("BuildBundle must be constructed on a directory")
+  
+        self.bundle_dir = bundle_dir
+        
+        self._database  = None
+       
+        self.filesystem = Filesystem(self, bundle_dir)
+        self.config = BundleFileConfig(self.bundle_dir)
+
+        import base64
+        self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
+        self.ptick_count = 0;
+
+    @property
+    def database(self):
+        
+        if self._database is None:
+            self._database  = Database(self)
+         
+        return self._database
+
+    @classmethod
+    def rm_rf(cls, d):
+        
+        if not os.path.exists(d):
+            return
+        
+        for path in (os.path.join(d,f) for f in os.listdir(d)):
+            if os.path.isdir(path):
+                cls.rm_rf(path)
+            else:
+                os.unlink(path)
+        os.rmdir(d)
+
+    def clean(self):
+        '''Remove all files generated by the build process'''
+        self.rm_rf(self.filesystem.build_path())
+        self.rm_rf(self.filesystem.downloads_path())
 
     
     def log(self, message, **kwargs):
@@ -141,60 +163,6 @@ class Bundle(object):
             sys.stdout.write("\n")
             self.ptick_count = 0
 
-    @classmethod
-    def rm_rf(cls, d):
-        
-        if not os.path.exists(d):
-            return
-        
-        for path in (os.path.join(d,f) for f in os.listdir(d)):
-            if os.path.isdir(path):
-                cls.rm_rf(path)
-            else:
-                os.unlink(path)
-        os.rmdir(d)
-
-    def clean(self):
-        '''Remove all files generated by the build process'''
-        self.rm_rf(self.filesystem.build_path())
-        self.rm_rf(self.filesystem.downloads_path())
-       
-        
-    from contextlib import contextmanager
-    @contextmanager
-    def extract_zip(self,path):
-        '''Context manager to extract a single file from a zip archive, and delete
-        it when finished'''
-        import zipfile
-        '''Extract a the files from a zip archive'''
-        
-        extractDir = self.filesystem.directory('extracts')
-
-        with zipfile.ZipFile(path) as zf:
-            for name in  zf.namelist():
-                extractFilename = os.path.join(extractDir,name)
-                
-                if os.path.exists(extractFilename):
-                    os.remove(extractFilename)
-                    
-                self.log('Extracting'+extractFilename+' from '+path)
-                name = name.replace('/','').replace('..','')
-                zf.extract(name,extractDir )
-                    
-                yield extractFilename
-                os.unlink(extractFilename)
-
-    def table_data(self, query):
-        '''Return a petl container for a data table'''
-        import petl 
-        query = query.strip().lower()
-        
-        if 'select' not in query:
-            query = "select * from {} ".format(query)
- 
-        
-        return petl.fromsqlite3(self.database.path, query)
-        
 
     ###
     ### Process Methods

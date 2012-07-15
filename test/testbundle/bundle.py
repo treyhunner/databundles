@@ -4,10 +4,10 @@ Created on Jun 10, 2012
 @author: eric
 '''
 
-from  databundles.bundle import Bundle as Base
+from  databundles.bundle import BuildBundle
 import petl.fluent as petl
 
-class Bundle(Base):
+class Bundle(BuildBundle):
     
     def __init__(self, directory):
         self.super_ = super(Bundle, self)

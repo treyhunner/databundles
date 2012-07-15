@@ -141,7 +141,7 @@ class Schema(object):
         
     def create_tables(self):
         '''Create the defined tables as database tables.'''
-        
+        self.bundle.database.commit()
         for t in self.tables:
             if not t.name in self.bundle.database.inspector.get_table_names():
                 t_meta, table = self.bundle.schema.get_table_meta(t.name) #@UnusedVariable

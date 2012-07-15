@@ -1,8 +1,8 @@
 identity:
-    creator: clarinova.com
-    dataset: Foobar Example File
-    id: a193HJ
+    creator: creator
+    dataset: dataset
+    id: a196Qr
     revision: 1
-    source: example.com
-    subset: SF1
-    variation: orig
+    source: source
+    subset: subset
+    variation: variation

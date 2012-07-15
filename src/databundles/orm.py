@@ -111,28 +111,24 @@ class Dataset(Base):
                     self.id_, self.name, self.source,
                     self.dataset, self.subset, self.variation, 
                     self.creator, self.revision)
+        
+    def to_dict(self):
+        return {
+                'id':self.id_, 
+                'name':self.name, 
+                'source':self.source,
+                'dataset':self.dataset, 
+                'subset':self.subset, 
+                'variation':self.variation, 
+                'creator':self.creator, 
+                'revision':self.revision
+                }
+        
     @property
     def identity(self):
         from databundles.identity import Identity
-        return Identity(
-                        id = self.id_, 
-                        name = self.name, 
-                        source = self.source,
-                        dataset = self.dataset, 
-                        subset = self.subset, 
-                        variation = self.variation, 
-                        creator = self.creator, 
-                        revision = self.revision
-                        )
+        return Identity(**self.to_dict() )
         
-    @staticmethod
-    def before_insert_update(mapper, conn, target):
-        pass
-    
-   
-     
-event.listen(Dataset, 'before_insert', Dataset.before_insert_update)
-event.listen(Dataset, 'before_update', Dataset.before_insert_update)
 
 class Column(Base):
     __tablename__ = 'columns'
@@ -317,8 +313,7 @@ class Table(Base):
     
         return row
 
-    def __repr__(self):
-        return "<tables: {}>".format(self.oid)
+
      
 event.listen(Table, 'before_insert', Table.before_insert)
 event.listen(Table, 'before_update', Table.before_update)

@@ -42,8 +42,15 @@ class Database(object):
         
         if file_path:
             self.file_path = file_path
+            
+            if not os.path.exists(self.file_path):
+                from exceptions import BundleError
+                raise BundleError('Database file must exist '+self.file_path)
+            
         else:
-            self.file_path = None
+            self.file_path = self.bundle.filesystem.path(
+                                self.bundle.filesystem.BUILD_DIR,
+                                self.bundle.identity.path+".db")
        
     @property
     def name(self):
@@ -52,22 +59,8 @@ class Database(object):
     @property 
     def path(self):
      
-        if self.file_path:
-            return self.file_path
-        else:
-            
-            # This if breaks a recursion loop. Getting the path from the database
-            # config required determining the path to open the database. 
-            if self.bundle._config is None:
-                from bundleconfig import  BundleConfigFile
-                identity = BundleConfigFile(self.bundle.bundle_dir).identity
-            else:
-                identity = self.bundle.identity
-            
-            return self.bundle.filesystem.path(
-                                self.bundle.filesystem.BUILD_DIR,
-                                identity.path+".db")
-     
+        return self.file_path
+      
     @property
     def metadata(self):
         '''Return an SqlAlchemy MetaData object, bound to the engine'''
@@ -109,6 +102,9 @@ class Database(object):
             self._session.close()
             self._session = None
    
+    def commit(self):
+        self.session.commit()
+   
     def exists(self):
         return os.path.exists( self.path)
     
@@ -142,10 +138,11 @@ class Database(object):
         
     def create(self):
         
-        
         """Create the database from the base SQL"""
         if not self.exists():    
             import databundles  
+            from orm import Dataset
+            from identity import Identity
             try:   
                 script_str = os.path.join(os.path.dirname(databundles.__file__),
                                           Database.PROTO_SQL_FILE)
@@ -156,6 +153,15 @@ class Database(object):
                 script_str = resource_string(databundles.__name__, Database.PROTO_SQL_FILE)
          
             self.load_sql(script_str)
+            
+            # Create the Dataset
+            s =  self.session
+            ds = Dataset(**self.bundle.config.dict['identity'])
+            ds.name = Identity.name_str(ds)
+           
+            s.add(ds)
+            s.commit()
+            
             return True
         
         return False

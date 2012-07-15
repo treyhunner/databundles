@@ -187,7 +187,7 @@ class LocalLibrary(Library):
         
     
     def require(self,key):
-        from databundles.bundle import Bundle as BaseBundle
+        from databundles.bundle import DbBundle
         '''Like 'require' but returns a Bundle object. '''
         set_ =  self.findByKey(key)
         
@@ -197,7 +197,7 @@ class LocalLibrary(Library):
         if len(set_) == 0:
             raise ResultCountError('Got no results for library require query for key: '+key)       
         
-        return BaseBundle(set_.pop(0).path)
+        return DbBundle(set_.pop(0).path)
 
     
         
