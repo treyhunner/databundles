@@ -13,12 +13,17 @@ from databundles.exceptions import ResultCountError, ConfigurationError
 
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
+    
+   
+    PROTO_SQL_FILE = 'support/configuration.sql' # Stored in the databundles module. 
+    
     def __init__(self, driver=None, server=None, username=None, password=None):
         self.driver = driver
         self.server = server
         self.username = username
         self.password = password
         
+        self._session = None
       
     @property
     def engine(self):
@@ -26,7 +31,7 @@ class LibraryDb(object):
         from sqlalchemy import create_engine  
         
         if not self._engine:
-            self._engine = create_engine('sqlite:///'+self.path, echo=False) 
+            self._engine = create_engine('sqlite:///'+self.path, echo=True) 
             
         return self._engine
 
@@ -56,16 +61,48 @@ class LibraryDb(object):
         self.session.commit()     
         
     def exists(self):
-        return True
+        self.engine
     
     def delete(self):
         pass
          
     def create(self):
-        pass
+        
+        """Create the database from the base SQL"""
+        if not self.exists():    
+            import databundles  
+            from orm import Dataset
+            from identity import Identity
+            try:   
+                script_str = os.path.join(os.path.dirname(databundles.__file__),
+                                          self.PROTO_SQL_FILE)
+            except:
+                # Not sure where to find pkg_resources, so this will probably
+                # fail. 
+                from pkg_resources import resource_string #@UnresolvedImport
+                script_str = resource_string(databundles.__name__, self.PROTO_SQL_FILE)
+         
+            self.load_sql(script_str)
+            
+            # Create the Dataset
+            s =  self.session
+            ds = Dataset(**self.bundle.config.dict['identity'])
+            ds.name = Identity.name_str(ds)
+           
+            s.add(ds)
+            s.commit()
+            
+            return True
+        
+        return False
     
     def load_sql(self, sql_file):
-        pass
+        import psycopg2
+        conn = psycopg2.connect("dbname=test user=postgres")
+        procedures  = open(sql_file,'r').read() 
+        cur = conn.cursor()
+        dbcur.execute(procedures) 
+
         
     
 class BundleQueryCommand(object):
@@ -200,6 +237,8 @@ class LocalLibrary(Library):
 
         self._named_bundles = kwargs.get('named_bundles', None)
 
+        import pprint
+        pprint.pprint(self.config.library)
 
     @property
     def root(self):

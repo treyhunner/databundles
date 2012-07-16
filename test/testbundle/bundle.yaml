@@ -1,12 +1,17 @@
 identity:
     creator: creator
     dataset: dataset
-    id: a19plg
+    id: a19KsC
     revision: 1
     source: source
-    subset: foo
+    subset: subset
     variation: variation
 library:
+    database:
+        driver: postgresql+psycopg2
+        password: foobar
+        server: lorne
+        username: databundles
     downloads: /net/nas2/c/proj/data-library-downloads
     root: /Volumes/Storage/proj/civic-library
 loaded:
