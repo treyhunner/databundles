@@ -4,7 +4,7 @@ Created on Jun 13, 2012
 @author: eric
 '''
 import unittest
-from databundles.objectnumber import *
+from databundles.identity import *
 
 class Test(unittest.TestCase):
 

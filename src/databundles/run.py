@@ -121,6 +121,9 @@ def run(argv, bundle_class):
     else:
         phases = [phase]
 
+    if 'clean' in phases:
+        b.clean()
+        
     if 'prepare' in phases:
         if b.pre_prepare():
             b.log("---- Preparing ----")

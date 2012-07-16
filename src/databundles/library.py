@@ -11,12 +11,59 @@ import databundles.database
 
 from databundles.exceptions import ResultCountError, ConfigurationError
 
-class LibraryDb(databundles.database.Database):
+class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
-    def __init__(self, path):
+    def __init__(self, driver=None, server=None, username=None, password=None):
+        
       
-        super(LibraryDb, self).__init__(None, path)  
+    @property
+    def engine(self):
+        '''return the SqlAlchemy engine for this database'''
+        from sqlalchemy import create_engine  
+        
+        if not self._engine:
+            self._engine = create_engine('sqlite:///'+self.path, echo=False) 
+            
+        return self._engine
 
+    @property
+    def inspector(self):
+        from sqlalchemy.engine.reflection import Inspector
+
+        return Inspector.from_engine(self.engine)
+
+    @property
+    def session(self):
+        '''Return a SqlAlchemy session'''
+        from sqlalchemy.orm import sessionmaker
+        
+        if not self._session:    
+            Session = sessionmaker(bind=self.engine)
+            self._session = Session()
+            
+        return self._session
+   
+    def close(self):
+        if self._session:    
+            self._session.close()
+            self._session = None
+   
+    def commit(self):
+        self.session.commit()     
+        
+    def exists(self):
+        return True
+    
+    def delete(self):
+        pass
+         
+    def create(self):
+        pass
+    
+    def load_sql(self, sql_file):
+        pass
+        
+    
 class BundleQueryCommand(object):
     '''An object that contains and transfers a query for a bundle
     

@@ -55,13 +55,12 @@ identity:
         b = BuildBundle(self.bundle_dir)
         b.clean() 
         b.database.create()
-      
         
         db_path =  b.database.path
         
         dbb = DbBundle(db_path)
         
-        config = dbb.config
+        config = dbb.config #@UnusedVariable
         
 
 if __name__ == "__main__":

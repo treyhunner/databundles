@@ -198,7 +198,6 @@ class Filesystem(object):
     def get_url(self,source_url, create=False):
         '''Return a database record for a file'''
     
-        from databundles.orm import File
         import sqlalchemy.orm.exc
  
         s = self.bundle.database.session
@@ -226,8 +225,7 @@ class Filesystem(object):
     
     def filerec(self, rel_path, create=False):
         '''Return a database record for a file'''
-    
-        from databundles.orm import File
+  
         import sqlalchemy.orm.exc
 
         s = self.bundle.database.session

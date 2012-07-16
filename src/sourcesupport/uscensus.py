@@ -30,23 +30,55 @@ class UsCensusBundle(BuildBundle):
         self.states_file =  self.filesystem.path(bg.statesFile)
         self.partitions_file =  self.filesystem.path(bg.partitionsFile)
         
-    def geoSchemaGenerator(self):
-        from databundles.orm import Table, Column
+    def clean(self):
+        
+        bg = self.config.build
+        
+        files = [
+                    self.filesystem.path(bg.urlsFile),
+                    self.filesystem.path(bg.segMapFile),
+                    self.filesystem.path(bg.rangeMapFile),
+                    self.filesystem.path(bg.partitionsFile)
+                 ]
+        
+        for f in files:
+            if os.path.exists(f):
+                os.remove(f)
+                
+        super(UsCensusBundle, self).clean()
+        
+        
+    def generate_geo_schema(self):
+        from databundles.orm import Column
         import csv
         
+        if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
+            self.log("Reusing schema")
+            return True
+            
+        else:
+            self.log("Regenerating schema. This could be slow ... ")
+        
         self.log("Create GEO schema")
-        yield Table(name='sf1geo',description='Geo header')
+        t = self.schema.add_table('sf1geo',description='Geo header')
       
         reader  = csv.DictReader(open(self.geoheaders_file, 'rbU') )
         types = {'TEXT':Column.DATATYPE_TEXT,
                  'INTEGER':Column.DATATYPE_REAL}
         for row in reader: 
-            yield Column(name=row['column'],datatype=types[row['datatype'].strip()])
+            self.schema.add_column(t, row['column'],datatype=types[row['datatype'].strip()])
     
-    def tableSchemaGenerator(self):
+    def generate_table_schema(self):
         '''Return schema rows from the  columns.csv file'''
-        from databundles.orm import Table, Column
+        from databundles.orm import Column
         import csv
+    
+        if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
+            self.log("Reusing schema")
+            return True
+            
+        else:
+            self.log("Regenerating schema. This could be slow ... ")
     
 
         self.log("Generating main table schemas")
@@ -71,18 +103,20 @@ class UsCensusBundle(BuildBundle):
             # and population universe, but don't have any column info. 
             if( not row['FIELDNUM']):
                 if  row['TABNO']:
-                    table = Table(name=row['TABLE'],description=row['TEXT'])
+                    table = {'name':row['TABLE'],'description':row['TEXT']}
                 else:
-                    table.universe = row['TEXT'].replace('Universe:','').strip()  
+                    table['universe'] = row['TEXT'].replace('Universe:','').strip()  
             else:
                 
                 # The whole table will exist in one segment ( file number ) 
                 # but the segment id is not included on the same lines ast the
                 # table name. 
                 if table:
-                    table.data = {'segment':row['SEG']}
+                    table['data'] = {'segment':row['SEG']}
                     self.ptick("T")
-                    yield table
+                    name = table['name']
+                    del table['name']
+                    t = self.schema.add_table(name, **table)
                      
                     # First 5 fields for every record      
                     # FILEID           Text (6),  uSF1, USF2, etc. 
@@ -98,15 +132,15 @@ class UsCensusBundle(BuildBundle):
                     seg = row['SEG']
                     
                     self.ptick("5")
-                    yield Column(name='FILEID',table_name=tn,datatype=dt,
+                    self.schema.add_column(t, 'FILEID',table_name=tn,datatype=dt,
                                  data={'source_col':0,'segment':seg})
-                    yield Column(name='STUSAB',table_name=tn,datatype=dt,
+                    self.schema.add_column(t, 'STUSAB',table_name=tn,datatype=dt,
                                  data={'source_col':1,'segment':seg})
-                    yield Column(name='CHARITER',table_name=tn,datatype=dt,
+                    self.schema.add_column(t, 'CHARITER',table_name=tn,datatype=dt,
                                  data={'source_col':2,'segment':seg})
-                    yield Column(name='CIFSN',table_name=tn,datatype=dt,
+                    self.schema.add_column(t, 'CIFSN',table_name=tn,datatype=dt,
                                  data={'source_col':3,'segment':seg})
-                    yield Column(name='LOGRECNO',table_name=tn,datatype=dt,
+                    self.schema.add_column(t, 'LOGRECNO',table_name=tn,datatype=dt,
                                  data={'source_col':4,'segment':seg})
                     
                     table = None
@@ -117,7 +151,7 @@ class UsCensusBundle(BuildBundle):
                     dt = Column.DATATYPE_INTEGER
                 
                 self.ptick("C")
-                yield Column(name=row['FIELDNUM'],table_name=row['TABLE'],
+                self.schema.add_column(t, row['FIELDNUM'],table_name=row['TABLE'],
                              description=row['TEXT'].strip(),
                               datatype=dt,data={'segment':int(row['SEG']),
                                                 'source_col':source_col}   )
@@ -148,7 +182,7 @@ class UsCensusBundle(BuildBundle):
             states = map(lambda s: s.strip(),f.readlines())
         
         # Root URL for downloading files. 
-        url = self.config.group('build').get('rootUrl')
+        url = self.config.build.rootUrl
        
         doc = urllib.urlretrieve(url)
         
@@ -272,18 +306,12 @@ class UsCensusBundle(BuildBundle):
         yaml.dump(map_, 
                   file(self.segmap_file, 'w'),indent=4, default_flow_style=False)  
 
-    def build_schema(self):
-        if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
-            self.log("Reusing schema")
-            
-        else:
-            self.log("Regenerating schema. This could be slow ... ")
-            self.schema.generate()
-           
     def get_geo_regex(self):
             '''Read the definition for the fixed positioins of the fields in the geo file and
             construct a regular expresstion to parse the lines.'''
             import csv, re
+                    
+                
                     
             reader  = csv.DictReader(open(self.geoheaders_file, 'rbU') )
             pos = 0;
