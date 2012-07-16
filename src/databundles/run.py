@@ -76,7 +76,14 @@ class RunConfig(object):
     def load(self,path):
 
         if os.path.exists(path):
-            self.overlay(yaml.load(file(path, 'r')))
+            
+            try:
+                d = yaml.load(file(path, 'r'))
+            except yaml.scanner.ScannerError as e:
+                from exceptions import ConfigurationError
+                raise ConfigurationError("Error in YAML configuration file {} : {}"
+                                         .format(path, str(e)))
+            self.overlay(d)
             self.config['loaded'].append(path)
         
 

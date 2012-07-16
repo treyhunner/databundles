@@ -14,6 +14,10 @@ from databundles.exceptions import ResultCountError, ConfigurationError
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
     def __init__(self, driver=None, server=None, username=None, password=None):
+        self.driver = driver
+        self.server = server
+        self.username = username
+        self.password = password
         
       
     @property
