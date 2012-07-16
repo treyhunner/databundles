@@ -6,11 +6,11 @@ Created on Jul 13, 2012
 Base class bundle for the US Census
 
 '''
-from  databundles.bundle import Bundle
+from  databundles.bundle import BuildBundle
 
 import os.path  
 
-class UsCensusBundle(Bundle):
+class UsCensusBundle(BuildBundle):
     '''Base class for  bundles that process the US census
     
     '''
@@ -21,14 +21,14 @@ class UsCensusBundle(Bundle):
         
         self._source_to_partition = None
         
-        bg = self.config.group('build')
-        self.urls_file =  self.filesystem.path(bg.get('urlsFile'))
-        self.segmap_file =  self.filesystem.path(bg.get('segMapFile'))
-        self.rangemap_file =  self.filesystem.path(bg.get('rangeMapFile'))
-        self.geoheaders_file = self.filesystem.path(bg.get('geoheaderFile'))
-        self.headers_file =  self.filesystem.path(bg.get('headersFile'))
-        self.states_file =  self.filesystem.path(bg.get('statesFile'))
-        self.partitions_file =  self.filesystem.path(bg.get('partitionsFile'))
+        bg = self.config.build
+        self.urls_file =  self.filesystem.path(bg.urlsFile)
+        self.segmap_file =  self.filesystem.path(bg.segMapFile)
+        self.rangemap_file =  self.filesystem.path(bg.rangeMapFile)
+        self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
+        self.headers_file =  self.filesystem.path(bg.headersFile)
+        self.states_file =  self.filesystem.path(bg.statesFile)
+        self.partitions_file =  self.filesystem.path(bg.partitionsFile)
         
     def geoSchemaGenerator(self):
         from databundles.orm import Table, Column
@@ -300,7 +300,7 @@ class UsCensusBundle(Bundle):
         
         
     def build_partitions(self, range_map):
-        from databundles.partition import PartitionId
+        from databundles.partition import PartitionIdentity
         
         if self.partitions.count > 0:
             self.log("Already have partitions, skipping build_partitions")
@@ -322,7 +322,7 @@ class UsCensusBundle(Bundle):
                 self.ptick('s')
                 for table, data in sub2.iteritems(): # table is the id, not the name @UnusedVariable
                     self.ptick('t')
-                    pid = PartitionId(table=data['table'], space=state)
+                    pid = PartitionIdentity(self.identity, table=data['table'], space=state)
                   
                     # Will not re-create the partition if it already exists. 
                     self.partitions.new_partition(pid)

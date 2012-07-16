@@ -30,7 +30,7 @@ class PartitionIdentity(Identity):
         self.space = kwargs.get('space',None)
         self.table = kwargs.get('table',None)
     
-        from objectnumber import ObjectNumber
+        from identity import ObjectNumber
         if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
             self.id_ = None
             
@@ -42,7 +42,7 @@ class PartitionIdentity(Identity):
         self.space = d.get('space',None)
         self.table = d.get('table',None)
         
-        from objectnumber import ObjectNumber
+        from identity import ObjectNumber
         if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
             self.id_ = None
         
@@ -289,6 +289,9 @@ class Partitions(object):
             if pid.table in self.table_cache:
                 table = self.table_cache[pid.table]
         
+        if pid.table and not table:
+            raise Exception("Didn't get table {} from cache".format(pid.table))
+        
         op = OrmPartition(name = pid.name,
              space = pid.space,
              time = pid.time,
@@ -298,7 +301,6 @@ class Partitions(object):
              state=kwargs.get('state',None),)  
 
         return op
-
 
     def clean(self):
         from databundles.orm import Partition as OrmPartition

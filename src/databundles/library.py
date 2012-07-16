@@ -3,7 +3,7 @@ A Library is a local collection of bundles. It holds a database for the configur
 of the bundles that have been installed into it. 
 '''
 
-from databundles.runconfig import  RunConfig
+from databundles.run import  RunConfig
 
 import os.path
 import shutil

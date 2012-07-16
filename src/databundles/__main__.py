@@ -13,7 +13,7 @@ import shutil
 def new_command(args):
   
     from databundles.identity import Identity
-    from databundles.objectnumber import DatasetNumber
+    from databundles.identity import DatasetNumber
     
     # Remove the creator code and version. 
     name = '-'.join(Identity.name_parts(args)[:-2])

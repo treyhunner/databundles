@@ -5,13 +5,14 @@ Created on Jun 9, 2012
 '''
 
 from database import Database
-from identity import Identity #@UnusedImport
+from identity import Identity 
 from library import LocalLibrary
 from filesystem import  Filesystem
-from bundleconfig import BundleDbConfig, BundleFileConfig
 from schema import Schema
 from partition import Partitions
 import os.path
+from exceptions import  ConfigurationError
+from run import RunConfig
 
 class Bundle(object):
     '''Represents a bundle, including all configuration 
@@ -106,12 +107,17 @@ class BuildBundle(Bundle):
         
         self._database  = None
        
-        self.filesystem = Filesystem(self, bundle_dir)
+        self.filesystem = Filesystem(self, self.bundle_dir)
         self.config = BundleFileConfig(self.bundle_dir)
 
         import base64
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
         self.ptick_count = 0;
+
+        # If a download directory is defined, cache the download
+        # otherwize, don't
+        self.cache_downloads = self.config.library.downloads is not None
+    
 
     @property
     def database(self):
@@ -215,6 +221,185 @@ class BuildBundle(Bundle):
     def post_submit(self):
         return True
     
+
+class BundleConfig(object):
+   
+    def __init__(self):
+        pass
+
+
+class BundleFileConfig(BundleConfig):
+    '''Bundle configuration from a bundle.yaml file '''
     
+    BUNDLE_CONFIG_FILE = 'bundle.yaml'
+
+    def __init__(self, directory):
+        '''Load the bundle.yaml file and create a config object
+        
+        If the 'id' value is not set in the yaml file, it will be created and the
+        file will be re-written
+        '''
+
+        super(BundleFileConfig, self).__init__()
+        
+        self.directory = directory
+     
+        self._run_config = RunConfig(os.path.join(self.directory,'databundles.yaml'))
+     
+        self._config_dict = None
+        self.dict # Fetch the dict. 
+   
+        # If there is no id field, create it immediately and
+        # write the configuration baci out. 
+   
+        if not self.identity.id_:
+            from identity import DatasetNumber
+            self.identity.id_ = str(DatasetNumber())
+            self.rewrite()
+   
+        if not os.path.exists(self.path):
+            raise ConfigurationError("Can't find bundle config file: "+self.config_file)
+
+        
+    @property
+    def dict(self): #@ReservedAssignment
+        '''Return a dict/array object tree for the bundle configuration'''
+        
+        if not self._config_dict:  
+            import yaml
+            try:
+             
+                self._config_dict = self.overlay(self._run_config.dict,
+                                                 yaml.load(file(self.path, 'r')))
+
+            except Exception as e:
+                raise e
+                raise NotImplementedError,''' Bundle.yaml missing. 
+                Auto-creation not implemented'''
+            
+        return self._config_dict
+
+    def overlay(self,dict1, dict2):
+        '''Overlay the values from an input dictionary into 
+        the object configuration, overwritting earlier values. '''
+        import copy
+        
+        dict1 = copy.copy(dict1)
+        
+        for name,group in dict2.items():
+            
+            if not name in dict1:
+                dict1[name] = {}
+            
+            try:
+                for key,value in group.items():
+                    dict1[name][key] = value
+            except:
+                # item is not a group
+                dict1[name] = group 
+                
+        return dict1
+
+    def __getattr__(self, group):
+        '''Fetch a confiration group and return the contents as an 
+        attribute-accessible dict'''
+        
+        inner = self.dict[group]
+        
+        class attrdict(object):
+            def __setattr__(self, key, value):
+                key = key.strip('_')
+                inner[key] = value
+
+            def __getattr__(self, key):
+                key = key.strip('_')
+                if key not in inner:
+                    return None
+                
+                return inner[key]
+        
+        return attrdict()
+
+    @property
+    def path(self):
+        return os.path.join(self.directory, BundleFileConfig.BUNDLE_CONFIG_FILE)
+
+    def reload(self): #@ReservedAssignment
+        '''Reload the configuation from the file'''
+        self._config_dict = None
+        
+    def rewrite(self):
+        '''Re-writes the file from its own data. Reformats it, and updates
+        themodification time'''
+        import yaml
+        
+        yaml.dump(self.dict, file(self.path, 'w'), indent=4, default_flow_style=False)
+   
+
+class BundleDbConfig(BundleConfig):
+    '''Binds configuration items to the database, and processes the bundle.yaml file'''
+
+    def __init__(self, database):
+        '''Maintain link between bundle.yam file and Config record in database'''
+        
+        super(BundleDbConfig, self).__init__()
+        self.database = database
+        self.dataset = self.get_dataset()
+
+    @property
+    def dict(self): #@ReservedAssignment
+        '''Return a dict/array object tree for the bundle configuration'''
+      
+        return {'identity':self.dataset.to_dict()}
+
+    def __getattr__(self, group):
+        '''Fetch a confiration group and return the contents as an 
+        attribute-accessible dict'''
+        
+        inner = self.dict[group]
+        
+        class attrdict(object):
+            def __setattr__(self, key, value):
+                key = key.strip('_')
+                inner[key] = value
+
+            def __getattr__(self, key):
+                key = key.strip('_')
+                if key not in inner:
+                    return None
+                
+                return inner[key]
+        
+        return attrdict()
+
+    def get_dataset(self):
+        '''Initialize the identity, creating a dataset record, 
+        from the bundle.yaml file'''
+        
+        from databundles.orm import Dataset
+ 
+        s = self.database.session
+
+        return  (s.query(Dataset).one())
+
+    def write_dict_to_db(self, dict): #@ReservedAssignment
+        from databundles.orm import Config as SAConfig
+     
+        s = self.database.session
+        ds = self.get_or_new_dataset()
+         
+        s.query(SAConfig).filter(SAConfig.d_id == ds.id_).delete()
+        
+        for group,gvalues in dict.items():
+            if group in ['identity']:
+                for key, value in gvalues.items():
+                    o = SAConfig(group=group,key=key,d_id=ds.id_,value = value)
+                    s.add(o)
+
+        s.commit()
+
+   
+
+
     
     

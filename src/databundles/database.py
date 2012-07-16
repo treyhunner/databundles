@@ -228,11 +228,9 @@ class PartitionDb(Database):
                             OrmPartition.id_ == self.partition.identity.id_).one()
             s.merge(orm_p)
             s.commit()
-            
-            
+                  
             # Create a config key to mark this as a partition
-            
-        
+     
       
 class BundleDb(Database):
     '''Represents the database version of a bundle that is installed in a library'''

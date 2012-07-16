@@ -12,8 +12,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.mutable import Mutable
 
 from sqlalchemy.sql import text
-from objectnumber import  DatasetNumber, ColumnNumber
-from objectnumber import TableNumber, PartitionNumber, ObjectNumber
+from identity import  DatasetNumber, ColumnNumber
+from identity import TableNumber, PartitionNumber, ObjectNumber
 
 import json
 

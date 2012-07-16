@@ -31,9 +31,10 @@ identity:
 
 
     def test_file_config(self):
-        from databundles.bundleconfig import BundleFileConfig
+        from databundles.bundle import BundleFileConfig
         
         bfc = BundleFileConfig(self.bundle_dir)
+        
         
         self.assertEquals('subset',bfc.identity.subset)
         self.assertEquals('source',bfc.identity.source)
@@ -54,6 +55,7 @@ identity:
         b = BuildBundle(self.bundle_dir)
         b.clean() 
         b.database.create()
+      
         
         db_path =  b.database.path
         

@@ -49,8 +49,8 @@ class Schema(object):
 
     def add_table(self, name, **kwargs):
         '''Add a table to the schema'''
-        from databundles.orm import Table
-        from databundles.objectnumber import TableNumber, ObjectNumber
+        from orm import Table
+        from identity import TableNumber, ObjectNumber
            
         name = Table.mangle_name(name)
      
