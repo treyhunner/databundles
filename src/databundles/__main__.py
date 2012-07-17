@@ -40,6 +40,12 @@ def new_command(args):
 
     shutil.copy(bundle_file ,name  )
 
+def library_command(args):
+    if args.init:
+        from library import LocalLibrary
+        l = LocalLibrary()
+        l.database.create()
+
 def main():
     import argparse
     
@@ -50,7 +56,7 @@ def main():
     
     subp = parser.add_subparsers(title='commands', help='sub-command help')
     
-    new_p = subp.add_parser('new', help='new help')
+    new_p = subp.add_parser('new', help='Create a new bundle')
     new_p.set_defaults(command='new')
     new_p.set_defaults(revision='1') # Needed in Identity.name_parts
     new_p.add_argument('-s','--source', required=True, help='Source, usually a domain name') 
@@ -61,10 +67,16 @@ def main():
     new_p.add_argument('-n','--dry-run', default=False, help='Dry run') 
     new_p.add_argument('args', nargs=argparse.REMAINDER) # Get everything else. 
 
+    lib_p = subp.add_parser('library', help='Manage a library')
+    lib_p.set_defaults(command='library')
+    lib_p.add_argument('-i','--init',  default=True,action="store_true",  help='Iniitalized the library specified in the configuration') 
+   
+
     args = parser.parse_args()
    
     funcs = {
-        'new':new_command
+        'new':new_command,
+        'library':library_command
     }
         
     if not funcs.get(args.command, False):

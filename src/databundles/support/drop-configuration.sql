@@ -1,11 +1,11 @@
 /* ---------------------------------------------------------------------- */
 /* Script generated with: DeZign for Databases v6.3.4                     */
-/* Target DBMS:           SQLite3                                         */
+/* Target DBMS:           PostgreSQL 9                                    */
 /* Project file:          configuration.dez                               */
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-07-11 09:39                                */
+/* Created on:            2012-07-16 16:04                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -13,37 +13,29 @@
 /* Drop foreign key constraints                                           */
 /* ---------------------------------------------------------------------- */
 
+ALTER TABLE tables DROP CONSTRAINT datasets_tables;
+
+ALTER TABLE columns DROP CONSTRAINT tables_columns;
+
+ALTER TABLE config DROP CONSTRAINT datasets_config;
+
+ALTER TABLE partitions DROP CONSTRAINT datasets_partitions;
+
+ALTER TABLE partitions DROP CONSTRAINT tables_partitions;
+
 /* ---------------------------------------------------------------------- */
 /* Drop table "partitions"                                                */
 /* ---------------------------------------------------------------------- */
 
 /* Drop constraints */
 
-ALTER TABLE "partitions" DROP CONSTRAINT "NN_partitions_p_name";
+ALTER TABLE partitions DROP CONSTRAINT PK_partitions;
 
-ALTER TABLE "partitions" DROP CONSTRAINT "NN_partitions_p_sequence_id";
-
-ALTER TABLE "partitions" DROP CONSTRAINT "PK_partitions";
-
-ALTER TABLE "partitions" DROP CONSTRAINT "TUC_partitions_1";
+ALTER TABLE partitions DROP CONSTRAINT TUC_partitions_1;
 
 /* Drop table */
 
-DROP TABLE "partitions";
-
-/* ---------------------------------------------------------------------- */
-/* Drop table "config"                                                    */
-/* ---------------------------------------------------------------------- */
-
-/* Drop constraints */
-
-ALTER TABLE "config" DROP CONSTRAINT "NN_config_co_d_id";
-
-ALTER TABLE "config" DROP CONSTRAINT "PK_config";
-
-/* Drop table */
-
-DROP TABLE "config";
+DROP TABLE partitions;
 
 /* ---------------------------------------------------------------------- */
 /* Drop table "columns"                                                   */
@@ -51,19 +43,15 @@ DROP TABLE "config";
 
 /* Drop constraints */
 
-ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_id";
+ALTER TABLE columns DROP CONSTRAINT PK_columns;
 
-ALTER TABLE "columns" DROP CONSTRAINT "NN_columns_c_sequence_id";
+ALTER TABLE columns DROP CONSTRAINT TUC_columns_1;
 
-ALTER TABLE "columns" DROP CONSTRAINT "PK_columns";
-
-ALTER TABLE "columns" DROP CONSTRAINT "TUC_columns_1";
-
-ALTER TABLE "columns" DROP CONSTRAINT "TUC_columns_2";
+ALTER TABLE columns DROP CONSTRAINT TUC_columns_2;
 
 /* Drop table */
 
-DROP TABLE "columns";
+DROP TABLE columns;
 
 /* ---------------------------------------------------------------------- */
 /* Drop table "tables"                                                    */
@@ -71,19 +59,15 @@ DROP TABLE "columns";
 
 /* Drop constraints */
 
-ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_sequence_id";
+ALTER TABLE tables DROP CONSTRAINT PK_tables;
 
-ALTER TABLE "tables" DROP CONSTRAINT "NN_tables_t_d_id";
+ALTER TABLE tables DROP CONSTRAINT TUC_tables_1;
 
-ALTER TABLE "tables" DROP CONSTRAINT "PK_tables";
-
-ALTER TABLE "tables" DROP CONSTRAINT "TUC_tables_1";
-
-ALTER TABLE "tables" DROP CONSTRAINT "TUC_tables_2";
+ALTER TABLE tables DROP CONSTRAINT TUC_tables_2;
 
 /* Drop table */
 
-DROP TABLE "tables";
+DROP TABLE tables;
 
 /* ---------------------------------------------------------------------- */
 /* Drop table "files"                                                     */
@@ -91,15 +75,23 @@ DROP TABLE "tables";
 
 /* Drop constraints */
 
-ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_id";
-
-ALTER TABLE "files" DROP CONSTRAINT "NN_files_f_path";
-
-ALTER TABLE "files" DROP CONSTRAINT "PK_files";
+ALTER TABLE files DROP CONSTRAINT PK_files;
 
 /* Drop table */
 
-DROP TABLE "files";
+DROP TABLE files;
+
+/* ---------------------------------------------------------------------- */
+/* Drop table "config"                                                    */
+/* ---------------------------------------------------------------------- */
+
+/* Drop constraints */
+
+ALTER TABLE config DROP CONSTRAINT PK_config;
+
+/* Drop table */
+
+DROP TABLE config;
 
 /* ---------------------------------------------------------------------- */
 /* Drop table "datasets"                                                  */
@@ -107,10 +99,8 @@ DROP TABLE "files";
 
 /* Drop constraints */
 
-ALTER TABLE "datasets" DROP CONSTRAINT "NN_datasets_d_id";
-
-ALTER TABLE "datasets" DROP CONSTRAINT "PK_datasets";
+ALTER TABLE datasets DROP CONSTRAINT PK_datasets;
 
 /* Drop table */
 
-DROP TABLE "datasets";
+DROP TABLE datasets;

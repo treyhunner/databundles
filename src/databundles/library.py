@@ -7,7 +7,7 @@ from databundles.run import  RunConfig
 
 import os.path
 import shutil
-import databundles.database 
+import databundles
 
 from databundles.exceptions import ResultCountError, ConfigurationError
 
@@ -15,15 +15,17 @@ class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
     
    
-    PROTO_SQL_FILE = 'support/configuration.sql' # Stored in the databundles module. 
+    PROTO_SQL_FILE = 'support/configuration-pg.sql' # Stored in the databundles module. 
     
-    def __init__(self, driver=None, server=None, username=None, password=None):
+    def __init__(self, driver=None, server=None, dbname = None, username=None, password=None):
         self.driver = driver
         self.server = server
+        self.dbname = dbname
         self.username = username
         self.password = password
         
         self._session = None
+        self._engine = None
       
     @property
     def engine(self):
@@ -31,7 +33,10 @@ class LibraryDb(object):
         from sqlalchemy import create_engine  
         
         if not self._engine:
-            self._engine = create_engine('sqlite:///'+self.path, echo=True) 
+            self._engine = create_engine(
+                     'postgresql+psycopg2://{}:{}@{}/{}'
+                     .format(self.username, self.password, self.server, self.dbname),
+                     echo=False) 
             
         return self._engine
 
@@ -63,16 +68,23 @@ class LibraryDb(object):
     def exists(self):
         self.engine
     
-    def delete(self):
-        pass
+    def clean(self):
+        s = self.session
+        from orm import Column, Partition, Table, Dataset, Config, File
+        
+        s.query(Column).delete()
+        s.query(Partition).delete()
+        s.query(Table).delete()
+        s.query(Dataset).delete()
+        s.query(Config).delete()
+        s.query(File).delete()
+        
          
     def create(self):
         
         """Create the database from the base SQL"""
         if not self.exists():    
-            import databundles  
-            from orm import Dataset
-            from identity import Identity
+         
             try:   
                 script_str = os.path.join(os.path.dirname(databundles.__file__),
                                           self.PROTO_SQL_FILE)
@@ -81,30 +93,40 @@ class LibraryDb(object):
                 # fail. 
                 from pkg_resources import resource_string #@UnresolvedImport
                 script_str = resource_string(databundles.__name__, self.PROTO_SQL_FILE)
-         
+            
             self.load_sql(script_str)
             
-            # Create the Dataset
-            s =  self.session
-            ds = Dataset(**self.bundle.config.dict['identity'])
-            ds.name = Identity.name_str(ds)
-           
-            s.add(ds)
-            s.commit()
             
             return True
         
         return False
     
     def load_sql(self, sql_file):
+        
+        #conn = self.engine.connect()
+        #conn.close()
+        
         import psycopg2
-        conn = psycopg2.connect("dbname=test user=postgres")
+        dsn = ("host={} dbname={} user={} password={} "
+                .format(self.server, self.dbname, self.username, self.password))
+       
+        conn = psycopg2.connect(dsn)
         procedures  = open(sql_file,'r').read() 
         cur = conn.cursor()
-        dbcur.execute(procedures) 
-
+      
+        cur.execute('DROP TABLE IF EXISTS columns')
+        cur.execute('DROP TABLE IF EXISTS partitions')
+        cur.execute('DROP TABLE IF EXISTS tables')
+        cur.execute('DROP TABLE IF EXISTS config')
+        cur.execute('DROP TABLE IF EXISTS datasets')
+        cur.execute('DROP TABLE IF EXISTS files')
         
-    
+        cur.execute("COMMIT")
+        cur.execute(procedures) 
+        cur.execute("COMMIT")
+        
+        conn.close()
+        
 class BundleQueryCommand(object):
     '''An object that contains and transfers a query for a bundle
     
@@ -132,7 +154,6 @@ class BundleQueryCommand(object):
         name, altname
         description
         keywords
-    
     
     Partition
         time
@@ -193,7 +214,7 @@ class Library(object):
     def search(self):
         raise NotImplementedError()
     
-    def connect_upsream(self, url):
+    def connect_upstream(self, url):
         '''Connect this library to an upstream library'''
         raise NotImplementedError()
     
@@ -236,9 +257,6 @@ class LocalLibrary(Library):
             raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
 
         self._named_bundles = kwargs.get('named_bundles', None)
-
-        import pprint
-        pprint.pprint(self.config.library)
 
     @property
     def root(self):
@@ -305,12 +323,17 @@ class LocalLibrary(Library):
     @property
     def database(self):
         '''Return databundles.database.Database object'''
-        return LibraryDb(os.path.join(self.directory,'library.db'))
+        config = self.config.library.database
+     
+        return LibraryDb(**config)
   
     def install_database(self, bundle):
         '''Copy the schema and partitions lists into the library database'''
         from databundles.orm import Dataset
         from databundles.orm import Partition as OrmPartition
+        from databundles.orm import Table
+        from databundles.orm import Column
+        
         bdbs = bundle.database.session 
         s = self.database.session
         dataset = bdbs.query(Dataset).one()
@@ -323,16 +346,22 @@ class LocalLibrary(Library):
             for c in t.columns:
                 s.merge(c)
             
-        for p in dataset.partitions:
-            from sqlalchemy import or_
-            s.query(OrmPartition).filter(
-                or_(OrmPartition.id_ == p.id_,OrmPartition.name == p.name)
-                ).delete()
-            s.merge(p)
+        for table in dataset.tables:
+            s.query(OrmPartition).filter(OrmPartition.t_id == table.id_).delete()
+            s.query(Column).filter(Column.t_id == table.id_).delete()
+            s.query(Table).filter(Table.id_ == table.id_).delete()
             
+            s.merge(table)
+         
+            for column in table.columns:
+                s.merge(column)
+            
+        for p in dataset.partitions:
+            s.query(OrmPartition).filter(OrmPartition.id_ == p.id_).delete()
+            s.merge(p)
+    
         s.commit()
         
-          
     def remove_database(self, bundle):
         '''remove a bundle from the database'''
         

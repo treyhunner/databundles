@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-07-11 09:39                                */
+/* Created on:            2012-07-16 15:34                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -27,6 +27,7 @@ CREATE TABLE "datasets" (
     "d_creator" TEXT,
     "d_revision" TEXT,
     "d_data" TEXT,
+    "d_repository" TEXT,
     CONSTRAINT "PK_datasets" PRIMARY KEY ("d_id")
 );
 
@@ -50,7 +51,7 @@ CREATE TABLE "files" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "tables" (
-    "t_id" TEXT,
+    "t_id" TEXT NOT NULL,
     "t_sequence_id" INTEGER NOT NULL,
     "t_d_id" TEXT NOT NULL,
     "t_name" TEXT NOT NULL,
@@ -97,8 +98,8 @@ CREATE TABLE "columns" (
 
 CREATE TABLE "config" (
     "co_d_id" TEXT NOT NULL,
-    "co_group" TEXT,
-    "co_key" TEXT,
+    "co_group" TEXT NOT NULL,
+    "co_key" TEXT NOT NULL,
     "co_source" TEXT,
     "co_value" TEXT,
     CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
@@ -111,7 +112,7 @@ CREATE TABLE "config" (
 /* ---------------------------------------------------------------------- */
 
 CREATE TABLE "partitions" (
-    "p_id" TEXT,
+    "p_id" TEXT NOT NULL,
     "p_name" TEXT NOT NULL,
     "p_d_id" TEXT NOT NULL,
     "p_sequence_id" INTEGER NOT NULL,

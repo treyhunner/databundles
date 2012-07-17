@@ -31,6 +31,13 @@ identity:
     
         self.bundle.database.create()
         
+
+    def test_library_create(self):
+        
+        from databundles.library import  LocalLibrary
+        #l = LocalLibrary()
+        #ldb = l.database
+        #ldb.clean()
    
       
     def test_identity(self):
@@ -178,6 +185,7 @@ identity:
         print p.database.path
         s.commit()
         p.database.create()
+
         self.bundle.library.put(p)
         
 if __name__ == "__main__":

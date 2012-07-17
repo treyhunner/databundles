@@ -304,11 +304,12 @@ class Partitions(object):
 
     def clean(self):
         from databundles.orm import Partition as OrmPartition
+       
         s = self.bundle.database.session
         s.query(OrmPartition).delete()
         
     def new_partition(self, pid, **kwargs):
-    
+        from databundles.orm import Dataset
         p = self.find(pid)
         
         if p is not None:
@@ -319,7 +320,6 @@ class Partitions(object):
         s.add(op)        
        
         p = self.partition(op)
-    
         return p
 
 
