@@ -6,13 +6,13 @@ Created on Jun 9, 2012
 
 from database import Database
 from identity import Identity 
-from library import LocalLibrary
 from filesystem import  Filesystem
 from schema import Schema
 from partition import Partitions
 import os.path
 from exceptions import  ConfigurationError
 from run import RunConfig
+
 
 class Bundle(object):
     '''Represents a bundle, including all configuration 
@@ -24,6 +24,7 @@ class Bundle(object):
     
         self._schema = None
         self._partitions = None
+    
  
     
     @property
@@ -50,7 +51,9 @@ class Bundle(object):
 
     @property
     def library(self):    
-        return LocalLibrary(named_bundles=self.config.dict.get('named_bundles',None))
+        import library
+        
+        return library.get_library()
 
     
 class DbBundle(Bundle):

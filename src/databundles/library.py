@@ -11,6 +11,17 @@ import databundles
 
 from databundles.exceptions import ResultCountError, ConfigurationError
 
+
+library = None
+
+def get_library():
+    ''' Returns LocalLIbrary singleton'''
+    global library
+    if library is None:
+        library =  LocalLibrary()
+        
+    return library
+
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
     
@@ -26,7 +37,8 @@ class LibraryDb(object):
         
         self._session = None
         self._engine = None
-      
+        
+        
     @property
     def engine(self):
         '''return the SqlAlchemy engine for this database'''
@@ -52,15 +64,20 @@ class LibraryDb(object):
         from sqlalchemy.orm import sessionmaker
         
         if not self._session:    
-            Session = sessionmaker(bind=self.engine)
-            self._session = Session()
+            self.Session = sessionmaker(bind=self.engine)
+            self._session = self.Session()
             
         return self._session
    
     def close(self):
+        raise Exception()
         if self._session:    
-            self._session.close()
+            self._session.bind.dispose()
+            self.Session.close_all()
+            self.engine.dispose() 
             self._session = None
+            self._engine = None
+            
    
     def commit(self):
         self.session.commit()     
@@ -258,6 +275,9 @@ class LocalLibrary(Library):
 
         self._named_bundles = kwargs.get('named_bundles', None)
 
+        self._database = None
+
+
     @property
     def root(self):
         return self.directory
@@ -323,9 +343,12 @@ class LocalLibrary(Library):
     @property
     def database(self):
         '''Return databundles.database.Database object'''
-        config = self.config.library.database
+        if self._database is None:
+            config = self.config.library.database
      
-        return LibraryDb(**config)
+            self._database = LibraryDb(**config)
+            
+        return self._database
   
     def install_database(self, bundle):
         '''Copy the schema and partitions lists into the library database'''
@@ -333,32 +356,27 @@ class LocalLibrary(Library):
         from databundles.orm import Partition as OrmPartition
         from databundles.orm import Table
         from databundles.orm import Column
+        from partition import Partition
         
         bdbs = bundle.database.session 
         s = self.database.session
         dataset = bdbs.query(Dataset).one()
         s.merge(dataset)
         s.commit()
-        
-        for t in dataset.tables:
-            s.merge(t)
-            
-            for c in t.columns:
-                s.merge(c)
-            
-        for table in dataset.tables:
-            s.query(OrmPartition).filter(OrmPartition.t_id == table.id_).delete()
-            s.query(Column).filter(Column.t_id == table.id_).delete()
-            s.query(Table).filter(Table.id_ == table.id_).delete()
-            
-            s.merge(table)
-         
-            for column in table.columns:
-                s.merge(column)
-            
-        for p in dataset.partitions:
-            s.query(OrmPartition).filter(OrmPartition.id_ == p.id_).delete()
-            s.merge(p)
+
+        if isinstance(bundle, Partition):
+            for partition in dataset.partitions:
+                s.merge(partition)
+        else:
+            for table in dataset.tables:
+                s.query(OrmPartition).filter(OrmPartition.t_id == table.id_).delete()
+                s.query(Column).filter(Column.t_id == table.id_).delete()
+                s.query(Table).filter(Table.id_ == table.id_).delete()
+                
+                s.merge(table)
+             
+                for column in table.columns:
+                    s.merge(column)
     
         s.commit()
         

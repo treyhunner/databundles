@@ -415,14 +415,15 @@ class Partition(Base):
     def before_insert(mapper, conn, target):
         '''event.listen method for Sqlalchemy to set the seqience_id for this  
         object and create an ObjectNumber value for the id_'''
-        sql = text('''SELECT max(p_sequence_id)+1 FROM Partitions WHERE p_d_id = :did''')
-
-        max_id, = conn.execute(sql, did=target.d_id).fetchone()
-  
-        if not max_id:
-            max_id = 1
-            
-        target.sequence_id = max_id
+        if target.sequence_id is None:
+            sql = text('''SELECT max(p_sequence_id)+1 FROM Partitions WHERE p_d_id = :did''')
+    
+            max_id, = conn.execute(sql, did=target.d_id).fetchone()
+      
+            if not max_id:
+                max_id = 1
+                
+            target.sequence_id = max_id
         
         Partition.before_update(mapper, conn, target)
 

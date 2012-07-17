@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-07-16 15:34                                */
+/* Created on:            2012-07-16 21:03                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -19,7 +19,7 @@
 
 CREATE TABLE "datasets" (
     "d_id" TEXT NOT NULL,
-    "d_name" INTEGER,
+    "d_name" TEXT,
     "d_source" TEXT,
     "d_dataset" TEXT,
     "d_subset" TEXT,
@@ -29,6 +29,20 @@ CREATE TABLE "datasets" (
     "d_data" TEXT,
     "d_repository" TEXT,
     CONSTRAINT "PK_datasets" PRIMARY KEY ("d_id")
+);
+
+/* ---------------------------------------------------------------------- */
+/* Add table "config"                                                     */
+/* ---------------------------------------------------------------------- */
+
+CREATE TABLE "config" (
+    "co_d_id" TEXT NOT NULL,
+    "co_group" TEXT NOT NULL,
+    "co_key" TEXT NOT NULL,
+    "co_value" TEXT,
+    "co_source" TEXT,
+    CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
+    FOREIGN KEY ("co_d_id") REFERENCES "datasets" ("d_id")
 );
 
 /* ---------------------------------------------------------------------- */
@@ -93,21 +107,6 @@ CREATE TABLE "columns" (
 );
 
 /* ---------------------------------------------------------------------- */
-/* Add table "config"                                                     */
-/* ---------------------------------------------------------------------- */
-
-CREATE TABLE "config" (
-    "co_d_id" TEXT NOT NULL,
-    "co_group" TEXT NOT NULL,
-    "co_key" TEXT NOT NULL,
-    "co_source" TEXT,
-    "co_value" TEXT,
-    CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
-    FOREIGN KEY ("co_d_id") REFERENCES "datasets" ("d_id"),
-    FOREIGN KEY ("co_source") REFERENCES "files" ("f_id")
-);
-
-/* ---------------------------------------------------------------------- */
 /* Add table "partitions"                                                 */
 /* ---------------------------------------------------------------------- */
 
@@ -118,6 +117,7 @@ CREATE TABLE "partitions" (
     "p_sequence_id" INTEGER NOT NULL,
     "p_space" TEXT,
     "p_time" TEXT,
+    "p_grain" TEXT,
     "p_t_id" TEXT,
     "p_data" TEXT,
     "p_state" TEXT,

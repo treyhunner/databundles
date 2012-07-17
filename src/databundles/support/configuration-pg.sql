@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-07-16 16:04                                */
+/* Created on:            2012-07-16 21:03                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -114,6 +114,7 @@ CREATE TABLE partitions (
     p_sequence_id INTEGER  NOT NULL,
     p_space TEXT,
     p_time TEXT,
+    p_grain TEXT,
     p_t_id TEXT,
     p_data TEXT,
     p_state TEXT,

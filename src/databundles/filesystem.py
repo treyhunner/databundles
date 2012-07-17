@@ -144,7 +144,7 @@ class Filesystem(object):
         it when finished'''
         
         extractDir = self.build_path('extracts')
-
+      
         with zipfile.ZipFile(path) as zf:
             for name in  zf.namelist():
                 extractFilename = self.build_path('extracts', name)

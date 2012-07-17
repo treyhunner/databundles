@@ -17,36 +17,33 @@ class PartitionIdentity(Identity):
     
     def __init__(self, *args, **kwargs):
 
-        got_id = False
+        d = {}
+
         for arg in args:
             if isinstance(arg, Identity):
-                self.from_dict(arg.to_dict())
-                got_id = True
+                d = arg.to_dict()
+       
     
-        if not got_id:
-            super(PartitionIdentity, self).__init__(**kwargs)
+        d = dict(d.items() + kwargs.items())
     
-        self.time = kwargs.get('time',None)
-        self.space = kwargs.get('space',None)
-        self.table = kwargs.get('table',None)
-    
-        from identity import ObjectNumber
-        if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
-            self.id_ = None
+        self.from_dict(d)
+        
+        self.name # Trigger some errors immediately. 
             
     def from_dict(self,d):
         
-        return super(PartitionIdentity, self).from_dict(d)
+        super(PartitionIdentity, self).from_dict(d)
         
         self.time = d.get('time',None)
         self.space = d.get('space',None)
         self.table = d.get('table',None)
+        self.grain = d.get('grain',None)
         
         from identity import ObjectNumber
         if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
             self.id_ = None
-        
 
+       
     def to_dict(self):
         '''Returns the identity as a dict. values that are empty are removed'''
         
@@ -309,7 +306,7 @@ class Partitions(object):
         s.query(OrmPartition).delete()
         
     def new_partition(self, pid, **kwargs):
-        from databundles.orm import Dataset
+     
         p = self.find(pid)
         
         if p is not None:
