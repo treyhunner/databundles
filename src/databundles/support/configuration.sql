@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-07-16 21:03                                */
+/* Created on:            2012-07-22 09:19                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -89,6 +89,9 @@ CREATE TABLE "columns" (
     "c_t_id" TEXT,
     "c_name" TEXT,
     "c_altname" TEXT,
+    "c_is_primary_key" INTEGER,
+    "c_unique_constraints" TEXT,
+    "c_indexes" TEXT,
     "c_datatype" TEXT,
     "c_size" INTEGER,
     "c_precision" INTEGER,

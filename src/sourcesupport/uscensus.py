@@ -68,6 +68,8 @@ class UsCensusBundle(BuildBundle):
         for row in reader: 
             self.schema.add_column(t, row['column'],datatype=types[row['datatype'].strip()])
     
+        self.database.commit()
+    
     def generate_table_schema(self):
         '''Return schema rows from the  columns.csv file'''
         from databundles.orm import Column
@@ -158,6 +160,7 @@ class UsCensusBundle(BuildBundle):
                 
                 source_col += 1
                 
+        self.database.commit()
   
     def scrape_files(self, states_file=None, urls_file=None):
         '''Extract all of the URLS from the Census website and store them'''
@@ -356,6 +359,7 @@ class UsCensusBundle(BuildBundle):
                     self.partitions.new_partition(pid)
                    
         self.database.session.commit()
+        
         import subprocess
         output = subprocess.check_output(
                     ['sqlite3',self.database.path, '.dump partitions'])

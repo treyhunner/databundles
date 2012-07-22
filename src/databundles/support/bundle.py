@@ -3,10 +3,10 @@
 '''
 
 
-from  databundles.bundle import Bundle as Base
+from  databundles.bundle import BuildBundle
  
 
-class Bundle(Base):
+class Bundle(BuildBundle):
     ''' '''
  
     def __init__(self,directory=None):

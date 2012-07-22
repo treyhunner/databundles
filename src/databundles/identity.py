@@ -151,7 +151,7 @@ class ObjectNumber(object):
     EPOCH = 1325376000 # Jan 1, 2012 in UNIX time
 
     @classmethod
-    def parse(self, input): #@ReservedAssignment
+    def parse(cls, input): #@ReservedAssignment
         '''Parse a string into one of the object number classes. '''
         
         if input is None:
@@ -160,18 +160,18 @@ class ObjectNumber(object):
         if  isinstance(input, unicode):
             dataset = input.encode('ascii')
       
-        if input[0] == self.TYPE.DATASET:
+        if input[0] == cls.TYPE.DATASET:
             dataset = int(ObjectNumber.base62_decode(input[1:]))
             return DatasetNumber(dataset)
-        elif input[0] == self.TYPE.TABLE:   
+        elif input[0] == cls.TYPE.TABLE:   
             table = int(ObjectNumber.base62_decode(input[-2:]))
             dataset = int(ObjectNumber.base62_decode(input[1:-2]))
             return TableNumber(DatasetNumber(dataset), table)
-        elif input[0] == self.TYPE.PARTITION:
+        elif input[0] == cls.TYPE.PARTITION:
             partition = int(ObjectNumber.base62_decode(input[-3:]))
             dataset = int(ObjectNumber.base62_decode(input[1:-3]))  
             return PartitionNumber(DatasetNumber(dataset), partition)              
-        elif input[0] == self.TYPE.COLUMN:       
+        elif input[0] == cls.TYPE.COLUMN:       
             column = int(ObjectNumber.base62_decode(input[-2:]))
             table = int(ObjectNumber.base62_decode(input[-4:-2]))
             dataset = int(ObjectNumber.base62_decode(input[1:-4]))
@@ -279,7 +279,8 @@ class TableNumber(ObjectNumber):
 
         self.dataset = dataset
         self.table = table;
-         
+        
+
          
     def __str__(self):        
         return (ObjectNumber.TYPE.TABLE+
@@ -298,6 +299,12 @@ class ColumnNumber(ObjectNumber):
 
         self.table = table
         self.column = column
+   
+    @property
+    def dataset(self):
+        '''Return the dataset number for ths partition '''
+        return self.table.dataset
+         
          
          
     def __str__(self):        
@@ -324,7 +331,7 @@ class PartitionNumber(ObjectNumber):
 
         self.dataset = dataset
         self.partition = partition;
-         
+
          
     def __str__(self):        
         return (ObjectNumber.TYPE.PARTITION+

@@ -6,7 +6,7 @@ Created on Jun 21, 2012
 from sqlalchemy import event
 from sqlalchemy import Column as SAColumn, Integer
 from sqlalchemy import Float as Real,  Text, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.types import TypeDecorator, TEXT, PickleType
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.mutable import Mutable
@@ -112,6 +112,12 @@ class Dataset(Base):
                     self.dataset, self.subset, self.variation, 
                     self.creator, self.revision)
         
+        
+    @property
+    def identity(self):
+        from databundles.identity import Identity
+        return Identity(**self.to_dict() )
+        
     def to_dict(self):
         return {
                 'id':self.id_, 
@@ -123,11 +129,6 @@ class Dataset(Base):
                 'creator':self.creator, 
                 'revision':self.revision
                 }
-        
-    @property
-    def identity(self):
-        from databundles.identity import Identity
-        return Identity(**self.to_dict() )
         
 
 class Column(Base):
@@ -150,6 +151,13 @@ class Column(Base):
     scale = SAColumn('c_scale',Real)
     data = SAColumn('c_data',MutationDict.as_mutable(JSONEncodedDict))
 
+    # Recent additionas, so they are deferred ESB 20120720
+    # These deferral should be removed after all  bundles are constructed with
+    # these columns
+    is_primary_key = deferred(SAColumn('c_is_primary_key',Integer, default = 0))
+    unique_constraints = deferred(SAColumn('c_unique_constraints',Text))
+    indexes = deferred(SAColumn('c_indexes',Text))
+
     DATATYPE_TEXT = 'text'
     DATATYPE_INTEGER ='integer' 
     DATATYPE_REAL = 'real'
@@ -164,6 +172,7 @@ class Column(Base):
         self.t_id = kwargs.get("t_id",None)  
         self.name = kwargs.get("name",None) 
         self.altname = kwargs.get("altname",None) 
+        self.is_primary_key = kwargs.get("is_primary_key",0) 
         self.datatype = kwargs.get("datatype",None) 
         self.size = kwargs.get("size",None) 
         self.precision = kwargs.get("precision",None) 
@@ -299,10 +308,13 @@ class Table(Base):
         s = sqlalchemy.orm.session.Session.object_session(self)
         
         name = Column.mangle_name(name)
+
    
         row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_), 
                                          kwargs.get('sequence_id'))),
                      name=name, 
+                     is_primary_key=  1 if (int(kwargs.get('is_primary_key',0)) == 1)   else  0,
+                     indexes = kwargs.get('indexes',None),
                      t_id=self.id_)
          
         for key, value in kwargs.items():
@@ -373,7 +385,11 @@ class Partition(Base):
     state = SAColumn('p_state',Text)
     data = SAColumn('p_data',MutationDict.as_mutable(JSONEncodedDict))
     
+    grain = deferred(SAColumn('p_grain',Text))
+    
     dataset = relationship("Dataset")
+    
+    
     
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",kwargs.get("id_",None)) 
@@ -383,10 +399,12 @@ class Partition(Base):
         self.space = kwargs.get("space",None) 
         self.time = kwargs.get("time",None) 
         self.table = kwargs.get("table",None) 
+        self.grain = kwargs.get('grain',None)
         self.data = kwargs.get('data',None)
-        self.state = kwargs.get('state',None)
+        
 
-    def as_partition_id(self):
+    @property
+    def identity(self):
         '''Return this partition information as a PartitionId'''
         from sqlalchemy.orm import object_session
         from partition import PartitionIdentity
@@ -407,6 +425,9 @@ class Partition(Base):
             id_ = self.dataset.identity
 
         return PartitionIdentity(id_, **args)
+
+    def to_dict(self):
+        return self.identity.to_dict()
 
     def __repr__(self):
         return "<partitions: {}>".format(self.id_)

@@ -8,13 +8,18 @@ class Schema(object):
     
      
     def __init__(self, bundle):
-        self.bundle = bundle
+        from partition import  Partition
+        self.bundle = bundle # COuld also be a partition
         
-    
-        if not self.bundle.identity.id_:
-            raise ValueError("self.bundle.identity.oid not set")
+        # the value for a Partition will be a PartitionNumber, and
+        # for the schema, we want the dataset number
+        if isinstance(self.bundle, Partition):
+            self.d_id=self.bundle.bundle.identity.id_
+        else:
+            self.d_id=self.bundle.identity.id_
 
-        self.d_id=self.bundle.identity.id_
+        if not self.d_id:
+            raise ValueError("self.bundle.identity.oid not set")
         self._seen_tables = {}
       
         self.table_sequence = 1
@@ -31,21 +36,26 @@ class Schema(object):
     def tables(self):
         '''Return a list of tables for this bundle'''
         from databundles.orm import Table
-        return (self.bundle.database.session.query(Table)
-                .filter(Table.d_id==self.bundle.identity.id_)
-                .all())
+        q = (self.bundle.database.session.query(Table)
+                .filter(Table.d_id==self.d_id))
+
+        return q.all()
     
-    def table(self, name_or_id):
-        '''Return an orm.Table object, from either the id or name'''
+    @classmethod
+    def get_table_from_database(cls, db, name_or_id):
         from databundles.orm import Table
         import sqlalchemy.orm.exc
         
         try:
-            return (self.bundle.database.session.query(Table)
+            return (db.session.query(Table)
                     .filter(Table.id_==name_or_id).one())
         except sqlalchemy.orm.exc.NoResultFound:
-            return (self.bundle.database.session.query(Table)
+            return (db.session.query(Table)
                     .filter(Table.name==name_or_id).one())
+    
+    def table(self, name_or_id):
+        '''Return an orm.Table object, from either the id or name'''
+        return Schema.get_table_from_database(self.bundle.database, name_or_id)
 
     def add_table(self, name, **kwargs):
         '''Add a table to the schema'''
@@ -95,12 +105,12 @@ class Schema(object):
         from databundles.orm import Column
         return (self.bundle.database.session.query(Column).all())
         
-    def get_table_meta(self, name):
+    def get_table_meta(self, name_or_id):
         s = self.bundle.database.session
         from databundles.orm import Table, Column
         
         import sqlalchemy
-        from sqlalchemy import MetaData   
+        from sqlalchemy import MetaData, UniqueConstraint, Index
         from sqlalchemy import Column as SAColumn
         from sqlalchemy import Table as SATable
         
@@ -123,19 +133,61 @@ class Schema(object):
         
         metadata = MetaData()
         
-        q =  (s.query(Table)
-                   .filter(Table.name==name)
-                   .filter(Table.d_id==self.bundle.identity.id_))
-      
-       
-        table = q.one()
+        try :
+            q =  (s.query(Table)
+                       .filter(Table.name==name_or_id)
+                       .filter(Table.d_id==self.d_id))
+          
+            table = q.one()
+        except:
+            # Try it with just the name
+            q =  (s.query(Table).filter(Table.name==name_or_id))
+             
+            table = q.one()
         
         at = SATable(table.name, metadata)
  
         for column in table.columns:
-            ac = SAColumn(column.name, translate_type(column), primary_key = False)
+            ac = SAColumn(column.name, 
+                          translate_type(column), 
+                          primary_key = ( column.is_primary_key == 1)
+                          )
 
             at.append_column(ac);
+    
+        # Now add all of the constraints
+        constraints = {}
+        for column in table.columns:
+            if not column.unique_constraints.strip():
+                continue;
+            
+            for cons in column.unique_constraints.strip().split(','):
+                
+                if cons.strip() not in constraints:
+                    constraints[cons.strip()] = []
+                
+                constraints[cons.strip()].append(column.name)
+    
+    
+        for constraint, columns in constraints.items():
+            at.append_constraint(UniqueConstraint(name=constraint,*columns))
+             
+        # Add indexes
+        indexes = {}
+        for column in table.columns:
+            if not column.indexes.strip():
+                continue;
+            
+            for cons in column.indexes.strip().split(','):
+                
+                if cons.strip() not in indexes:
+                    indexes[cons.strip()] = []
+                
+                indexes[cons.strip()].append(column)
+    
+    
+        for index, columns in constraints.items():
+            Index(index, unique = True ,*columns)
     
         return metadata, at
         
@@ -146,6 +198,9 @@ class Schema(object):
             if not t.name in self.bundle.database.inspector.get_table_names():
                 t_meta, table = self.bundle.schema.get_table_meta(t.name) #@UnusedVariable
                 t_meta.create_all(bind=self.bundle.database.engine)
+        
+       
+        
         
         
         

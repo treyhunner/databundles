@@ -9,7 +9,7 @@ import os
 from identity import Identity
 
 class PartitionIdentity(Identity):
-    '''Has a similar interface to Identity'''
+    '''Subclass of Identity for partitions'''
     
     time = None
     space = None
@@ -52,6 +52,7 @@ class PartitionIdentity(Identity):
         d['time'] = self.time
         d['space'] = self.space
         d['table'] = self.table
+        d['grain'] = self.grain
 
         return { k:v for k,v in d.items() if v}
     
@@ -64,8 +65,7 @@ class PartitionIdentity(Identity):
         id_path = Identity.path_str(o)
 
         partition_parts = [re.sub('[^\w\.]','_',str(s))
-                         for s in filter(None, [o.time, o.space, 
-                                                o.table])]
+                         for s in filter(None, [o.time, o.space, o.table, o.grain])]
     
        
         return  os.path.join(id_path ,  *partition_parts )
@@ -85,8 +85,7 @@ class PartitionIdentity(Identity):
         rev = parts.pop()
         
         partition_component = '.'.join([re.sub('[^\w\.]','_',str(s))
-                         for s in filter(None, [o.time, o.space, 
-                                                o.table])])
+                         for s in filter(None, [o.time, o.space, o.table, o.grain])])
         
         parts.append(partition_component)
         parts.append(rev)
@@ -107,21 +106,28 @@ class Partition(object):
         self.pid.id_ = kwargs.get('id',kwargs.get('id_',None))
       
         self.pid.partition = self
+        
+        self._schema = None
 
+        # The value for the library is injected in LocalLibrary.get() so the
+        # partition can figure out what the pat to its database is. 
+        self.library = None
       
     def init(self):
         '''Initialize the partition, loading in any SQL, etc. '''
         if not self.database.exists():
             self.database.create()
 
-  
     @property
     def name(self):
         return self.pid.name
     
     @property
     def path(self):
+        '''Return a pathname for the partition, relative to the containing 
+        directory of the bundle. '''
         import os.path
+        
         parts = self.bundle.identity.name_parts(self.bundle.identity)
        
         source = parts.pop(0)
@@ -133,7 +139,16 @@ class Partition(object):
     @property
     def database(self):
         from database import PartitionDb
-        return PartitionDb(self.bundle, self)
+        
+        # If the library is set, the path to the database is relative to the
+        # library, not to the dataset
+        if self.library is not None:
+           
+            return PartitionDb(self.bundle, self, file_path=self.library.path(self.path)+".db")
+        else:
+            db =  PartitionDb(self.bundle, self)
+            db.file_path = None
+            return db
     
  
     def __repr__(self):
@@ -142,6 +157,15 @@ class Partition(object):
     @property
     def identity(self):
         return self.pid
+    
+    @property
+    def schema(self):
+        from schema import Schema
+        if self._schema is None:
+            self._schema = Schema(self)
+            
+        return self._schema
+    
         
         
 class Partitions(object):
@@ -171,9 +195,8 @@ class Partitions(object):
         else:
             raise ValueError("Arg must be a Partition or")
         
-        partition_id = orm_partition.as_partition_id()
-        
-
+        partition_id = orm_partition.identity
+     
         return Partition(self.bundle, 
                          partition_id, 
                          id=orm_partition.id_,
@@ -211,10 +234,12 @@ class Partitions(object):
             time = kwargs.get('time',None)
             space = kwargs.get('space', None)
             table = kwargs.get('table', None)
+            grain = kwargs.get('grain', None)
         else:
             time = pid.time
             space = pid.space
             table = pid.table
+            grain = pid.grain
                 
         from databundles.orm import Partition as OrmPartition
         q = self.query
@@ -224,6 +249,9 @@ class Partitions(object):
 
         if space is not None:
             q = q.filter(OrmPartition.space==space)
+    
+        if grain is not None:
+            q = q.filter(OrmPartition.grain==grain)
     
         if table is not None:
             tr = self.bundle.schema.table(table)
