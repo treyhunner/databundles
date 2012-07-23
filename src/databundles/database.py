@@ -279,7 +279,7 @@ class Database(object):
         
         if name is None:
             import random, string
-            name =  ''.join(random.choice(string.letters) for i in xrange(10))
+            name =  ''.join(random.choice(string.letters) for i in xrange(10)) #@UnusedVariable
         
         q = """ATTACH DATABASE '{}' AS '{}' """.format(path, name)
     

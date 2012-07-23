@@ -147,8 +147,7 @@ class Schema(object):
  
         indexes = {}
         constraints = {}
-    
-                
+       
         for column in table.columns:
             
             kwargs = {}
@@ -159,8 +158,7 @@ class Schema(object):
                     kwargs['server_default'] = text(str(10))
                 except:
                     kwargs['server_default'] = column.default
-       
-            
+          
             ac = SAColumn(column.name, 
                           translate_type(column), 
                           primary_key = ( column.is_primary_key == 1),
@@ -192,7 +190,6 @@ class Schema(object):
              
         # Add indexes   
         for index, columns in indexes.items():
-            print "INDEX",index,columns
             Index(index, unique = True ,*columns)
     
         return metadata, at
