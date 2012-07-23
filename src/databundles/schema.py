@@ -184,6 +184,7 @@ class Schema(object):
                     constraints[cons.strip()].append(column.name)
             
     
+    
         # Append constraints. 
         for constraint, columns in constraints.items():
             at.append_constraint(UniqueConstraint(name=constraint,*columns))
