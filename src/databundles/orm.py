@@ -151,12 +151,10 @@ class Column(Base):
     scale = SAColumn('c_scale',Real)
     data = SAColumn('c_data',MutationDict.as_mutable(JSONEncodedDict))
 
-    # Recent additionas, so they are deferred ESB 20120720
-    # These deferral should be removed after all  bundles are constructed with
-    # these columns
-    is_primary_key = deferred(SAColumn('c_is_primary_key',Integer, default = 0))
-    unique_constraints = deferred(SAColumn('c_unique_constraints',Text))
-    indexes = deferred(SAColumn('c_indexes',Text))
+    is_primary_key = SAColumn('c_is_primary_key',Integer, default = 0)
+    unique_constraints = SAColumn('c_unique_constraints',Text)
+    indexes = SAColumn('c_indexes',Text)
+    default = SAColumn('c_default',Text)
 
     DATATYPE_TEXT = 'text'
     DATATYPE_INTEGER ='integer' 

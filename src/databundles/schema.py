@@ -110,7 +110,7 @@ class Schema(object):
         from databundles.orm import Table, Column
         
         import sqlalchemy
-        from sqlalchemy import MetaData, UniqueConstraint, Index
+        from sqlalchemy import MetaData, UniqueConstraint, Index, text
         from sqlalchemy import Column as SAColumn
         from sqlalchemy import Table as SATable
         
@@ -123,12 +123,10 @@ class Schema(object):
         Column.DATATYPE_TIME:sqlalchemy.types.Time,
         Column.DATATYPE_TIMESTAMP:sqlalchemy.types.DateTime,
         }
-     
+    
         def translate_type(column):
-            # Creates a lot of unnecessary objects, but spped is not important here. 
-            
-            type_map[Column.DATATYPE_NUMERIC] = sqlalchemy.types.Numeric(column.precision, column.scale),
-            
+            # Creates a lot of unnecessary objects, but spped is not important here.  
+            type_map[Column.DATATYPE_NUMERIC] = sqlalchemy.types.Numeric(column.precision, column.scale),  
             return type_map[column.datatype]
         
         metadata = MetaData()
@@ -147,46 +145,54 @@ class Schema(object):
         
         at = SATable(table.name, metadata)
  
+        indexes = {}
+        constraints = {}
+    
+                
         for column in table.columns:
+            
+            kwargs = {}
+        
+            if column.default is not None:
+                try:
+                    int(column.default)
+                    kwargs['server_default'] = text(str(10))
+                except:
+                    kwargs['server_default'] = column.default
+       
+            
             ac = SAColumn(column.name, 
                           translate_type(column), 
-                          primary_key = ( column.is_primary_key == 1)
+                          primary_key = ( column.is_primary_key == 1),
+                          **kwargs
                           )
 
             at.append_column(ac);
-    
-        # Now add all of the constraints
-        constraints = {}
-        for column in table.columns:
-            if not column.unique_constraints.strip():
-                continue;
             
-            for cons in column.unique_constraints.strip().split(','):
-                
-                if cons.strip() not in constraints:
-                    constraints[cons.strip()] = []
-                
-                constraints[cons.strip()].append(column.name)
+            # assemble indexes
+            if column.indexes and column.indexes.strip():
+                for cons in column.indexes.strip().split(','):
+                    if cons.strip() not in indexes:
+                        indexes[cons.strip()] = []
+                    indexes[cons.strip()].append(ac)
+
+            # Assemble constraints
+            if column.unique_constraints and column.unique_constraints.strip(): 
+                for cons in column.unique_constraints.strip().split(','):
+                    
+                    if cons.strip() not in constraints:
+                        constraints[cons.strip()] = []
+                    
+                    constraints[cons.strip()].append(column.name)
+            
     
-    
+        # Append constraints. 
         for constraint, columns in constraints.items():
             at.append_constraint(UniqueConstraint(name=constraint,*columns))
              
-        # Add indexes
-        indexes = {}
-        for column in table.columns:
-            if not column.indexes.strip():
-                continue;
-            
-            for cons in column.indexes.strip().split(','):
-                
-                if cons.strip() not in indexes:
-                    indexes[cons.strip()] = []
-                
-                indexes[cons.strip()].append(column)
-    
-    
-        for index, columns in constraints.items():
+        # Add indexes   
+        for index, columns in indexes.items():
+            print "INDEX",index,columns
             Index(index, unique = True ,*columns)
     
         return metadata, at
