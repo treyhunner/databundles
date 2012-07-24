@@ -154,6 +154,7 @@ class Column(Base):
     is_primary_key = SAColumn('c_is_primary_key',Integer, default = 0)
     unique_constraints = SAColumn('c_unique_constraints',Text)
     indexes = SAColumn('c_indexes',Text)
+    uindexes = SAColumn('c_uindexes',Text)
     default = SAColumn('c_default',Text)
     illegal_value = SAColumn('c_illegal_value',Text)
 

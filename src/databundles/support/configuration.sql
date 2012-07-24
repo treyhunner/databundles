@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-07-23 16:21                                */
+/* Created on:            2012-07-24 07:38                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -92,6 +92,7 @@ CREATE TABLE "columns" (
     "c_is_primary_key" INTEGER,
     "c_unique_constraints" TEXT,
     "c_indexes" TEXT,
+    "c_uindexes" INTEGER,
     "c_datatype" TEXT,
     "c_default" TEXT,
     "c_size" INTEGER,

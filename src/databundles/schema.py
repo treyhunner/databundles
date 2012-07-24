@@ -146,6 +146,7 @@ class Schema(object):
         at = SATable(table.name, metadata)
  
         indexes = {}
+        uindexes = {}
         constraints = {}
        
         for column in table.columns:
@@ -169,12 +170,20 @@ class Schema(object):
 
             at.append_column(ac);
             
-            # assemble indexes
+            # assemble non unique indexes
             if column.indexes and column.indexes.strip():
                 for cons in column.indexes.strip().split(','):
                     if cons.strip() not in indexes:
                         indexes[cons.strip()] = []
                     indexes[cons.strip()].append(ac)
+
+            # assemble  unique indexes
+            if column.uindexes and column.uindexes.strip():
+                for cons in column.uindexes.strip().split(','):
+                    if cons.strip() not in uindexes:
+                        uindexes[cons.strip()] = []
+                    uindexes[cons.strip()].append(ac)
+
 
             # Assemble constraints
             if column.unique_constraints and column.unique_constraints.strip(): 
@@ -193,6 +202,10 @@ class Schema(object):
              
         # Add indexes   
         for index, columns in indexes.items():
+            Index(index, unique = False ,*columns)
+    
+        # Add unique indexes   
+        for index, columns in uindexes.items():
             Index(index, unique = True ,*columns)
     
         return metadata, at

@@ -167,6 +167,7 @@ class BuildBundle(Bundle):
         '''Writes a tick to the stdout, without a space or newline'''
         import sys
         sys.stdout.write(message)
+        sys.stdout.flush()
         
         self.ptick_count += len(message)
        
