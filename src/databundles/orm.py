@@ -155,6 +155,7 @@ class Column(Base):
     unique_constraints = SAColumn('c_unique_constraints',Text)
     indexes = SAColumn('c_indexes',Text)
     default = SAColumn('c_default',Text)
+    illegal_value = SAColumn('c_illegal_value',Text)
 
     DATATYPE_TEXT = 'text'
     DATATYPE_INTEGER ='integer' 
@@ -307,23 +308,28 @@ class Table(Base):
         
         name = Column.mangle_name(name)
 
+        is_primary_key = 1 if (int(kwargs.get('is_primary_key',0)) == 1)   else  0
+        del kwargs['is_primary_key']
+        del kwargs['sequence_id']
+    
    
         row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_), 
                                          kwargs.get('sequence_id'))),
                      name=name, 
-                     is_primary_key=  1 if (int(kwargs.get('is_primary_key',0)) == 1)   else  0,
-                     indexes = kwargs.get('indexes',None),
-                     t_id=self.id_)
+                     t_id=self.id_,
+                     is_primary_key = is_primary_key,
+                     **kwargs
+                   
+                     )
          
         for key, value in kwargs.items():
             if key[0] != '_' and key not in ['d_id','t_id','name']:
                 setattr(row, key, value)
       
         s.add(row)
+        s.commit()
     
         return row
-
-
      
 event.listen(Table, 'before_insert', Table.before_insert)
 event.listen(Table, 'before_update', Table.before_update)

@@ -155,9 +155,11 @@ class Schema(object):
             if column.default is not None:
                 try:
                     int(column.default)
-                    kwargs['server_default'] = text(str(10))
+                    kwargs['server_default'] = text(str(column.default))
                 except:
                     kwargs['server_default'] = column.default
+          
+          
           
             ac = SAColumn(column.name, 
                           translate_type(column), 
