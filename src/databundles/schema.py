@@ -25,7 +25,6 @@ class Schema(object):
         self.table_sequence = 1
         self.col_sequence = 1 
 
-        
     def clean(self):
         from databundles.orm import Table, Column
         s = self.bundle.database.session 

@@ -42,6 +42,10 @@ class Database(object):
         self._session = None
         self._connection = None
         
+        # DB-API is needed to issue INSERT OR REPLACE type inserts. 
+        self._dbapi_cursor = None
+        self._dbapi_connection = None
+        
         if file_path:
             self.file_path = file_path
             
@@ -96,6 +100,38 @@ class Database(object):
             self._connection = self.engine.connect()
             
         return self._connection
+    
+    @property
+    def dbapi_connection(self):
+        '''Return an DB_API connection'''
+        import sqlite3
+        if not self._dbapi_connection:
+            self._dbapi_connection = sqlite3.connect(self.path)
+            
+        return self._dbapi_connection
+
+    @property
+    def dbapi_cursor(self):
+        '''Return an DB_API cursor'''
+        if not self._dbapi_cursor:
+        
+            self._dbapi_cursor = self.dbapi_connection.cursor()
+            
+        return self._dbapi_cursor
+    
+    def dbapi_close(self):
+        '''Close both the cursor and the connection'''
+        if  self._dbapi_cursor:
+            self._dbapi_cursor.close();
+            self._dbapi_cursor = None
+            
+        if  self._dbapi_connection:
+            self._dbapi_connection.close();
+            self._dbapi_connection = None            
+        
+      
+
+
 
     @property
     def inspector(self):
@@ -427,3 +463,12 @@ def _pragma_on_connect(dbapi_con, con_record):
     dbapi_con.execute('PRAGMA cache_size = 500000')
     dbapi_con.execute('pragma foreign_keys=ON')
     
+def insert_or_ignore(table, columns):
+    return  ("""INSERT OR IGNORE INTO {table} ({columns}) VALUES ({values})"""
+                            .format(
+                                 table=table,
+                                 columns =','.join([c.name for c in columns ]),
+                                 values = ','.join(['?' for c in columns]) #@UnusedVariable
+                            )
+                         )
+
