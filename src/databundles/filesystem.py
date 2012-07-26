@@ -10,6 +10,7 @@ from databundles.orm import File
 from contextlib import contextmanager
 import zipfile
 import urllib
+
     
 class FileRef(File):
     '''Extends the File orm class with awareness of the filsystem'''

@@ -6,7 +6,6 @@ Created on Jun 10, 2012
 
 import os.path
 
-
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''
     def __init__(self, bundle, table, db):
@@ -407,7 +406,7 @@ class PartitionDb(Database):
                     self.partition.path+".db")
 
     
-    def create(self):
+    def create(self, copy_tables = True):
         from databundles.orm import Dataset
         from databundles.orm import Table
         
@@ -432,17 +431,18 @@ class PartitionDb(Database):
         
          
             #Copy the tables and columns
-            if orm_p.t_id is not None:
-                table = bdbs.query(Table).filter(Table.id_ == orm_p.t_id).one()
-                s.merge(table)
-                for column in table.columns:
-                    s.merge(column)
-            else:
-                for table in dataset.tables:
+            if copy_tables:
+                if orm_p.t_id is not None:
+                    table = bdbs.query(Table).filter(Table.id_ == orm_p.t_id).one()
                     s.merge(table)
                     for column in table.columns:
                         s.merge(column)
-            
+                else:
+                    for table in dataset.tables:
+                        s.merge(table)
+                        for column in table.columns:
+                            s.merge(column)
+                
             s.commit()
                   
             # Create a config key to mark this as a partition

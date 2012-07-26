@@ -167,6 +167,33 @@ class Partition(object):
         return self._schema
     
         
+    def create_with_tables(self, tables=None, clean=True):
+        '''Create, or re-create,  the partition, possibly copying tables
+        from the main bundle
+        
+        Args:
+            tables. String or Array of Strings. Specifies the names of tables to 
+            copy from the main bundle. 
+            
+            clean. If True, delete the database first. Defaults to true. 
+        
+        '''
+        
+        if clean:
+            self.database.delete()
+        
+        self.database.create(copy_tables = False)
+        
+        if tables is not None:
+        
+            if not isinstance(tables, list):
+                tables = [tables]
+        
+            for table in tables:
+             
+                self.database.copy_table_from(self.bundle.database,table)
+            
+        self.schema.create_tables()
         
 class Partitions(object):
     '''Continer and manager for the set of partitions. '''
@@ -296,27 +323,20 @@ class Partitions(object):
              .filter(OrmPartition.id_==id_.encode('ascii')))
       
         return self.partition(q.one())
-    
-    table_cache = None
+   
     def new_orm_partition(self, pid, **kwargs):
+        '''Create a new ORM Partrition object, or return one if
+        it already exists '''
         from databundles.orm import Partition as OrmPartition, Table
 
-        if self.table_cache is None:
-            self.table_cache = {}
-            
         s = self.bundle.database.session
-        for table in s.query(Table).filter(Table.name==pid.table).all():
-            self.table_cache[table.name] = table
-            self.table_cache[table.id_] = table
-                
-        table = None
+   
         if pid.table:
-            if pid.table in self.table_cache:
-                table = self.table_cache[pid.table]
-        
-        if pid.table and not table:
-            raise Exception("Didn't get table {} from cache".format(pid.table))
-        
+            q =s.query(Table).filter( (Table.name==pid.table) |  (Table.id_==pid.table) )
+            table = q.one()
+        else:
+            table = None
+         
         op = OrmPartition(name = pid.name,
              space = pid.space,
              time = pid.time,
@@ -342,7 +362,8 @@ class Partitions(object):
        
         op = self.new_orm_partition(pid, **kwargs)
         s = self.bundle.database.session
-        s.add(op)        
+        s.add(op)   
+        s.commit()     
        
         p = self.partition(op)
         return p

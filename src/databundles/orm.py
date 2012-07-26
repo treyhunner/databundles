@@ -4,7 +4,7 @@ Created on Jun 21, 2012
 @author: eric
 '''
 from sqlalchemy import event
-from sqlalchemy import Column as SAColumn, Integer
+from sqlalchemy import Column as SAColumn, Integer, Boolean
 from sqlalchemy import Float as Real,  Text, ForeignKey
 from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.types import TypeDecorator, TEXT, PickleType
@@ -130,6 +130,12 @@ class Dataset(Base):
                 'revision':self.revision
                 }
         
+def _clean_flag( in_flag):
+    
+    if in_flag is None or in_flag == '0':
+        return False;
+    
+    return bool(in_flag)
 
 class Column(Base):
     __tablename__ = 'columns'
@@ -141,6 +147,7 @@ class Column(Base):
     altname = SAColumn('c_altname',Text)
     datatype = SAColumn('c_datatype',Text)
     size = SAColumn('c_size',Integer)
+    width = SAColumn('c_width',Integer)
     precision = SAColumn('c_precision',Integer)
     flags = SAColumn('c_flags',Text)
     description = SAColumn('c_description',Text)
@@ -151,7 +158,7 @@ class Column(Base):
     scale = SAColumn('c_scale',Real)
     data = SAColumn('c_data',MutationDict.as_mutable(JSONEncodedDict))
 
-    is_primary_key = SAColumn('c_is_primary_key',Integer, default = 0)
+    is_primary_key = SAColumn('c_is_primary_key',Boolean, default = False)
     unique_constraints = SAColumn('c_unique_constraints',Text)
     indexes = SAColumn('c_indexes',Text)
     uindexes = SAColumn('c_uindexes',Text)
@@ -167,15 +174,17 @@ class Column(Base):
     DATATYPE_TIMESTAMP = 'timestamp'
 
     def __init__(self,**kwargs):
+     
         self.id_ = kwargs.get("oid",None) 
         self.sequence_id = kwargs.get("sequence_id",None) 
         self.t_id = kwargs.get("t_id",None)  
         self.name = kwargs.get("name",None) 
         self.altname = kwargs.get("altname",None) 
-        self.is_primary_key = kwargs.get("is_primary_key",0) 
+        self.is_primary_key = _clean_flag(kwargs.get("is_primary_key",False))
         self.datatype = kwargs.get("datatype",None) 
         self.size = kwargs.get("size",None) 
         self.precision = kwargs.get("precision",None) 
+        self.width = kwargs.get("width",None)      
         self.flags = kwargs.get("flags",None) 
         self.description = kwargs.get("description",None) 
         self.keywords = kwargs.get("keywords",None) 
@@ -309,28 +318,50 @@ class Table(Base):
         
         name = Column.mangle_name(name)
 
-        is_primary_key = 1 if (int(kwargs.get('is_primary_key',0)) == 1)   else  0
-        del kwargs['is_primary_key']
         del kwargs['sequence_id']
     
-   
         row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_), 
                                          kwargs.get('sequence_id'))),
                      name=name, 
                      t_id=self.id_,
-                     is_primary_key = is_primary_key,
-                     **kwargs
-                   
+                     **kwargs              
                      )
          
         for key, value in kwargs.items():
             if key[0] != '_' and key not in ['d_id','t_id','name']:
                 setattr(row, key, value)
+            
+            if isinstance(value, basestring) and len(value) == 0:
+                if key == 'is_primary_key':
+                    value = False
+                    setattr(row, key, value)
       
         s.add(row)
+       
         s.commit()
     
         return row
+    
+    def get_fixed_regex(self):
+            '''Using the size values for the columsn for the table, construct a
+            regular expression to  parsing a fixed width file.'''
+            import re
+
+            pos = 0;
+            regex = ''
+            header = []
+            
+            for col in  self.columns:
+                
+                if not col.width:
+                    continue
+                
+                pos += col.width
+            
+                regex += "(.{{{}}})".format(col.width)
+                header.append(col.name)
+           
+            return header, re.compile(regex) , regex 
      
 event.listen(Table, 'before_insert', Table.before_insert)
 event.listen(Table, 'before_update', Table.before_update)

@@ -69,7 +69,7 @@ def main():
 
     lib_p = subp.add_parser('library', help='Manage a library')
     lib_p.set_defaults(command='library')
-    lib_p.add_argument('-i','--init',  default=True,action="store_true",  help='Iniitalized the library specified in the configuration') 
+    lib_p.add_argument('-i','--init',  default=True,action="store_true",  help='Iniitalize the library specified in the configuration') 
    
 
     args = parser.parse_args()

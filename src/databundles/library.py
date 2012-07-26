@@ -420,7 +420,7 @@ class LocalLibrary(Library):
         elif isinstance(bp_id, ObjectNumber):
             pass
         elif isinstance(bp_id, Identity):
-            
+           
             bp_id = ObjectNumber.parse(bp_id.id_)
         else:
             # hope that is has an identity field
@@ -442,7 +442,8 @@ class LocalLibrary(Library):
                 dataset = query.one();
         except sqlalchemy.orm.exc.NoResultFound as e:
             from exceptions import ResultCountError
-            raise ResultCountError("Failed to find dataset or partition for: {}".format(str(bp_id)))
+            return None
+            #raise ResultCountError("Failed to find dataset or partition for: {}".format(str(bp_id)))
         
         path = self.path(dataset.identity.path)+".db"
        
@@ -562,7 +563,11 @@ class LocalLibrary(Library):
     def find(self, query_command):
         from databundles.orm import Dataset
         from databundles.orm import Partition
+        from databundles.identity import Identity
         s = self.database.session
+        
+        if isinstance(query_command, Identity):
+            return self.findByIdentity(query_command)
         
         if len(query_command.partition) == 0:
             query = s.query(Dataset)
@@ -594,8 +599,9 @@ class LocalLibrary(Library):
         return query
         
     def queryByIdentity(self, identity):
-        from databundles.orm import Dataset
+        from databundles.orm import Dataset, Partition
         from databundles.identity import Identity
+        from databundles.partition import PartitionIdentity
         from sqlalchemy import desc
         
         s = self.database.session
@@ -604,14 +610,30 @@ class LocalLibrary(Library):
         if isinstance(identity, str) or isinstance(identity, unicode) : 
             query = (s.query(Dataset)
                      .filter( (Dataset.id_==identity) | (Dataset.name==identity)) )
-        elif isinstance(identity, Identity):
+        elif isinstance(identity, PartitionIdentity):
             
+            query = s.query(Dataset, Partition)
+            
+            for k,v in identity.to_dict().items():
+                d = {}
+              
+                if k == 'revision':
+                    v = int(v)
+                    
+                d[k] = v
+                
+            print d 
+            query = query.filter_by(**d)
+                
+        elif isinstance(identity, Identity):
             query = s.query(Dataset)
             
             for k,v in identity.to_dict().items():
                 d = {}
                 d[k] = v
-                query = query.filter_by(**d)
+                
+            query = query.filter_by(**d)
+
            
         elif isinstance(identity, dict):
             query = s.query(Dataset)
@@ -622,7 +644,7 @@ class LocalLibrary(Library):
                 query = query.filter_by(**d)
       
         else:
-            raise ValueError("Invalid type for identit")
+            raise ValueError("Invalid type for identity")
     
         query.order_by(desc(Dataset.revision))
      

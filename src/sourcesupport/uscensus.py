@@ -25,7 +25,7 @@ class UsCensusBundle(BuildBundle):
         self.urls_file =  self.filesystem.path(bg.urlsFile)
         self.segmap_file =  self.filesystem.path(bg.segMapFile)
         self.rangemap_file =  self.filesystem.path(bg.rangeMapFile)
-        self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
+       
         self.headers_file =  self.filesystem.path(bg.headersFile)
         self.states_file =  self.filesystem.path(bg.statesFile)
         self.partitions_file =  self.filesystem.path(bg.partitionsFile)
@@ -47,29 +47,7 @@ class UsCensusBundle(BuildBundle):
                 
         super(UsCensusBundle, self).clean()
         
-        
-    def generate_geo_schema(self):
-        from databundles.orm import Column
-        import csv
-        
-        if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
-            self.log("Reusing schema")
-            return True
-            
-        else:
-            self.log("Regenerating schema. This could be slow ... ")
-        
-        self.log("Create GEO schema")
-        t = self.schema.add_table('sf1geo',description='Geo header')
-      
-        reader  = csv.DictReader(open(self.geoheaders_file, 'rbU') )
-        types = {'TEXT':Column.DATATYPE_TEXT,
-                 'INTEGER':Column.DATATYPE_REAL}
-        for row in reader: 
-            self.schema.add_column(t, row['column'],datatype=types[row['datatype'].strip()])
-    
-        self.database.commit()
-    
+
     def generate_table_schema(self):
         '''Return schema rows from the  columns.csv file'''
         from databundles.orm import Column
@@ -309,26 +287,6 @@ class UsCensusBundle(BuildBundle):
         yaml.dump(map_, 
                   file(self.segmap_file, 'w'),indent=4, default_flow_style=False)  
 
-    def get_geo_regex(self):
-            '''Read the definition for the fixed positioins of the fields in the geo file and
-            construct a regular expresstion to parse the lines.'''
-            import csv, re
-                    
-                
-                    
-            reader  = csv.DictReader(open(self.geoheaders_file, 'rbU') )
-            pos = 0;
-            regex = ''
-            header = []
-            for row in reader:
-                #start = int(row['start']) - 1
-                pos += int(row['length'])
-            
-                regex += "(.{{{}}})".format(row['length'])
-                header.append(row['column'])
-           
-            return header, re.compile(regex)  
-        
         
     def build_partitions(self, range_map):
         from databundles.partition import PartitionIdentity

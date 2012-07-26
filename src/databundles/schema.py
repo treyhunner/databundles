@@ -3,6 +3,28 @@ Created on Jun 23, 2012
 
 @author: eric
 '''
+def _clean_flag( in_flag):
+    
+    if in_flag is None or in_flag == '0':
+        return False;
+    
+    return bool(in_flag)
+
+def _clean_int(i):
+    
+    if isinstance(i, int):
+        return i
+    elif isinstance(i, basestring):
+        if len(i) == 0:
+            return None
+        
+        return int(i.strip())
+    elif i is None:
+        return None
+        raise ValueError("Input must be convertable to an int. got:  ".str(i)) 
+    
+    
+        
 
 class Schema(object):
     
@@ -49,8 +71,11 @@ class Schema(object):
             return (db.session.query(Table)
                     .filter(Table.id_==name_or_id).one())
         except sqlalchemy.orm.exc.NoResultFound:
-            return (db.session.query(Table)
-                    .filter(Table.name==name_or_id).one())
+            try:
+                return (db.session.query(Table)
+                        .filter(Table.name==name_or_id).one())
+            except sqlalchemy.orm.exc.NoResultFound:
+                return None
     
     def table(self, name_or_id):
         '''Return an orm.Table object, from either the id or name'''
@@ -217,6 +242,75 @@ class Schema(object):
                 t_meta, table = self.bundle.schema.get_table_meta(t.name) #@UnusedVariable
                 t_meta.create_all(bind=self.bundle.database.engine)
         
+    def schema_from_file(self, file_):
+        '''Read a CSV file, in a particular format, to generate the schema'''
+        from orm import Column
+        import csv, re
+        
+        reader  = csv.DictReader(file_)
+    
+        self.bundle.log("Generating schema from file")
+       
+        t = None
+
+        tm = {
+              'TEXT':Column.DATATYPE_TEXT,
+              'INTEGER':Column.DATATYPE_INTEGER,
+              'REAL':Column.DATATYPE_REAL,
+              }
+
+        new_table = True
+        for row in reader:
+         
+            # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
+            # in UTF-8
+            row = { k:v.decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
+
+            if not row['table']:
+                new_table = True
+                continue
+
+            if new_table and row['table']:
+                #print 'Table',row['table']
+                t = self.add_table(row['table'], **row)
+                new_table = False
+              
+            # Ensure that the default doesnt get quotes if it is a number. 
+            if row['default']:
+                try:
+                    default = int(row['default'])
+                except:
+                    default = row['default']
+          
+            # Build the index and unique constraint values. 
+            indexes = [ row['table']+'_'+c for c in row.keys() if (re.match('i\d+', c) and _clean_flag(row[c]))]  
+            uindexes = [ row['table']+'_'+c for c in row.keys() if (re.match('ui\d+', c) and _clean_flag(row[c]))]  
+            uniques = [ row['table']+'_'+c for c in row.keys() if (re.match('u\d+', c) and  _clean_flag(row[c]))]  
+    
+            datatype = tm[row['type'].strip()]
+    
+     
+            width = _clean_int(row.get('width', None))
+            size = _clean_int(row.get('size',None))
+    
+            if  size and size > 0:
+                illegal_value = '9' * size
+            else:
+                illegal_value = None
+   
+            self.add_column(t,row['column'],
+                                   is_primary_key=row['is_pk'],
+                                   description=row['description'].strip(),
+                                   datatype=datatype,
+                                   unique_constraints = ','.join(uniques),
+                                   indexes = ','.join(indexes),
+                                   uindexes = ','.join(uindexes),
+                                   default = default,
+                                   illegal_value = illegal_value,
+                                   size = size,
+                                   width = width
+                                   )
+
        
         
         
