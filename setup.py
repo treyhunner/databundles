@@ -9,7 +9,7 @@ if sys.version < '2.7':
 
 # zip_save=False  : database.Database.create uses __file__
 setup(name='databundles',
-      version='0.0.8',
+      version='0.0.9',
       description='Databundles Management Library',
       long_description=open('README').read(),
       author='Eric Busboom',
