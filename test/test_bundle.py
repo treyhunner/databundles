@@ -66,11 +66,9 @@ identity:
         
         dbb = DbBundle(db_path)
         
-        print dbb.identity.name
+        self.assertEqual("source-dataset-subset-variation-ca0d-r1", dbb.identity.name)
+        self.assertEqual("source-dataset-subset-variation-ca0d-r1", dbb.config.identity.name)
         
-        print dbb.config.identity.name
-
-     
     def test_schema_direct(self):
         '''Test adding tables directly to the schema'''
         
@@ -125,9 +123,35 @@ identity:
         s.add_column(t3,name='col3', datatype=Column.DATATYPE_TEXT )   
 
         self.bundle.database.session.commit()
-        print self.bundle.database.path
+     
+    def test_column_processor(self):
+        from databundles.orm import  Column
+        from databundles.transform import BasicTransform, CensusTransform
+        
+        s = self.bundle.schema  
+        s.clean()
+        
+        t = s.add_table('table3') 
+        s.add_column(t,name='col1', datatype=Column.DATATYPE_INTEGER, default=-1, illegal_value = '999' )
+        s.add_column(t,name='col2', datatype=Column.DATATYPE_TEXT )   
+        s.add_column(t,name='col3', datatype=Column.DATATYPE_REAL )
+        
+        
+        self.bundle.database.session.commit()
+        
+        c1 = t.column('col1')
 
-   
+        
+        self.assertEquals(1, BasicTransform(c1)({'col1': ' 1 '}))
+        
+        with self.assertRaises(ValueError):
+            print "PROCESSOR '{}'".format(c1.processor()({'col1': ' B '}))
+        
+        self.assertEquals(1, CensusTransform(c1)({'col1': ' 1 '}))
+        self.assertEquals(-1, CensusTransform(c1)({'col1': ' 999 '}))
+        self.assertEquals(-3, CensusTransform(c1)({'col1': ' # '}))
+        self.assertEquals(-2, CensusTransform(c1)({'col1': ' ! '}))
+       
         
     def test_partition(self):
         

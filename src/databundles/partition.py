@@ -108,6 +108,7 @@ class Partition(object):
         self.pid.partition = self
         
         self._schema = None
+        self._database = None
 
         # The value for the library is injected in LocalLibrary.get() so the
         # partition can figure out what the pat to its database is. 
@@ -138,6 +139,12 @@ class Partition(object):
     
     @property
     def database(self):
+        if self._database is None:
+            self._database = self._get_database()
+            
+        return self._database
+    
+    def _get_database(self):
         from database import PartitionDb
         
         # If the library is set, the path to the database is relative to the
@@ -166,6 +173,19 @@ class Partition(object):
             
         return self._schema
     
+    @property
+    def table(self):
+        '''Return the orm table for this partition, or None if
+        no table is specified. 
+        '''
+        
+        table_spec = self.identity.table
+        
+        if table_spec is None:
+            return None
+        
+        return self.bundle.schema.table(table_spec)
+        
         
     def create_with_tables(self, tables=None, clean=True):
         '''Create, or re-create,  the partition, possibly copying tables
@@ -189,10 +209,11 @@ class Partition(object):
             if not isinstance(tables, list):
                 tables = [tables]
         
-            for table in tables:
-             
+            for table in tables:         
                 self.database.copy_table_from(self.bundle.database,table)
-            
+        elif self.table:
+            self.database.copy_table_from(self.bundle.database,self.table.name)
+        
         self.schema.create_tables()
         
 class Partitions(object):
@@ -282,6 +303,7 @@ class Partitions(object):
     
         if table is not None:
             tr = self.bundle.schema.table(table)
+            
             q = q.filter(OrmPartition.t_id==tr.id_)
 
         try:

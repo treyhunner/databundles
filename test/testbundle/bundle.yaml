@@ -1,8 +1,7 @@
 identity:
     creator: creator
     dataset: dataset
-    id: a19Qpc
-    id_: a1a2gk
+    id: a1ftFL
     revision: 1
     source: source
     subset: subset
@@ -14,8 +13,8 @@ library:
         password: databundles
         server: lorne
         username: databundles
-    downloads: /net/nas2/c/proj/data-library-downloads
-    root: /Volumes/Storage/proj/civic-library
+    downloads: /net/nas2/c/proj/data-library-downloads/
+    root: /Volumes/DataLibrary/data
 loaded:
 - /etc/databundles.yaml
 repository:

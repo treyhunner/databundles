@@ -196,13 +196,10 @@ class BundleQueryCommand(object):
         self._dict = {}
         self._library = None
 
-        
-
     def getsubdict(self, group):
         '''Fetch a confiration group and return the contents as an 
         attribute-accessible dict'''
-        
-   
+
         if not group in self._dict:
             self._dict[group] = {}
             
@@ -234,10 +231,8 @@ class BundleQueryCommand(object):
                 for k,v in kwargs.items():
                     inner[k] = v
                 return query
-            
-        
-        return attrdict()
 
+        return attrdict()
 
     @property
     def identity(self):
@@ -408,7 +403,7 @@ class LocalLibrary(Library):
         
         '''
         from bundle import DbBundle
-        from identity import ObjectNumber, DatasetNumber, PartitionNumber, Identity
+        from identity import ObjectNumber, PartitionNumber, Identity
         from orm import Dataset
         from orm import Partition
         import sqlalchemy.orm.exc 
@@ -420,8 +415,10 @@ class LocalLibrary(Library):
         elif isinstance(bp_id, ObjectNumber):
             pass
         elif isinstance(bp_id, Identity):
-           
+            if not bp_id.id_:
+                raise Exception("Identity does not have an id_ defined")
             bp_id = ObjectNumber.parse(bp_id.id_)
+            
         else:
             # hope that is has an identity field
             bp_id = ObjectNumber.parse(bp_id.identity.id_)
@@ -440,12 +437,14 @@ class LocalLibrary(Library):
                 query = s.query(Dataset).filter(Dataset.id_ == str(bp_id)) 
             
                 dataset = query.one();
-        except sqlalchemy.orm.exc.NoResultFound as e:
-            from exceptions import ResultCountError
+        except sqlalchemy.orm.exc.NoResultFound as e: #@UnusedVariable
             return None
             #raise ResultCountError("Failed to find dataset or partition for: {}".format(str(bp_id)))
         
         path = self.path(dataset.identity.path)+".db"
+       
+        if not os.path.exists(path):
+            return False
        
         bundle = DbBundle(path)
         
@@ -521,17 +520,21 @@ class LocalLibrary(Library):
 
         if isinstance(bundle, Partition):
             for partition in dataset.partitions:
-                s.merge(partition)
+                s.query(OrmPartition).filter(OrmPartition.name == partition.name).delete()
+                
+            s.merge(partition)
         else:
+            # The Tables only get installed when the dataset is installed, 
+            # not for the partition
             for table in dataset.tables:
                 s.query(OrmPartition).filter(OrmPartition.t_id == table.id_).delete()
                 s.query(Column).filter(Column.t_id == table.id_).delete()
                 s.query(Table).filter(Table.id_ == table.id_).delete()
                 
-                s.merge(table)
-             
-                for column in table.columns:
-                    s.merge(column)
+            s.merge(table)
+         
+            for column in table.columns:
+                s.merge(column)
     
         s.commit()
         
@@ -586,12 +589,21 @@ class LocalLibrary(Library):
         if len(query_command.partition) > 0:     
             query = query.join(Partition)
             for k,v in query_command.partition.items():
-                if k == 'table': k = 't_id'
+                
                 if k == 'any': continue # Just join the partition
-                query = query.filter(  getattr(Partition, k) == v )
+                
+                if k == 'table':
+                    # The 'table" value could be the table id
+                    # or a table name
+                    from sqlalchemy.sql import or_
+                    from databundles.orm import Table
+                    query = query.join(Table)
+                    query = query.filter( or_(Partition.t_id  == v,
+                                              Table.name == v))
+                else:
+                    query = query.filter(  getattr(Partition, k) == v )
         
         if len(query_command.table) > 0:
-            from databundles.orm import Table
             query = query.join(Table)
             for k,v in query_command.table.items():
                 query = query.filter(  getattr(Table, k) == v )

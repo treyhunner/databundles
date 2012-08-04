@@ -183,4 +183,18 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Submit ---- ")            
                 
+    if 'test' in phases:
+        import nose
+
+        dir = b.filesystem.path('test') #@ReservedAssignment
+                   
+        loader = nose.loader.TestLoader()
+        
+        tests = loader.loadTestsFromDir(dir)
+        
+        print tests
+        
+        
+                
+    
     

@@ -22,13 +22,9 @@ def _clean_int(i):
     elif i is None:
         return None
         raise ValueError("Input must be convertable to an int. got:  ".str(i)) 
-    
-    
-        
 
 class Schema(object):
-    
-     
+
     def __init__(self, bundle):
         from partition import  Partition
         self.bundle = bundle # COuld also be a partition
@@ -93,12 +89,15 @@ class Schema(object):
         
         id_ = str(TableNumber(ObjectNumber.parse(self.d_id), self.table_sequence))
       
+        
+        data = { k.replace('d_','',1): v for k,v in kwargs.items() if k.startswith('d_') }
+      
         row = Table(id = id_,
                     name=name, 
                     d_id=self.d_id, 
-                    sequence_id=self.table_sequence)
+                    sequence_id=self.table_sequence,
+                    data=data)
         
-  
         self.bundle.database.session.add(row)
             
         for key, value in kwargs.items():    
@@ -260,15 +259,17 @@ class Schema(object):
               }
 
         new_table = True
+        last_table = None
         for row in reader:
          
             # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
             # in UTF-8
-            row = { k:v.decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
+           
+            row = { k:str(v).decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
 
-            if not row['table']:
+            if  row['table'] and row['table'] != last_table:
                 new_table = True
-                continue
+                last_table = row['table']
 
             if new_table and row['table']:
                 #print 'Table',row['table']
@@ -276,7 +277,7 @@ class Schema(object):
                 new_table = False
               
             # Ensure that the default doesnt get quotes if it is a number. 
-            if row['default']:
+            if row.get('default', False):
                 try:
                     default = int(row['default'])
                 except:
@@ -288,8 +289,7 @@ class Schema(object):
             uniques = [ row['table']+'_'+c for c in row.keys() if (re.match('u\d+', c) and  _clean_flag(row[c]))]  
     
             datatype = tm[row['type'].strip()]
-    
-     
+
             width = _clean_int(row.get('width', None))
             size = _clean_int(row.get('size',None))
     
@@ -298,9 +298,15 @@ class Schema(object):
             else:
                 illegal_value = None
    
+            
+            data = { k.replace('d_','',1): v for k,v in row.items() if k.startswith('d_') }
+   
+            description = row.get('description','').strip()
+            
+            
             self.add_column(t,row['column'],
-                                   is_primary_key=row['is_pk'],
-                                   description=row['description'].strip(),
+                                   is_primary_key= True if row.get('is_pk', False) else False,
+                                   description=description,
                                    datatype=datatype,
                                    unique_constraints = ','.join(uniques),
                                    indexes = ','.join(indexes),
@@ -308,12 +314,8 @@ class Schema(object):
                                    default = default,
                                    illegal_value = illegal_value,
                                    size = size,
-                                   width = width
+                                   width = width,
+                                   data=data
                                    )
 
-       
-        
-        
-        
-        
         

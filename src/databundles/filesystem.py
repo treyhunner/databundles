@@ -51,13 +51,17 @@ class Filesystem(object):
             os.makedirs(self.path(Filesystem.BUILD_DIR),0755)
  
     @staticmethod
-    def find_root_dir(testFile='bundle.yaml'):
+    def find_root_dir(testFile='bundle.yaml', start_dir =  None):
         '''Find the parent directory that contains the bundle.yaml file '''
         import sys
 
-        d = sys.path[0]
+        if start_dir is not None:
+            d = start_dir
+        else:
+            d = sys.path[0]
         
         while os.path.isdir(d) and d != '/':
+            print "D: ",d
             test =  os.path.normpath(d+'/'+testFile)
 
             if(os.path.isfile(test)):

@@ -201,41 +201,6 @@ class Column(Base):
         if not self.name:
             raise ValueError('Column must have a name')
 
-    def processor(self):
-        """Return a function that will extract this column from a row
-        and perform appropriate processing and cleaning"""
-        def set_default(column, v):
-            # The 'illegal' value is usually a string of '9'
-            if str(v) == column.illegal_value or  ( v == '' or v is None):
-                if column.datatype == 'text':
-                    v = column.default
-                else: # Ignoring case for REAL, since there aren't any. 
-                    v = int(column.default)
-                    
-            return v
-
-        def coerce_int(v):
-            try:
-                return int(v)
-            except:
-                return v
-        
-        # Strip test values, but not numbers
-        f = lambda v:  v.strip() if isinstance(v,basestring) else v
-        
-        # for numbers try to coerce to an integer. Doesn't work for None
-        # so we use an intermediate function
-        if self.datatype == 'integer':
-            f = lambda v, f=f: coerce_int(f(v))
-        
-        # Set the default value. 
-        if self.default.strip():
-            f = lambda v, column=self, f=f : set_default(column,f(v) )
-        
-        # Extract the value from a position in the row
-        f = lambda row, column=self, f=f: f(row[column.name])
-        
-        return f
 
     @staticmethod
     def mangle_name(name):
@@ -377,6 +342,18 @@ class Table(Base):
         s.commit()
     
         return row
+    
+    def column(self, name_or_id):
+        from sqlalchemy.sql import or_
+        import sqlalchemy.orm.session
+        s = sqlalchemy.orm.session.Session.object_session(self)
+        
+        q = (s.query(Column)
+               .filter(or_(Column.id_==name_or_id,Column.name==name_or_id))
+               .filter(Column.t_id == self.id_)
+            )
+      
+        return  q.one()
     
     def get_fixed_regex(self):
             '''Using the size values for the columsn for the table, construct a
