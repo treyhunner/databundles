@@ -41,10 +41,20 @@ def new_command(args):
     shutil.copy(bundle_file ,name  )
 
 def library_command(args):
+    from library import LocalLibrary
+    l = LocalLibrary()
+
     if args.init:
-        from library import LocalLibrary
-        l = LocalLibrary()
+        print "Initialize Library"
         l.database.create()
+        
+    elif args.drop:
+        print "Drop tables"
+        l.database.drop()
+
+    elif args.clean:
+        print "Clean tables"
+        l.database.clean()
 
 def main():
     import argparse
@@ -69,8 +79,10 @@ def main():
 
     lib_p = subp.add_parser('library', help='Manage a library')
     lib_p.set_defaults(command='library')
-    lib_p.add_argument('-i','--init',  default=True,action="store_true",  help='Iniitalize the library specified in the configuration') 
-   
+    lib_p.add_argument('-i','--init',  default=False,action="store_true",  help='Iniitalize the library specified in the configuration')
+    lib_p.add_argument('-d','--drop',  default=False,action="store_true",  help='Drop all of the tables in the library database')  
+    lib_p.add_argument('-c','--clean',  default=False,action="store_true",  help='Delete al lof the records from the library database')  
+
 
     args = parser.parse_args()
    

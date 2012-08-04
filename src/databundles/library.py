@@ -113,10 +113,23 @@ class LibraryDb(object):
             
             self.load_sql(script_str)
             
-            
             return True
         
         return False
+    
+    def drop(self):
+        s = self.session
+        from orm import Column, Partition, Table, Dataset, Config, File
+        
+        s.execute("DROP TABLE IF EXISTS files")
+        s.execute("DROP TABLE IF EXISTS columns")
+        s.execute("DROP TABLE IF EXISTS partitions")
+        s.execute("DROP TABLE IF EXISTS tables")
+        s.execute("DROP TABLE IF EXISTS config")
+        s.execute("DROP TABLE IF EXISTS datasets")
+        s.commit()
+
+        
     
     def load_sql(self, sql_file):
         
