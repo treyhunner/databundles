@@ -19,7 +19,15 @@ def get_args(argv):
     
     parser.add_argument('-b','--build_opt', action='append', help='Set options for the build phase')
     
-    return parser.parse_args()
+
+    
+    args = parser.parse_args()
+    
+    if args.build_opt is None:
+        args.build_opt = []
+        
+    return args
+    
 
 import yaml
 import os.path

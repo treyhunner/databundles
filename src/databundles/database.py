@@ -336,7 +336,8 @@ class Database(object):
     
     
     
-    def copy_from_attached(self, table, columns=None, name=None, on_conflict= 'ABORT', where=None):
+    def copy_from_attached(self, table, columns=None, name=None, 
+                           on_conflict= 'ABORT', where=None):
         """ Copy from this database to an attached database
         
         Args:
@@ -377,6 +378,9 @@ class Database(object):
             
         q = """INSERT OR {on_conflict} INTO {to_table} {to_columns} 
                SELECT {from_columns} FROM {db}.{from_table}""".format(**f)
+    
+        if where is not None:
+            q = q + " " + where.format(**f)
     
         self.connection.execute(q)
   
