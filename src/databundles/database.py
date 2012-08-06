@@ -26,7 +26,55 @@ class ValueInserter(object):
     def __exit__(self, type_, value, traceback):
         self.session.commit()
         
+class TempFile(object): 
+           
+    def __init__(self, bundle,  db, table, header=None):
+        self.bundle = bundle
+        self.db = db 
+        self.table = table
         
+        if header is None:
+            header = [ c.name for c in table.columns ]
+        else:
+            pass
+
+        self.header = header
+
+        self._path = str(self.db.path).replace('.db','-'+table.name+".csv")
+        
+        self._writer = None
+        self._reader = None
+        
+        
+    @property
+    def writer(self, mode = 'w'):
+        if self._writer is None:
+            import csv
+            self._writer = csv.writer(open(self.path, mode))
+            self._writer.writerow(self.header)
+            
+        return self._writer
+            
+    
+    @property
+    def reader(self, mode='r'):
+        if self._reader is None:
+            import csv
+            self._reader = csv.DictReader(open(self.path, mode))
+            
+        return self._reader
+       
+       
+    @property 
+    def path(self):
+        return self._path
+    
+    
+    
+    def delete(self):
+        os.remove(self.path)
+    
+           
            
 class Database(object):
     '''Represents a Sqlite database'''
@@ -58,6 +106,8 @@ class Database(object):
                                 self.bundle.identity.path+".db")
        
         self._last_attach_name = None
+        
+        self.tempfiles = {}
        
     @property
     def name(self):
@@ -129,7 +179,12 @@ class Database(object):
             self._dbapi_connection = None            
         
       
+    def tempfile(self, table, header=None):
+        
+        if table.name not in self.tempfiles:
+            self.tempfiles[table.name] = TempFile(self.bundle, self, table, header=header)
 
+        return self.tempfiles[table.name]
 
 
     @property

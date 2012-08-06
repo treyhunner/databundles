@@ -11,6 +11,3 @@ partition:
    space:
    table:
    
-build:
-  rootUrl: 
-  headers: 

@@ -252,7 +252,7 @@ class BundleFileConfig(BundleConfig):
         super(BundleFileConfig, self).__init__()
         
         self.directory = directory
-     
+    
         self._run_config = RunConfig(os.path.join(self.directory,'databundles.yaml'))
      
         self._config_dict = None
@@ -313,6 +313,7 @@ class BundleFileConfig(BundleConfig):
         '''Fetch a confiration group and return the contents as an 
         attribute-accessible dict'''
         
+      
         inner = self.dict[group]
         
         class attrdict(object):

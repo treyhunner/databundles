@@ -1,13 +1,15 @@
+build:
+    geoheaderFile: meta/geoschema.csv
+    headers: null
+    rootUrl: null
 identity:
     creator: creator
     dataset: dataset
-    id: a1ftFL
+    id: a1hniy
     revision: 1
     source: source
     subset: subset
     variation: variation
-build:
-    geoheaderFile: meta/geoschema.csv
 library:
     database:
         dbname: databundles-dev

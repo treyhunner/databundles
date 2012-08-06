@@ -319,7 +319,8 @@ class Table(Base):
         
         name = Column.mangle_name(name)
 
-        del kwargs['sequence_id']
+        if kwargs.get('sequence_id', False):
+            del kwargs['sequence_id']
     
         row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_), 
                                          kwargs.get('sequence_id'))),
@@ -342,7 +343,7 @@ class Table(Base):
         s.commit()
     
         return row
-    
+   
     def column(self, name_or_id):
         from sqlalchemy.sql import or_
         import sqlalchemy.orm.session

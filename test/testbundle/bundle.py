@@ -14,6 +14,7 @@ class Bundle(BuildBundle):
         self.super_.__init__(directory)
         
         bg = self.config.build
+       
         self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
         
         

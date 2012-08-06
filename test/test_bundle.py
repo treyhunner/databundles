@@ -21,7 +21,13 @@ identity:
     revision: 1
     source: source
     subset: subset
-    variation: variation'''
+    variation: variation
+build:
+  rootUrl: 
+  headers: 
+  geoheaderFile: meta/geoschema.csv
+    
+    '''
      
         cf = os.path.join(self.bundle_dir,'bundle.yaml')
       
@@ -108,9 +114,9 @@ identity:
         
         t1 = s.add_table('table1')
                 
-        s.add_column(t1,name='col1' )
-        s.add_column(t1,name='col2' )
-        s.add_column(t1,name='col3' )
+        s.add_column(t1,name='col1', datatype=Column.DATATYPE_REAL )
+        s.add_column(t1,name='col2', datatype=Column.DATATYPE_INTEGER )
+        s.add_column(t1,name='col3', datatype=Column.DATATYPE_TEXT )  
         
         t2 = s.add_table('table2')   
         s.add_column(t2,name='col1' )
@@ -145,10 +151,10 @@ identity:
         self.assertEquals(1, BasicTransform(c1)({'col1': ' 1 '}))
         
         with self.assertRaises(ValueError):
-            print "PROCESSOR '{}'".format(c1.processor()({'col1': ' B '}))
+            print "PROCESSOR '{}'".format(CensusTransform(c1)({'col1': ' B '}))
         
         self.assertEquals(1, CensusTransform(c1)({'col1': ' 1 '}))
-        self.assertEquals(-1, CensusTransform(c1)({'col1': ' 999 '}))
+        self.assertEquals(-1, CensusTransform(c1)({'col1': ' 999 ' }))
         self.assertEquals(-3, CensusTransform(c1)({'col1': ' # '}))
         self.assertEquals(-2, CensusTransform(c1)({'col1': ' ! '}))
        
@@ -211,6 +217,22 @@ identity:
         p.database.create()
 
         self.bundle.library.put(p)
+        
+    def test_tempfile(self):
+  
+        self.test_generate_schema()
+  
+        table = self.bundle.schema.tables[0]
+        print "TABLE", table.name
+        tf = self.bundle.database.tempfile(table)
+        
+        print "PATH",tf.path
+        w = tf.writer
+        
+        for i in range(10):
+            w.writerow([i,i,i])
+        
+        
         
 if __name__ == "__main__":
     if True:

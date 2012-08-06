@@ -104,11 +104,11 @@ class CensusTransform(BasicTransform):
             return default
         elif v == '':
             return default
-        elif str(v) == ('9' * column.width):
+        elif column.illegal_value and str(v) == str(column.illegal_value):
             return default
-        elif v.startswith('!'):
+        elif isinstance(v, basestring) and v.startswith('!'):
             return -2
-        elif v.startswith('#'):
+        elif isinstance(v, basestring) and v.startswith('#'):
             return -3
         else:
             return f(v)

@@ -99,9 +99,10 @@ class Schema(object):
                     data=data)
         
         self.bundle.database.session.add(row)
-            
+        #
+        #
         for key, value in kwargs.items():    
-            if key[0] != '_' and key not in ['id','id_', 'd_id','name','sequence_id']:
+            if key[0] != '_' and key not in ['id','id_', 'd_id','name','sequence_id','table','column']:       
                 setattr(row, key, value)
      
         self._seen_tables[name] = row

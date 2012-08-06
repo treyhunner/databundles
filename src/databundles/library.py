@@ -615,26 +615,23 @@ class LocalLibrary(Library):
     def remove_database(self, bundle):
         '''remove a bundle from the database'''
         
-        from databundles.orm import Dataset
+        from databundles.orm import Dataset, Partition
         import sqlalchemy.orm.exc
+        from sqlalchemy.sql import or_
         
         s = self.database.session
         
-        try:
-            row = s.query(Dataset).filter(Dataset.id_==bundle.identity.id_).one()
-            s.delete(row)
-            s.commit()
-            return
-        except sqlalchemy.orm.exc.NoResultFound: 
-            pass
-            
-        try:
-            row = s.query(Dataset).filter(Dataset.name==bundle.identity.name).one()
-            row.remove();
-            s.commit()
-            return
-        except sqlalchemy.orm.exc.NoResultFound: 
-            pass
+     
+        row = s.query(Dataset).filter(
+        or_(Dataset.id_==bundle.identity.id_, Dataset.name==bundle.identity.name)
+        ).delete()
+        s.commit()
+     
+
+        row = s.query(Partition).filter(
+        or_(Partition.name==bundle.identity.name, Partition.id_==bundle.identity.id_)
+        ).delete()
+       
 
      
     def find(self, query_command):
