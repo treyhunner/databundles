@@ -72,10 +72,11 @@ class DbBundle(Bundle):
         
         super(DbBundle, self).__init__()
        
-        
-       
         self.database = Database(self, database_file)
         self.config = BundleDbConfig(self.database)
+        
+        self.run_args = None
+        
 
     def table_data(self, query):
         '''Return a petl container for a data table'''

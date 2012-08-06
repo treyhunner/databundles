@@ -14,6 +14,7 @@ from databundles.exceptions import ResultCountError, ConfigurationError
 
 library = None
 
+
 def get_library():
     ''' Returns LocalLIbrary singleton'''
     global library
@@ -95,6 +96,7 @@ class LibraryDb(object):
         s.query(Dataset).delete()
         s.query(Config).delete()
         s.query(File).delete()
+        s.commit()
         
          
     def create(self):
@@ -156,6 +158,8 @@ class LibraryDb(object):
         cur.execute("COMMIT")
         
         conn.close()
+        
+  
         
 class BundleQueryCommand(object):
     '''An object that contains and transfers a query for a bundle
@@ -380,13 +384,14 @@ class LocalLibrary(Library):
 
         return p
         
-    def put(self, bundle, **kwargs):
+    def put(self, bundle,  remove=True, copy=True):
         '''Install a bundle file, and all of its partitions, into the library.
         Copies in the files that don't exist, and loads data into the library
         database'''
         
         # First, check if the bundle is already installed. If so, remove it. 
-        self.remove(bundle)
+        if remove:
+            self.remove(bundle)
 
         src = bundle.database.path
         dst = os.path.join(self.directory, bundle.identity.path+".db")
@@ -394,7 +399,8 @@ class LocalLibrary(Library):
         if not os.path.isdir(os.path.dirname(dst)):
             os.makedirs(os.path.dirname(dst))
      
-        shutil.copyfile(src,dst)
+        if copy:
+            shutil.copyfile(src,dst)
         
         self.install_database(bundle)
         
@@ -409,7 +415,12 @@ class LocalLibrary(Library):
         
         Args:
             bp_id (Bundle|Partition|str) Specifies a bundle or partition to
-                fetch
+                fetch. bp_id may be:
+                    An ObjectNumber string id for a partition or dataset
+                    An ObjectNumber object
+                    An Identity object, for a partition or bundle
+                    Any object that has an 'identity' attribute that is an Identity object
+                    
                 
         Returns:
             Bundle|Partition
@@ -519,37 +530,87 @@ class LocalLibrary(Library):
   
     def install_database(self, bundle):
         '''Copy the schema and partitions lists into the library database'''
+        from databundles import resolve_id
         from databundles.orm import Dataset
         from databundles.orm import Partition as OrmPartition
         from databundles.orm import Table
         from databundles.orm import Column
         from partition import Partition
-        
+        from bundle import Bundle
+                
         bdbs = bundle.database.session 
         s = self.database.session
         dataset = bdbs.query(Dataset).one()
         s.merge(dataset)
         s.commit()
 
+        if not isinstance(bundle, (Partition, Bundle)):
+            raise ValueError("Can only install a Partition or Bindle object")
+
         if isinstance(bundle, Partition):
-            for partition in dataset.partitions:
-                s.query(OrmPartition).filter(OrmPartition.name == partition.name).delete()
+
+            try: 
                 
-            s.merge(partition)
+                partition =  (bdbs
+                              .query(OrmPartition)
+                              .filter(OrmPartition.id_ == str(resolve_id(bundle)))
+                              .one())
+                
+                s.merge(partition)
+                s.commit()
+            except Exception as e:
+                        print "ERROR: Failed to merge partition "+str(bundle.identity)+":"+ str(e)
         else:
+            pass
             # The Tables only get installed when the dataset is installed, 
             # not for the partition
             for table in dataset.tables:
-                s.query(OrmPartition).filter(OrmPartition.t_id == table.id_).delete()
-                s.query(Column).filter(Column.t_id == table.id_).delete()
-                s.query(Table).filter(Table.id_ == table.id_).delete()
-                
-            s.merge(table)
-         
-            for column in table.columns:
-                s.merge(column)
+                try:
+                    s.merge(table)
+                    s.commit()
+                except Exception as e:
+                    print "ERROR: Failed to merge table"+str(table.identity)+":"+ str(e)
+             
+                for column in table.columns:
+                    try:
+                        s.merge(column)
+                        s.commit()
+                    except Exception as e:
+                        print "ERROR: Failed to merge column"+str(column.identity)+":"+ str(e)
     
         s.commit()
+        
+    def rebuild(self):
+        '''Rebuild the database from the bundles that are already installed
+        in the repositry directory'''
+        
+        import os.path
+        
+        from bundle import DbBundle
+   
+        bundles = []
+        for r,d,f in os.walk(self.directory):
+            for file in f:
+                if file.endswith(".db"):
+                    b = DbBundle(os.path.join(r,file))
+                    # This is a fragile hack -- there should be a flag in the database
+                    # that diferentiates a partition from a bundle. 
+                    f = os.path.splitext(file)[0]
+
+                    if b.identity.name.endswith(f):
+                        bundles.append(b)
+
+        self.database.clean()
+        
+        for bundle in bundles:
+            self.install_database(bundle)
+            
+            for partition in bundle.partitions.all:
+                partition.library = self
+                self.install_database(partition)
+            
+        self.database.commit()
+        return bundles
         
     def remove_database(self, bundle):
         '''remove a bundle from the database'''
@@ -580,6 +641,7 @@ class LocalLibrary(Library):
         from databundles.orm import Dataset
         from databundles.orm import Partition
         from databundles.identity import Identity
+        from databundles.orm import Table
         s = self.database.session
         
         if isinstance(query_command, Identity):
@@ -609,7 +671,7 @@ class LocalLibrary(Library):
                     # The 'table" value could be the table id
                     # or a table name
                     from sqlalchemy.sql import or_
-                    from databundles.orm import Table
+                    
                     query = query.join(Table)
                     query = query.filter( or_(Partition.t_id  == v,
                                               Table.name == v))
@@ -646,8 +708,7 @@ class LocalLibrary(Library):
                     v = int(v)
                     
                 d[k] = v
-                
-            print d 
+         
             query = query.filter_by(**d)
                 
         elif isinstance(identity, Identity):

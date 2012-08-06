@@ -6,15 +6,20 @@ Created on Jun 10, 2012
 import sys, getopt
 
 def get_args(argv):
-    try:
-        opts, args = getopt.getopt(argv,"hi:o:",["long1=","long2="])
-    except getopt.GetoptError:
-        print 'test.py -i <inputfile> -o <outputfile>'
-        sys.exit(2)
-    for opt, arg in opts:
-        print opt+" "+arg
-  
-    return opts, args 
+    import argparse
+    
+    parser = argparse.ArgumentParser(prog='python bundle.py',
+                                     description='Run the bunble build process')
+    
+    parser.add_argument('phases', metavar='N', type=str, nargs='*',
+                   help='Build phases to run')
+    
+    parser.add_argument('-r','--reset',  default=False, action="store_true",  
+                        help='')
+    
+    parser.add_argument('-b','--build_opt', action='append', help='Set options for the build phase')
+    
+    return parser.parse_args()
 
 import yaml
 import os.path
@@ -112,21 +117,20 @@ class RunConfig(object):
         
         return self.config.get(name,{})
 
+
+
 def run(argv, bundle_class):
    
-    opts, args = get_args(argv) #@UnusedVariable
+    args = get_args(argv) #@UnusedVariable
 
-    if len(args) == 0:
-        args.append('all')
-        
-    phase = args.pop(0)
-   
-    b = bundle_class()
-
-    if phase == 'all':
+    if len(args.phases) ==  0 or (len(args.phases) == 1 and args.phases[0] == 'all'):    
         phases = ['prepare','build', 'install']
     else:
-        phases = [phase]
+        phases = args.phases
+
+    b = bundle_class()
+    b.run_args = args
+
 
     if 'clean' in phases:
         b.clean()

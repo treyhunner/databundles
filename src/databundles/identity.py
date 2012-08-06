@@ -242,8 +242,10 @@ class ObjectNumber(object):
         return num
 
 
+    def __eq__(self, other):
+        return str(self) == str(other)
 
-class DatasetNumber():
+class DatasetNumber(ObjectNumber):
     '''An identifier for a dataset'''
     def __init__(self, dataset=None):
         '''
@@ -265,6 +267,8 @@ class DatasetNumber():
         return (ObjectNumber.TYPE.DATASET+
                 ObjectNumber.base62_encode(self.dataset))
            
+ 
+
  
 
 class TableNumber(ObjectNumber):

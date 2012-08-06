@@ -44,6 +44,7 @@ def library_command(args):
     from library import LocalLibrary
     l = LocalLibrary()
 
+
     if args.init:
         print "Initialize Library"
         l.database.create()
@@ -55,6 +56,14 @@ def library_command(args):
     elif args.clean:
         print "Clean tables"
         l.database.clean()
+        
+    elif args.rebuild:
+        print "Rebuild library"
+        l.rebuild()
+
+def test_command(args):
+    print 'Testing'
+    print args
 
 def main():
     import argparse
@@ -64,9 +73,9 @@ def main():
     
     #parser.add_argument('command', nargs=1, help='Create a new bundle') 
     
-    subp = parser.add_subparsers(title='commands', help='sub-command help')
+    cmd = parser.add_subparsers(title='commands', help='command help')
     
-    new_p = subp.add_parser('new', help='Create a new bundle')
+    new_p = cmd.add_parser('new', help='Create a new bundle')
     new_p.set_defaults(command='new')
     new_p.set_defaults(revision='1') # Needed in Identity.name_parts
     new_p.add_argument('-s','--source', required=True, help='Source, usually a domain name') 
@@ -77,18 +86,20 @@ def main():
     new_p.add_argument('-n','--dry-run', default=False, help='Dry run') 
     new_p.add_argument('args', nargs=argparse.REMAINDER) # Get everything else. 
 
-    lib_p = subp.add_parser('library', help='Manage a library')
+    lib_p = cmd.add_parser('library', help='Manage a library')
     lib_p.set_defaults(command='library')
     lib_p.add_argument('-i','--init',  default=False,action="store_true",  help='Iniitalize the library specified in the configuration')
     lib_p.add_argument('-d','--drop',  default=False,action="store_true",  help='Drop all of the tables in the library database')  
-    lib_p.add_argument('-c','--clean',  default=False,action="store_true",  help='Delete al lof the records from the library database')  
+    lib_p.add_argument('-c','--clean',  default=False,action="store_true",  help='Delete all of the records from the library database')  
+    lib_p.add_argument('-r','--rebuild',  default=False,action="store_true",  help='Reload the database from bundles in the library directory')  
 
 
     args = parser.parse_args()
    
     funcs = {
         'new':new_command,
-        'library':library_command
+        'library':library_command,
+        'test':test_command
     }
         
     if not funcs.get(args.command, False):

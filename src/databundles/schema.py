@@ -248,7 +248,7 @@ class Schema(object):
         
         reader  = csv.DictReader(file_)
     
-        self.bundle.log("Generating schema from file")
+        #self.bundle.log("Generating schema from file")
        
         t = None
 
@@ -282,6 +282,8 @@ class Schema(object):
                     default = int(row['default'])
                 except:
                     default = row['default']
+            else:
+                default = None
           
             # Build the index and unique constraint values. 
             indexes = [ row['table']+'_'+c for c in row.keys() if (re.match('i\d+', c) and _clean_flag(row[c]))]  

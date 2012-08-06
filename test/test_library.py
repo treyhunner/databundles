@@ -16,8 +16,11 @@ class Test(unittest.TestCase):
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
         self.bundle = Bundle(self.bundle_dir)
         
-        self.bundle.database.delete();
+        self.bundle.clean()
         self.bundle = Bundle(self.bundle_dir)
+        
+        self.bundle.prepare()
+        self.bundle.build()
         
     def tearDown(self):
         pass
@@ -26,8 +29,101 @@ class Test(unittest.TestCase):
     def testName(self):
         pass
 
+    def test_resolve(self):
+        from databundles import resolve_id
+        
+        self.assertEquals(self.bundle.identity.id_, resolve_id(self.bundle) )
+        self.assertEquals(self.bundle.identity.id_, resolve_id(self.bundle.identity))
+        self.assertEquals(self.bundle.identity.id_, resolve_id(self.bundle.identity.id_))
+        self.assertEquals(self.bundle.identity.id_, resolve_id(str(self.bundle.identity.id_)))
 
-    def test_basic(self):
+        for partition in self.bundle.partitions.all:
+            self.assertEquals(partition.identity.id_, resolve_id(partition))
+            self.assertEquals(partition.identity.id_, resolve_id(partition.identity))
+            self.assertEquals(partition.identity.id_, resolve_id(partition.identity.id_))
+            self.assertEquals(partition.identity.id_, resolve_id(str(partition.identity.id_)))
+
+        
+
+    def test_library_install(self):
+        '''Install the bundle and partitions, and check that they are
+        correctly installed. Check that installation is idempotent'''
+        
+        l =  databundles.library.get_library()
+        
+        l.put(self.bundle)
+        l.put(self.bundle)
+        
+        bundle = l.get(self.bundle.identity)
+        
+        self.assertIsNotNone(bundle)
+        self.assertEquals(self.bundle.identity.id_, bundle.identity.id_)
+        
+        print bundle.identity.name
+        
+        # Install the partition, then check that we can fetch it
+        # a few different ways. 
+        for partition in self.bundle.partitions.all:
+            l.put(partition)
+            
+            p2 = l.get(partition.identity)
+            self.assertIsNotNone(p2)
+            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            
+            p2 = l.get(partition.identity.id_)
+            self.assertIsNotNone(p2)
+            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            
+        # Re-install the bundle, then check that the partitions are still properly installed
+
+        l.put(self.bundle, remove=False)
+        
+        for partition in self.bundle.partitions.all:
+       
+            p2 = l.get(partition.identity)
+            self.assertIsNotNone(p2)
+            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            
+            p2 = l.get(partition.identity.id_)
+            self.assertIsNotNone(p2)
+            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            
+        # Find the bundle and partitions in the library. 
+    
+        r = l.find(l.query().table(name='tone'))
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
+    
+        r = l.find(l.query().table(name='tone').partition(any=True)).all()
+        self.assertEquals('source-dataset-subset-variation-ca0d-tone-r1',r[0].Partition.identity.name)
+        
+        r = l.find(l.query().table(name='tthree').partition(any=True)).all()
+        self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
+        
+        # Put the bundle with remove to check that the partitions are reset
+        l.put(self.bundle, remove=True)
+        
+        r = l.find(l.query().table(name='tone'))
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
+    
+        r = l.find(l.query().table(name='tone').partition(any=True)).all()
+        self.assertEquals(0, len(r))
+        
+        #
+        # Rebuild from installed bundles. 
+        
+        l.rebuild()
+        
+        r = l.find(l.query().table(name='tone'))
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
+    
+        r = l.find(l.query().table(name='tone').partition(any=True)).all()
+        self.assertEquals('source-dataset-subset-variation-ca0d-tone-r1',r[0].Partition.identity.name)
+        
+        r = l.find(l.query().table(name='tthree').partition(any=True)).all()
+        self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
+        
+        
+    def x_test_basic(self):
         import sqlite3
 
         path = '/tmp/geo.db'
@@ -59,11 +155,7 @@ class Test(unittest.TestCase):
                         print "{}\tTEXT".format(c.name)
                         break
  
-                   
-                   
-    def test_splitgeo(self):
-        pass
-        
+
     def x_test_BuildCombinedFile(self):
 
         import os.path
@@ -103,7 +195,7 @@ class Test(unittest.TestCase):
         
         return True 
           
-    def x_test_basic(self):
+    def xs_test_basic(self):
         import sqlite3
         import petl
          

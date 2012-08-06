@@ -13,30 +13,50 @@ class Bundle(BuildBundle):
         self.super_ = super(Bundle, self)
         self.super_.__init__(directory)
         
+        bg = self.config.build
+        self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
+        
+        
     
     def prepare(self):
-        self.schema.generate()
+        from databundles.partition import PartitionIdentity 
+        
+        self.database.create()
+        self.schema.schema_from_file(open(self.geoheaders_file, 'rbU'))
+        self.schema.create_tables()
+        self.database.commit()
+             
+        for table in self.schema.tables:       
+            pid = PartitionIdentity(self.identity, table=table.name)
+            partition = self.partitions.new_partition(pid)   
+            partition.create_with_tables(table.name)
                     
     def build(self):
+        import random
+        from functools import partial
         
         sink = self.database.path
-        self.database.create_table('random')
-        petl.randomtable(5, 500).tosqlite3(sink, 'random', create=False) #@UndefinedVariable
+     
+        #self.log("Writing random data to: "+ self.database.path)
+        fields = [
+                  ('tone_id', lambda: None),
+                  ('text',partial(random.choice, ['chocolate', 'strawberry', 'vanilla'])),
+                  ('integer', partial(random.randint, 0, 500)),
+                  ('float', random.random)
+                  ]
+        petl.dummytable(2000,fields).tosqlite3(sink, 'tone', create=False) #@UndefinedVariable
+        petl.dummytable(2000,fields).tosqlite3(sink, 'ttwo', create=False) #@UndefinedVariable
+        petl.dummytable(2000,fields).tosqlite3(sink, 'tthree', create=False) #@UndefinedVariable
+      
+        # Now write random data to each of the pable partitions. 
         
-        self.library.put(self)
-        
-        bundle = self.library.get(self.identity.id_)
-        
-        print bundle.identity.name
-        
-        bundle = self.library.get(self.identity.name)
-        
-        print bundle.identity.name
-        
-        first_table = self.schema.tables.pop(0)
-        
-        print first_table.name, first_table.id_
-        
+        for partition in self.partitions.all:
+            #self.log("Loading "+partition.name)
+            db = partition.database.path
+            table_name = partition.table.name
+            petl.dummytable(2000,fields).tosqlite3(db, table_name, create=False) #@UndefinedVariable
+             
+            
         
         
         
