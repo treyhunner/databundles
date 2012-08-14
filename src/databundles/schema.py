@@ -267,7 +267,7 @@ class Schema(object):
             # in UTF-8
            
             row = { k:str(v).decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
-
+            print "!!!", row
             if  row['table'] and row['table'] != last_table:
                 new_table = True
                 last_table = row['table']

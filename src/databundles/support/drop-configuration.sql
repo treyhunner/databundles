@@ -1,11 +1,11 @@
 /* ---------------------------------------------------------------------- */
 /* Script generated with: DeZign for Databases v6.3.4                     */
 /* Target DBMS:           SQLite3                                         */
-/* Project file:          configuration.dez                               */
+/* Project file:          configuration-sqlite.dez                        */
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database drop script                            */
-/* Created on:            2012-07-25 13:03                                */
+/* Created on:            2012-08-13 22:10                                */
 /* ---------------------------------------------------------------------- */
 
 

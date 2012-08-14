@@ -449,17 +449,17 @@ class LocalLibrary(Library):
 
         dataset = None
         partition = None
-        
+
         try:
             if isinstance(bp_id, PartitionNumber):
                 query = s.query(Dataset, Partition).join(Partition).filter(Partition.id_ == str(bp_id)) 
-             
+
                 dataset, partition = query.one();
                     
             else:
                 query = s.query(Dataset)
                 query = s.query(Dataset).filter(Dataset.id_ == str(bp_id)) 
-            
+
                 dataset = query.one();
         except sqlalchemy.orm.exc.NoResultFound as e: #@UnusedVariable
             return None
@@ -569,14 +569,14 @@ class LocalLibrary(Library):
                     s.merge(table)
                     s.commit()
                 except Exception as e:
-                    print "ERROR: Failed to merge table"+str(table.identity)+":"+ str(e)
+                    print "ERROR: Failed to merge table"+str(table.id_)+":"+ str(e)
              
                 for column in table.columns:
                     try:
                         s.merge(column)
                         s.commit()
                     except Exception as e:
-                        print "ERROR: Failed to merge column"+str(column.identity)+":"+ str(e)
+                        print "ERROR: Failed to merge column"+str(column.id_)+":"+ str(e)
     
         s.commit()
         
@@ -621,17 +621,18 @@ class LocalLibrary(Library):
         
         s = self.database.session
         
-     
-        row = s.query(Dataset).filter(
-        or_(Dataset.id_==bundle.identity.id_, Dataset.name==bundle.identity.name)
-        ).delete()
+        b = self.get(bundle.identity)
+        
+        if not b:
+            return False
+        
+        s.query(Dataset).filter(Dataset.id_==b.identity.id_).delete()
+        
         s.commit()
      
-
-        row = s.query(Partition).filter(
-        or_(Partition.name==bundle.identity.name, Partition.id_==bundle.identity.id_)
-        ).delete()
-       
+        s.query(Partition).filter(Partition.id_==b.identity.id_).delete()
+        
+        s.commit()
 
      
     def find(self, query_command):

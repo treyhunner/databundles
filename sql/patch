@@ -1,0 +1,146 @@
+--- configuration-pg.dez	2012-08-13 21:39:03.000000000 -0700
++++ configuration-sqlite.dez	2012-08-13 21:46:53.000000000 -0700
+@@ -12,7 +12,7 @@
+ <DESCRIPTION></DESCRIPTION>
+ <AUTHOR></AUTHOR>
+ <COPYRIGHT></COPYRIGHT>
+-<LASTGENERATEDFILES>Y:\proj\github.com\databundles\src\databundles\support\configuration.sql;Y:\proj\github.com\databundles\src\databundles\support\drop-configuration.sql;C:\Users\eric\Documents\CreateDBLog_201207259.txt</LASTGENERATEDFILES>
++<LASTGENERATEDFILES>Y:\proj\github.com\databundles\src\databundles\support\configuration.sql;Y:\proj\github.com\databundles\src\databundles\support\drop-configuration.sql;C:\Users\eric\Documents\CreateDBLog_201208132.txt</LASTGENERATEDFILES>
+ <PRINTORIENTATION>PORTRAIT</PRINTORIENTATION>
+ <PRINTPAGETYPE>A4</PRINTPAGETYPE>
+ <DEFTABLEOPTIONS></DEFTABLEOPTIONS>
+@@ -116,7 +116,7 @@
+ <CONGENDIRECTIVES></CONGENDIRECTIVES>
+ </PROJECTSETTINGS>
+ <DATADICT>
+-<DBID>postgresql9</DBID>
++<DBID>sqlite3</DBID>
+ <LASTID>27</LASTID>
+ <DOMAINS>
+ </DOMAINS>
+@@ -191,7 +191,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_tables_t_sequence_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -220,7 +220,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_tables_t_d_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -395,7 +395,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_datasets_d_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -579,7 +579,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_columns_c_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -608,7 +608,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_columns_c_sequence_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -994,7 +994,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_config_co_d_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -1138,7 +1138,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_files_f_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -1167,7 +1167,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_files_f_path</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -1324,7 +1324,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_partitions_p_name</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -1382,7 +1382,7 @@
+ <INC>1</INC>
+ </DT>
+ <NNCON>
+-<NAME></NAME>
++<NAME>NN_partitions_p_sequence_id</NAME>
+ <NAMETEMPLATE>NN_%table%_%column%</NAMETEMPLATE>
+ <ID>1</ID>
+ <POSNR>0</POSNR>
+@@ -1529,7 +1529,7 @@
+ <RELTYPE>1</RELTYPE>
+ <MANDATORYPARENT>1</MANDATORYPARENT>
+ <UPDATERULE>0</UPDATERULE>
+-<DELETERULE>2</DELETERULE>
++<DELETERULE>0</DELETERULE>
+ <CONSTRAINT>
+ <NAME>datasets_tables</NAME>
+ <NAMETEMPLATE>%relname%</NAMETEMPLATE>
+@@ -1613,7 +1613,7 @@
+ <RELTYPE>1</RELTYPE>
+ <MANDATORYPARENT>1</MANDATORYPARENT>
+ <UPDATERULE>0</UPDATERULE>
+-<DELETERULE>2</DELETERULE>
++<DELETERULE>0</DELETERULE>
+ <CONSTRAINT>
+ <NAME>datasets_partitions</NAME>
+ <NAMETEMPLATE>%relname%</NAMETEMPLATE>
+@@ -1655,7 +1655,7 @@
+ <RELTYPE>1</RELTYPE>
+ <MANDATORYPARENT>0</MANDATORYPARENT>
+ <UPDATERULE>0</UPDATERULE>
+-<DELETERULE>2</DELETERULE>
++<DELETERULE>0</DELETERULE>
+ <CONSTRAINT>
+ <NAME>tables_columns</NAME>
+ <NAMETEMPLATE>%relname%</NAMETEMPLATE>
+@@ -1697,7 +1697,7 @@
+ <RELTYPE>1</RELTYPE>
+ <MANDATORYPARENT>0</MANDATORYPARENT>
+ <UPDATERULE>0</UPDATERULE>
+-<DELETERULE>2</DELETERULE>
++<DELETERULE>0</DELETERULE>
+ <CONSTRAINT>
+ <NAME>tables_partitions</NAME>
+ <NAMETEMPLATE>%relname%</NAMETEMPLATE>

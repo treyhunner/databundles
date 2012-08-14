@@ -151,6 +151,7 @@ def run(argv, bundle_class):
                 b.log("---- Done Preparing ----")
             else:
                 b.log("---- Prepare exited with failure ----")
+                return False
         else:
             b.log("---- Skipping prepare ---- ")
     else:
@@ -164,6 +165,7 @@ def run(argv, bundle_class):
                 b.log("---- Done Building ---")
             else:
                 b.log("---- Build exited with failure ---")
+                return False
         else:
             b.log("---- Skipping Build ---- ")
     else:

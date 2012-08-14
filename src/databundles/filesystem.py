@@ -144,25 +144,27 @@ class Filesystem(object):
 
  
     @contextmanager
-    def unzip(self,path):
+    def unzip(self,path, count=1):
         '''Context manager to extract a single file from a zip archive, and delete
         it when finished'''
         
         extractDir = self.build_path('extracts')
       
         with zipfile.ZipFile(path) as zf:
-            for name in  zf.namelist():
-                extractFilename = self.build_path('extracts', name)
+            name = iter(zf.namelist()).next() # Assume only one file in zip archive. 
+         
+            extractFilename = self.build_path('extracts', name)
+            
+            if os.path.exists(extractFilename):
+                os.remove(extractFilename)
                 
-                if os.path.exists(extractFilename):
-                    os.remove(extractFilename)
-                    
-                self.bundle.log('Extracting'+extractFilename+' from '+path)
-                name = name.replace('/','').replace('..','')
-                zf.extract(name,extractDir )
-                    
-                yield extractFilename
-                os.unlink(extractFilename)
+            self.bundle.log('Extracting'+extractFilename+' from '+path)
+            name = name.replace('/','').replace('..','')
+            zf.extract(name,extractDir )
+                
+            yield extractFilename
+        
+            os.unlink(extractFilename)
 
     @contextmanager
     def download(self,url, **kwargs):
@@ -187,16 +189,13 @@ class Filesystem(object):
          
             yield file_path
             
-            if not cache:
-                os.remove(file_path)
-            
         except IOError as e:
             self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
             raise e
             
         finally:
             if file_path and os.path.exists(file_path) and not cache:
-                os.unlink(file_path)
+                os.remove(file_path)
         
         
 
