@@ -10,7 +10,13 @@ def coerce_int(v):
         return int(v)
     except:
         return v
-        
+    
+def coerce_int_except(v, msg):   
+    '''Convert to an int, throw an exception if it isn't'''
+    try:
+        return int(v)
+    except:
+        raise ValueError("Bad value: '{}'; {} ".format(v,msg) )
                 
 class PassthroughTransform(object):
     '''
@@ -61,7 +67,9 @@ class BasicTransform(object):
         # for numbers try to coerce to an integer. We'd have to use a helper func
         # with a try/catch, except in this case, integers are always all digits here 
         if column.datatype == 'integer':
-            f = lambda v: int(v)
+            #f = lambda v: int(v)
+            msg = column.name
+            f = lambda v, msg = msg: coerce_int_except(v, msg)
         else:
             f = lambda v: v
 
@@ -152,7 +160,8 @@ class CensusTransform(BasicTransform):
         # for numbers try to coerce to an integer. We'd have to use a helper func
         # with a try/catch, except in this case, integers are always all digits here 
         if column.datatype == 'integer':
-            f = lambda v: int(v)
+            msg = column.name
+            f = lambda v, msg = msg: coerce_int_except(v, msg)
         else:
             f = lambda v: v
 

@@ -19,6 +19,9 @@ def get_args(argv):
     
     parser.add_argument('-b','--build_opt', action='append', help='Set options for the build phase')
     
+    parser.add_argument('-m','--multi', default=False, action="store", 
+                        help='Run the build process on multiple processors')
+
 
     
     args = parser.parse_args()

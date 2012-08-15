@@ -61,7 +61,7 @@ class Filesystem(object):
             d = sys.path[0]
         
         while os.path.isdir(d) and d != '/':
-            print "D: ",d
+        
             test =  os.path.normpath(d+'/'+testFile)
 
             if(os.path.isfile(test)):
