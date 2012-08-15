@@ -296,8 +296,8 @@ class Schema(object):
             width = _clean_int(row.get('width', None))
             size = _clean_int(row.get('size',None))
     
-            if  size and size > 0:
-                illegal_value = '9' * size
+            if  width and width > 0:
+                illegal_value = '9' * width
             else:
                 illegal_value = None
    

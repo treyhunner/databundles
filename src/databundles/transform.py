@@ -52,7 +52,7 @@ class BasicTransform(object):
         else:
             return f(v)
 
-    def __init__(self, column, index=None):
+    def __init__(self, column, useIndex=None):
         """
         
         """
@@ -82,6 +82,11 @@ class BasicTransform(object):
         
         # Extract the value from a position in the row
         f = lambda row, column=column, f=f: f(row[column.name])
+        
+        if useIndex:
+            f = lambda row, column=column, f=f: f(row[column.sequence_id-1])
+        else:
+            f = lambda row, column=column, f=f: f(row[column.name])
         
         self.f = f
 
