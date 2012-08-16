@@ -262,63 +262,66 @@ class Schema(object):
         new_table = True
         last_table = None
         for row in reader:
-         
-            # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
-            # in UTF-8
-           
-            row = { k:str(v).decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
-          
-            if  row['table'] and row['table'] != last_table:
-                new_table = True
-                last_table = row['table']
-
-            if new_table and row['table']:
-                #print 'Table',row['table']
-                t = self.add_table(row['table'], **row)
-                new_table = False
+            try:
+                # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
+                # in UTF-8
+               
+                row = { k:str(v).decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
               
-            # Ensure that the default doesnt get quotes if it is a number. 
-            if row.get('default', False):
-                try:
-                    default = int(row['default'])
-                except:
-                    default = row['default']
-            else:
-                default = None
-          
-            # Build the index and unique constraint values. 
-            indexes = [ row['table']+'_'+c for c in row.keys() if (re.match('i\d+', c) and _clean_flag(row[c]))]  
-            uindexes = [ row['table']+'_'+c for c in row.keys() if (re.match('ui\d+', c) and _clean_flag(row[c]))]  
-            uniques = [ row['table']+'_'+c for c in row.keys() if (re.match('u\d+', c) and  _clean_flag(row[c]))]  
+                if  row['table'] and row['table'] != last_table:
+                    new_table = True
+                    last_table = row['table']
     
-            datatype = tm[row['type'].strip()]
-
-            width = _clean_int(row.get('width', None))
-            size = _clean_int(row.get('size',None))
+                if new_table and row['table']:
+                    #print 'Table',row['table']
+                    t = self.add_table(row['table'], **row)
+                    new_table = False
+                  
+                # Ensure that the default doesnt get quotes if it is a number. 
+                if row.get('default', False):
+                    try:
+                        default = int(row['default'])
+                    except:
+                        default = row['default']
+                else:
+                    default = None
+              
+                # Build the index and unique constraint values. 
+                indexes = [ row['table']+'_'+c for c in row.keys() if (re.match('i\d+', c) and _clean_flag(row[c]))]  
+                uindexes = [ row['table']+'_'+c for c in row.keys() if (re.match('ui\d+', c) and _clean_flag(row[c]))]  
+                uniques = [ row['table']+'_'+c for c in row.keys() if (re.match('u\d+', c) and  _clean_flag(row[c]))]  
+        
+                datatype = tm[row['type'].strip()]
     
-            if  width and width > 0:
-                illegal_value = '9' * width
-            else:
-                illegal_value = None
-   
-            
-            data = { k.replace('d_','',1): v for k,v in row.items() if k.startswith('d_') }
-   
-            description = row.get('description','').strip()
-            
-            
-            self.add_column(t,row['column'],
-                                   is_primary_key= True if row.get('is_pk', False) else False,
-                                   description=description,
-                                   datatype=datatype,
-                                   unique_constraints = ','.join(uniques),
-                                   indexes = ','.join(indexes),
-                                   uindexes = ','.join(uindexes),
-                                   default = default,
-                                   illegal_value = illegal_value,
-                                   size = size,
-                                   width = width,
-                                   data=data
-                                   )
+                width = _clean_int(row.get('width', None))
+                size = _clean_int(row.get('size',None))
+        
+                if  width and width > 0:
+                    illegal_value = '9' * width
+                else:
+                    illegal_value = None
+       
+                
+                data = { k.replace('d_','',1): v for k,v in row.items() if k.startswith('d_') }
+       
+                description = row.get('description','').strip()
+                
+                
+                self.add_column(t,row['column'],
+                                       is_primary_key= True if row.get('is_pk', False) else False,
+                                       description=description,
+                                       datatype=datatype,
+                                       unique_constraints = ','.join(uniques),
+                                       indexes = ','.join(indexes),
+                                       uindexes = ','.join(uindexes),
+                                       default = default,
+                                       illegal_value = illegal_value,
+                                       size = size,
+                                       width = width,
+                                       data=data
+                                       )
+            except Exception as e:
+                print "ERROR on row: ", row
+                raise e
 
         

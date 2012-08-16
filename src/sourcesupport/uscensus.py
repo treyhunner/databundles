@@ -149,7 +149,7 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
     
     
     log("Generating main table schemas")
-    log("T = Table, C = Column, 5 = Five geo columns")
+    log("T = Table, C = Column, X = extra columns")
     
     reader  = csv.DictReader(open(headers_file, 'rbU') )
     
@@ -179,7 +179,7 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
             # but the segment id is not included on the same lines ast the
             # table name. 
             if table:
-                table['data'] = {'segment':row['SEG']}
+                table['data'] = {'segment':row['SEG'], 'fact':True}
                 tick("T")
                 name = table['name']
                 del table['name']
@@ -198,17 +198,24 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
                 dt = Column.DATATYPE_INTEGER
                 seg = row['SEG']
                 
-                tick("5")
-                schema.add_column(t, 'FILEID',table_name=tn,datatype=dt,
-                             data={'source_col':0,'segment':seg})
-                schema.add_column(t, 'STUSAB',table_name=tn,datatype=dt,
-                             data={'source_col':1,'segment':seg})
-                schema.add_column(t, 'CHARITER',table_name=tn,datatype=dt,
-                             data={'source_col':2,'segment':seg})
-                schema.add_column(t, 'CIFSN',table_name=tn,datatype=dt,
-                             data={'source_col':3,'segment':seg})
-                schema.add_column(t, 'LOGRECNO',table_name=tn,datatype=dt,
-                             data={'source_col':4,'segment':seg})
+                tick("X")
+                #schema.add_column(t, 'FILEID',table_name=tn,datatype=dt,
+                #             data={'source_col':0,'segment':seg})
+                #schema.add_column(t, 'STUSAB',table_name=tn,datatype=dt,
+                #             data={'source_col':1,'segment':seg})
+                #schema.add_column(t, 'CHARITER',table_name=tn,datatype=dt,
+                #             data={'source_col':2,'segment':seg})
+                #schema.add_column(t, 'CIFSN',table_name=tn,datatype=dt,
+                #             data={'source_col':3,'segment':seg})
+                #schema.add_column(t, 'LOGRECNO',table_name=tn,datatype=dt,
+                #             data={'source_col':4,'segment':seg})
+                
+                foreign_keys = (['recno_id','area_id','leg_district_id','block_id','county_id',
+                       'state_id','place_id','metro_type_id','cons_city_id','schools_id'
+                       'urban_type_id','spec_area_id'])
+                
+                for fk in foreign_keys:
+                    schema.add_column(t, fk,table_name=tn,datatype=dt)
                 
                 table = None
     
