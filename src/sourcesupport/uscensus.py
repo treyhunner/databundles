@@ -134,6 +134,24 @@ def make_range_map(urls_file, segmap_file, schema_lookup, log=lambda msg: True, 
     tick('\n')
     return range_map
 
+def geo_tables():
+    return (['recno',
+             'area',
+             'block',
+             'cons_city',
+             'county',
+             'leg_district',
+             'metro_type',
+             'place',
+             'schools',
+             'spec_area',
+             'state', 
+             'urban_type',     
+             ]
+            )
+    
+def geo_keys():
+    return  [ t+'_id' for t in geo_tables()]
 
 def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lambda msg: True):
     '''Return schema rows from the  columns.csv file'''
@@ -210,12 +228,9 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
                 #schema.add_column(t, 'LOGRECNO',table_name=tn,datatype=dt,
                 #             data={'source_col':4,'segment':seg})
                 
-                foreign_keys = (['recno_id','area_id','leg_district_id','block_id','county_id',
-                       'state_id','place_id','metro_type_id','cons_city_id','schools_id'
-                       'urban_type_id','spec_area_id'])
                 
-                for fk in foreign_keys:
-                    schema.add_column(t, fk,table_name=tn,datatype=dt)
+                for fk in geo_keys():
+                    schema.add_column(t, fk,table_name=tn,datatype=dt, is_foreign_key =True)
                 
                 table = None
     

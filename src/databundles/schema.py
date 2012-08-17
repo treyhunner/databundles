@@ -309,6 +309,7 @@ class Schema(object):
                 
                 self.add_column(t,row['column'],
                                        is_primary_key= True if row.get('is_pk', False) else False,
+                                       is_foreign_key= True if row.get('is_fk', False) else False,
                                        description=description,
                                        datatype=datatype,
                                        unique_constraints = ','.join(uniques),

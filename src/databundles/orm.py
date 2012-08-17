@@ -159,6 +159,7 @@ class Column(Base):
     data = SAColumn('c_data',MutationDict.as_mutable(JSONEncodedDict))
 
     is_primary_key = SAColumn('c_is_primary_key',Boolean, default = False)
+    is_foreign_key = SAColumn('c_is_foreign_key',Boolean, default = False)
     unique_constraints = SAColumn('c_unique_constraints',Text)
     indexes = SAColumn('c_indexes',Text)
     uindexes = SAColumn('c_uindexes',Text)
