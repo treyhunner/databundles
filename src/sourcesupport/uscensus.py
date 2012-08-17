@@ -246,6 +246,8 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
                                             'source_col':source_col}   )
             
             source_col += 1
+
+            
     tick("\n")
 
 
