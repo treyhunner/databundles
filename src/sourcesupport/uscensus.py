@@ -105,7 +105,6 @@ def make_range_map(urls_file, segmap_file, schema_lookup, log=lambda msg: True, 
 
     range_map = {}
     
-    
     state, segments = urls['tables'].items()[0]
       
     for seg_number,source in segments.items(): #@UnusedVariable
@@ -121,7 +120,7 @@ def make_range_map(urls_file, segmap_file, schema_lookup, log=lambda msg: True, 
                 if table_id not in irm:
                     irm[table_id] = []
                   
-                if column.data['source_col'] >= 5 and start is None:
+                if 'source_col' in column.data and column.data['source_col'] >= 5 and start is None:
                     start = column.data['source_col']
                              
             irm[table_id] = {
