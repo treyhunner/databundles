@@ -54,7 +54,8 @@ class TempFile(object):
     def writer(self, mode = 'w'):
         if self._writer is None:
             import csv
-            self._writer = csv.writer(open(self.path, mode))
+            f = open(self.path, mode)
+            self._writer = csv.writer(f)
             self._writer.writerow(self.header)
             
         return self._writer
