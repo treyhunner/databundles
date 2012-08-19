@@ -3,7 +3,7 @@ Created on Jun 10, 2012
 
 @author: eric
 '''
-import sys, getopt
+
 
 def get_args(argv):
     import argparse
@@ -22,8 +22,6 @@ def get_args(argv):
     parser.add_argument('-m','--multi', default=False, action="store", 
                         help='Run the build process on multiple processors')
 
-
-    
     args = parser.parse_args()
     
     if args.build_opt is None:

@@ -28,7 +28,7 @@ class ValueInserter(object):
         
 class TempFile(object): 
            
-    def __init__(self, bundle,  db, table, header=None):
+    def __init__(self, bundle,  db, table, suffix=None, header=None):
         self.bundle = bundle
         self.db = db 
         self.table = table
@@ -40,11 +40,15 @@ class TempFile(object):
 
         self.header = header
 
-        self._path = str(self.db.path).replace('.db','-'+table.name+".csv")
+        name = table.name
+        
+        if suffix:
+            name += "-"+suffix
+
+        self._path = str(self.db.path).replace('.db','-'+name+".csv")
         
         self._writer = None
         self._reader = None
-        
         
     @property
     def writer(self, mode = 'w'):
@@ -64,15 +68,26 @@ class TempFile(object):
             
         return self._reader
        
+    @property
+    def linereader(self, mode='r'):
+        if self._reader is None:
+            import csv
+            self._reader = csv.reader(open(self.path, mode))
+            
+        return self._reader
        
     @property 
     def path(self):
         return self._path
     
     
+    @property
+    def exists(self):
+        return os.path.exists(self.path)
     
     def delete(self):
-        os.remove(self.path)
+        if self.exists:
+            os.remove(self.path)
     
            
            
@@ -82,7 +97,20 @@ class Database(object):
     BUNDLE_DB_NAME = 'bundle'
     PROTO_SQL_FILE = 'support/configuration.sql' # Stored in the databundles module. 
 
-    def __init__(self, bundle, file_path=None):    
+    def __init__(self, bundle, file_path=None, post_create=None):   
+        '''Initialize the a database object
+        
+        Args:
+            bundle. a Bundle object
+            
+            file_path. Path to the database file. If None, uses the name of the
+            bundle, in the bundle build director. 
+            
+            post_create. A function called during the create() method. has
+            signature post_create(database)
+            
+            
+        '''
         self.bundle = bundle 
         
         self._engine = None
@@ -92,6 +120,8 @@ class Database(object):
         # DB-API is needed to issue INSERT OR REPLACE type inserts. 
         self._dbapi_cursor = None
         self._dbapi_connection = None
+        
+        self._post_create = None
         
         if file_path:
             self.file_path = file_path
@@ -178,14 +208,12 @@ class Database(object):
             self._dbapi_connection.close();
             self._dbapi_connection = None            
         
-      
-    def tempfile(self, table, header=None):
+    def tempfile(self, table, header=None, suffix=None):
         
         if table.name not in self.tempfiles:
-            self.tempfiles[table.name] = TempFile(self.bundle, self, table, header=header)
+            self.tempfiles[table.name] = TempFile(self.bundle, self, table, header=header, suffix=suffix)
 
         return self.tempfiles[table.name]
-
 
     @property
     def inspector(self):
@@ -247,6 +275,34 @@ class Database(object):
         
         conn.commit()
         
+    def load_tempfile(self, table):
+        '''Load a tempfile into the database. Uses the header line of the temp file
+        for the column names '''
+        tempfile = self.tempfile(table)
+        
+        
+        if not tempfile.exists:
+            self.bundle.log("Tempfile already deleted. Skipping")
+            return
+        
+        lr = tempfile.linereader
+        
+        column_names = lr.next()
+       
+        self.dbapi_cursor.execute('DELETE FROM {} '.format(table.name))
+       
+        ins =  ("""INSERT INTO {table} ({columns}) VALUES ({values})"""
+                            .format(
+                                 table=table.name,
+                                 columns =','.join(column_names),
+                                 values = ','.join(['?' for c in column_names]) #@UnusedVariable
+                            )
+                         )
+        
+        self.dbapi_cursor.executemany(ins, lr)
+        self.dbapi_connection.commit()
+        self.dbapi_close()
+        
     def create(self):
         
         """Create the database from the base SQL"""
@@ -272,6 +328,10 @@ class Database(object):
            
             s.add(ds)
             s.commit()
+            
+            # call the post create function
+            if self._post_create:
+                self._post_create(self)
             
         return self
       

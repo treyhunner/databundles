@@ -158,7 +158,6 @@ class Filesystem(object):
             if os.path.exists(extractFilename):
                 os.remove(extractFilename)
                 
-            self.bundle.log('Extracting'+extractFilename+' from '+path)
             name = name.replace('/','').replace('..','')
             zf.extract(name,extractDir )
                 

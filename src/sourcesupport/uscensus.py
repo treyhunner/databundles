@@ -69,8 +69,7 @@ def scrape_files(rootUrl, states_file, log=lambda msg: True, tick=lambda msg: Tr
 def make_segment_map(headers_file, log=lambda msg: True, tick=lambda msg: True):
     
     import csv
-    import yaml
-
+   
     map_ = {}
     for row in csv.DictReader(open(headers_file, 'rbU') ):
         if row['SEG'] and row['TABLE']:
@@ -105,7 +104,7 @@ def make_range_map(urls_file, segmap_file, schema_lookup, log=lambda msg: True, 
 
     range_map = {}
     
-    state, segments = urls['tables'].items()[0]
+    state, segments = urls['tables'].items()[0] #@UnusedVariable
       
     for seg_number,source in segments.items(): #@UnusedVariable
         tick('.')
@@ -213,7 +212,7 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
           
                 tn = row['TABLE']
                 dt = Column.DATATYPE_INTEGER
-                seg = row['SEG']
+                seg = row['SEG'] #@UnusedVariable
                 
                 tick("X")
                 #schema.add_column(t, 'FILEID',table_name=tn,datatype=dt,
@@ -226,8 +225,7 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
                 #             data={'source_col':3,'segment':seg})
                 #schema.add_column(t, 'LOGRECNO',table_name=tn,datatype=dt,
                 #             data={'source_col':4,'segment':seg})
-                
-                
+                   
                 for fk in geo_keys():
                     schema.add_column(t, fk,table_name=tn,datatype=dt, is_foreign_key =True)
                 
@@ -243,10 +241,9 @@ def generate_table_schema(headers_file, schema,  log=lambda msg: True, tick=lamb
                          description=row['TEXT'].strip(),
                           datatype=dt,data={'segment':int(row['SEG']),
                                             'source_col':source_col}   )
-            
             source_col += 1
 
-            
+  
     tick("\n")
 
 
