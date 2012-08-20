@@ -38,6 +38,7 @@ class Filesystem(object):
     
     BUILD_DIR = 'build'
     DOWNLOAD_DIR = 'downloads'
+    EXTRACT_DIR = 'extracts'
    
     
     def __init__(self, bundle, root_directory = None):
@@ -109,7 +110,6 @@ class Filesystem(object):
         args = (self.BUILD_DIR,) + args
         return self.path(*args)
 
-
     def downloads_path(self, *args):
         
         if len(args) > 0 and args[0] == self.DOWNLOAD_DIR:
@@ -121,6 +121,20 @@ class Filesystem(object):
             downloads_dir = self.DOWNLOAD_DIR
         
         args = (downloads_dir,) + args
+        return self.path(*args)
+
+    def extracts_path(self, *args):
+        '''Construct a path into the extracts directory''' 
+        
+        if len(args) > 0 and args[0] == self.EXTRACT_DIR:
+            raise ValueError("Adding extract to existing extract path "+os.path.join(*args))
+        
+        extract_dir = self.bundle.config.library.extracts
+        
+        if extract_dir is None:
+            extract_dir = self.EXTRACT_DIR
+        
+        args = (extract_dir,) + args
         return self.path(*args)
 
     def directory(self, rel_path):
@@ -144,16 +158,16 @@ class Filesystem(object):
 
  
     @contextmanager
-    def unzip(self,path, count=1):
+    def unzip(self,path, cache=True):
         '''Context manager to extract a single file from a zip archive, and delete
         it when finished'''
         
-        extractDir = self.build_path('extracts')
+        extractDir = self.extracts_path(os.path.basename(path))
       
         with zipfile.ZipFile(path) as zf:
             name = iter(zf.namelist()).next() # Assume only one file in zip archive. 
          
-            extractFilename = self.build_path('extracts', name)
+            extractFilename = os.path.join(extractDir, name)
             
             if os.path.exists(extractFilename):
                 os.remove(extractFilename)
@@ -163,25 +177,76 @@ class Filesystem(object):
                 
             yield extractFilename
         
-            os.unlink(extractFilename)
+            if not cache:
+                os.unlink(extractFilename)
+
+    @contextmanager
+    def unzip_dir(self,path,  cache=True):
+        '''Extract all of the files in a zip file to a directory, and return
+        the directory. Delete the directory when done. '''
+       
+        extractDir = self.extracts_path(os.path.basename(path))
+
+        files = []
+     
+        if os.path.exists(extractDir):
+            import glob
+            # File already exists, so don't extract agaain. 
+            yield glob.glob(extractDir+'/*')
+
+        else :
+            try:
+                with zipfile.ZipFile(path) as zf:
+                    for name in zf.namelist():
+                  
+                        extractFilename = os.path.join(extractDir, name)
+                        
+                        files.append(extractFilename)
+                        
+                        if os.path.exists(extractFilename):
+                            os.remove(extractFilename)
+                        
+                        # don't let the name of the file escape the extract dir. 
+                        name = name.replace('/','').replace('..','')
+                        zf.extract(name,extractDir )
+                        
+                    yield files
+            except Exception as e:
+                if os.path.exists(path):
+                    os.remove(path)
+                raise e
+                
+        
+        if  not cache and os.path.isdir(extractDir):
+            import shutil
+            shutil.rmtree(extractDir)
+        
 
     @contextmanager
     def download(self,url, **kwargs):
         '''Context manager to download a file, return it for us, 
         and delete it when done'''
+        import shutil
+        
 
         file_path = None
         try:    
             
             file_name = urllib.quote_plus(url)
             file_path = self.downloads_path(file_name)
+            download_path = file_path+".download"
             
             cache = kwargs.get('cache',self.bundle.cache_downloads)
+            
+            if os.path.exists(download_path):
+                os.remove(download_path)
             
             if not cache or not os.path.exists(file_path):
                 self.bundle.log("Downloading "+url)
                 self.bundle.log("  --> "+file_path)
-                file_path, headers = urllib.urlretrieve(url,file_path) #@UnusedVariable
+                download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
+                
+                shutil.move(download_path, file_path)
                 
                 if not os.path.exists(file_path):
                     raise Exception("Failed to download "+url)
@@ -190,6 +255,11 @@ class Filesystem(object):
             
         except IOError as e:
             self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise e
+        except urllib.ContentTooShortError as e:
+            print "Bye"
             raise e
             
         finally:

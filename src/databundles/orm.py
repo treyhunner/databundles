@@ -305,7 +305,7 @@ class Table(Base):
     def mangle_name(name):
         import re
         try:
-            return re.sub('[^\w_]','_',name).lower()
+            return re.sub('[^\w_]','_',name.strip()).lower()
         except TypeError:
             raise TypeError('Not a valid type for name '+str(type(name)))
 
