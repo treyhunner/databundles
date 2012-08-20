@@ -32,6 +32,7 @@ class TempFile(object):
         self.bundle = bundle
         self.db = db 
         self.table = table
+        self.file = None
         
         if header is None:
             header = [ c.name for c in table.columns ]
@@ -54,8 +55,9 @@ class TempFile(object):
     def writer(self, mode = 'w'):
         if self._writer is None:
             import csv
-            f = open(self.path, mode)
-            self._writer = csv.writer(f)
+            self.close()
+            self.file = open(self.path, mode)
+            self._writer = csv.writer(self.file)
             self._writer.writerow(self.header)
             
         return self._writer
@@ -90,7 +92,12 @@ class TempFile(object):
         if self.exists:
             os.remove(self.path)
     
-           
+    def close(self):
+        if self.file:
+            self.file.flush()
+            self.file.close()
+            self.file = None
+       
            
 class Database(object):
     '''Represents a Sqlite database'''

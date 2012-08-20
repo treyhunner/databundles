@@ -167,14 +167,13 @@ class Filesystem(object):
         with zipfile.ZipFile(path) as zf:
             name = iter(zf.namelist()).next() # Assume only one file in zip archive. 
          
+            name = name.replace('/','').replace('..','')
+         
             extractFilename = os.path.join(extractDir, name)
             
-            if os.path.exists(extractFilename):
-                os.remove(extractFilename)
-                
-            name = name.replace('/','').replace('..','')
-            zf.extract(name,extractDir )
-                
+            if not os.path.exists(extractFilename):
+                zf.extract(name,extractDir )
+                    
             yield extractFilename
         
             if not cache:

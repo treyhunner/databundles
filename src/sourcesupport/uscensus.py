@@ -317,6 +317,12 @@ class UsCensusBundle(BuildBundle):
                         partition = fact_partitions[table_id]
                         self.write_fact_table(state, partition, table, values)
 
+            for seg_number, segment in segments.items():
+                for table_id, range in range_map[seg_number].iteritems(): #@ReservedAssignment
+                    table = self.get_table_by_table_id(table_id)
+                    tf = partition.database.tempfile(table, suffix=state)
+                    tf.close()
+
     #############################################
     # Generate rows from multiple files. 
     #############################################
@@ -381,6 +387,8 @@ class UsCensusBundle(BuildBundle):
                         segments = {}
                         geo = m.groups()
                         lrn = geo[6]
+                     
+                        
                         for g in gens:
                             try:
                                 seg_number,  row = g.send(None if first else lrn)
@@ -623,14 +631,17 @@ class UsCensusBundle(BuildBundle):
             r = len(th)+1
             th[values[-1]] = r
             values[0] = r
-            tf = partition.database.tempfile(table).writer
-            tf.writerow(values)
+            tf = partition.database.tempfile(table)
+            tf.writer.writerow(values)
+            tf.file.flush()
         
         return r
     
     def write_fact_table(self, state, partition, table,  values):
         tf = partition.database.tempfile(table, suffix=state)
         tf = tf.writer.writerow(values)
+        
+        
     
     def store_geo_splits(self):
         '''Copy all of the geo split CSV files -- the tempfiles -- into
