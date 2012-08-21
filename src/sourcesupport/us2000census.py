@@ -105,53 +105,7 @@ class Us2000CensusBundle(UsCensusBundle):
                     seg_map[seg].append(table)
                 
         return seg_map
-    
-    def _make_range_map(self, schema_lookup ):
-        '''Builds a yaml file that links(state,segment,table) to the column ranges
-        in the segment file that have data for that table. 
-        
-        Uses:
-            Urls File
-            Segmap File
-            
-        Outputs:
-            Rangemap File
-        
-        '''
-    
-        urls = yaml.load(file(self.urls_file, 'r'))
-        segmap = self._make_segment_map()
-    
-        range_map = {}
-        
-        state, segments = urls['tables'].items()[0] #@UnusedVariable
-          
-        for seg_number,source in segments.items(): #@UnusedVariable
-            self.ptick('.')
-            
-            irm = {}
-            for table_name in segmap[seg_number]: 
-                table = schema_lookup(table_name)
-            
-                start =   None
-                for column in table.columns:
-                    table_id =  table.id_.encode('ascii')        
-                    if table_id not in irm:
-                        irm[table_id] = []
-                      
-                    if 'source_col' in column.data and column.data['source_col'] >= 5 and start is None:
-                        start = column.data['source_col']
-                                 
-                irm[table_id] = {
-                                'start':start,  
-                                'end':column.data['source_col']+1, 
-                                'table' : table.name.encode('ascii', 'ignore')}
-                
-            range_map[seg_number] = irm
-    
-        self.ptick('\n')
-        return range_map
-    
+
     def generate_schema_rows(self):
         '''This generator yields schema rows from the schema defineition
         files. This one is specific to the files produced by dumpoing the Access97
@@ -173,7 +127,9 @@ class Us2000CensusBundle(UsCensusBundle):
             # and population universe, but don't have any column info. 
             if( not row['FIELDNUM']):
                 if  row['TABNO']:
-                    table = {'type': 'table', 'name':row['TABLE'],'description':row['TEXT']}
+                    table = {'type': 'table', 
+                             'name':row['TABLE'],'description':row['TEXT']
+                             }
                 else:
                     table['universe'] = row['TEXT'].replace('Universe:','').strip()  
             else:
@@ -182,7 +138,8 @@ class Us2000CensusBundle(UsCensusBundle):
                 # but the segment id is not included on the same lines ast the
                 # table name. 
                 if table:
-                    table['data'] = {'segment':row['SEG'], 'fact':True}
+                    # This is yielded  here so we can get the segment number. 
+                    table['segment'] = row['SEG'] 
                     yield table
                     table  = None
                     
@@ -195,4 +152,103 @@ class Us2000CensusBundle(UsCensusBundle):
                        'col_pos':col_pos,
                        'decimal':int(row['DECIMAL'])
                        }
+                
+    def generate_seg_rows(self, seg_number, source):
+        '''Generate rows for a segment file. Call this generator with send(), 
+        passing in the lexpected logrecno. If the next row does not have that 
+        value, return a blank row until the logrecno values match. '''
+        import csv
+        next_logrecno = None
+        with self.filesystem.download(source) as zip_file:
+            with self.filesystem.unzip(zip_file) as rf:
+                for row in csv.reader(open(rf, 'rbU') ):
+                    # The next_logrec bit takes care of a differece in the
+                    # segment files -- the PCT tables to not have entries for
+                    # tracts, so there are gaps in the logrecno sequence for those files. 
+                    while next_logrecno is not None and next_logrecno != row[4]:
+                        next_logrecno = (yield seg_number,  [])
+             
+                    next_logrecno = (yield seg_number,  row)
+                 
+        return
+                    
+    def generate_rows(self, state, urls, geodim=False):
+        '''A Generator that yelds a tuple that has the logrecno row
+        for all of the segment files and the geo file. '''
+
+        table = self.schema.table('sf1geo')
+        header, regex, regex_str = table.get_fixed_regex() #@UnusedVariable
+         
+        geo_source = urls['geos'][state]
+      
+        gens = [self.generate_seg_rows(n,source) for n,source in urls['tables'][state].items() ]
+
+        geodim_gen = self.generate_geodim_rows(state) if geodim else None
+     
+        with self.filesystem.download(geo_source) as geo_zip_file:
+            with self.filesystem.unzip(geo_zip_file) as grf:
+                with open(grf, 'rbU') as geofile:
+                    first = True
+                    for line in geofile.readlines():
+                        
+                        m = regex.match(line)
+                         
+                        if not m:
+                            raise ValueError("Failed to match regex on line: "+line) 
+    
+                        segments = {}
+                        geo = m.groups()
+                        lrn = geo[6]
+                     
+                        
+                        for g in gens:
+                            try:
+                                seg_number,  row = g.send(None if first else lrn)
+                                segments[seg_number] = row
+                                # The logrecno must match up across all files, except
+                                # when ( in PCT tables ) there is no entry
+                                if len(row) > 5 and row[4] != lrn:
+                                    raise Exception("Logrecno mismatch for seg {} : {} != {}"
+                                                    .format(seg_number, row[4],lrn))
+                            except StopIteration:
+                                # Apparently, the StopIteration exception, raised in
+                                # a generator function, gets propagated all the way up, 
+                                # ending all higher level generators. thanks for nuthin. 
+                                break
+                    
+                        geodim = geodim_gen.next() if geodim_gen is not None else None
+
+                        if geodim and geodim[0] != lrn:
+                            raise Exception("Logrecno mismatch for geodim : {} != {}"
+                                                    .format(geodim[0],lrn))
+
+                        first = False
+
+                        yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
+
+                    # Check that there are no extra lines. 
+                    for g in gens:
+                        try:
+                            while g.next(): 
+                                raise Exception("Should not have extra items left")
+                        except StopIteration:
+                            pass
+        return
+               
+    def geo_table_names(self):
+        return (['recno',
+                 'area',
+                 'block',
+                 'cons_city',
+                 'county',
+                 'leg_district',
+                 'metro_type',
+                 'place',
+                 'schools',
+                 'spec_area',
+                 'state', 
+                 'urban_type',     
+                 ]
+                )
+  
  

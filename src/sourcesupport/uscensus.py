@@ -23,7 +23,6 @@ class UsCensusBundle(BuildBundle):
         bg = self.config.build
         self.segmap_file =  self.filesystem.path(bg.segMapFile)
         self.headers_file =  self.filesystem.path(bg.headersFile)
-        self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
         self.geoschema_file = self.filesystem.path(bg.geoschemaFile)
         self.rangemap_file =  self.filesystem.path(bg.rangeMapFile)
         self.urls_file =  self.filesystem.path(bg.urlsFile)
@@ -48,18 +47,8 @@ class UsCensusBundle(BuildBundle):
       
         self.make_range_map()
 
-        if not self.schema.table('sf1geo'): # Do this only once for the database
-            from databundles.orm import Column
-            self.schema.schema_from_file(open(self.geoschema_file, 'rbU'))
+        self.create_split_table_schema()
     
-            # Add extra fields to all of the split_tables
-            for table in self.schema.tables:
-                if not table.data.get('split_table', False):
-                    continue;
-            
-                table.add_column('hash',  datatype=Column.DATATYPE_INTEGER,
-                                  uindexes = 'uihash')
-        
         self.generate_partitions()
         
         return True
@@ -84,11 +73,42 @@ class UsCensusBundle(BuildBundle):
 
         self.log("Making range map")
 
-        rangemap = self._make_range_map(self.schema.table)
+        range_map = {}
+        
+        segment = None
+       
+        for table in self.schema.tables:
+            
+            if segment != table.data['segment']:
+                last_col = 5
+         
+            segment = int(table.data['segment'])
+            
+            col_start = min(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
+            col_end = max(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
+        
+            if segment not in range_map:
+                range_map[segment] = {}
+        
+            range_map[segment][table.id_.encode('ascii', 'ignore')] = {
+                                'start':last_col + col_start,  
+                                'end':last_col + col_end+ 1, 
+                                'length': col_end-col_start + 1,
+                                'table' : table.name.encode('ascii', 'ignore')}
+            
+                         
+            #print "{:5s} {:4d} {:4d} {:4d} {:4d}".format(table.name,  int(segment), col_end-col_start + 1, 
+            #                                        last_col + col_start, last_col + col_end  )
+         
+            last_col += col_end
+            
+            self.ptick('.')
+         
 
-        yaml.dump(rangemap, file(self.rangemap_file, 'w'),indent=4, default_flow_style=False)  
- 
+    
+        self.ptick('\n')
 
+        yaml.dump(range_map, file(self.rangemap_file, 'w'),indent=4, default_flow_style=False)  
 
     def generate_partitions(self):
         from databundles.partition import PartitionIdentity
@@ -114,10 +134,6 @@ class UsCensusBundle(BuildBundle):
                 partition = self.partitions.new_partition(pid)
             else:
                 self.log("Already created partition, skipping "+table.name)
-
-        
-
-
         
         # First install the bundle main database into the library
         # so all of the tables will be there for installing the
@@ -130,10 +146,9 @@ class UsCensusBundle(BuildBundle):
         
         return True
 
-    
-
     def create_table_schema(self):
-        '''Return schema rows from the  columns.csv file'''
+        '''Uses the generate_schema_rows() generator to creeate rows for the fact table
+        The geo split table is created in '''
         import csv
         from databundles.orm import Column
         
@@ -156,8 +171,10 @@ class UsCensusBundle(BuildBundle):
                 
                 tick(".")
                 name = row['name']
+                row['data'] = {'segment':row['segment'], 'fact': True}
+                del row['segment']
                 del row['name']
-                t = self.schema.add_table(name, **row)
+                t = self.schema.add_table(name, **row )
 
                 # First 5 fields for every record      
                 # FILEID           Text (6),  uSF1, USF2, etc. 
@@ -171,7 +188,7 @@ class UsCensusBundle(BuildBundle):
                 for fk in self.geo_keys():
                     self.schema.add_column(t, fk,
                                            datatype=Column.DATATYPE_INTEGER, 
-                                           is_foreign_key =True)
+                                           is_foreign_key =True,)
               
             else:
 
@@ -183,10 +200,24 @@ class UsCensusBundle(BuildBundle):
                 self.schema.add_column(t, row['name'],
                             description=row['description'],
                             datatype=dt,
-                            data={'segment':row['segment'],'source_col':row['col_pos']+5})
+                            data={'segment':row['segment'],'source_col':row['col_pos']})
                 
         tick("\n")
 
+    def create_split_table_schema(self):
+        '''Create the split table schema from  the geoschema_filefile. '''
+
+        from databundles.orm import Column
+        self.schema.schema_from_file(open(self.geoschema_file, 'rbU'))
+
+        # Add extra fields to all of the split_tables
+        for table in self.schema.tables:
+            if not table.data.get('split_table', False):
+                continue;
+            
+            if not table.column('hash', False):
+                table.add_column('hash',  datatype=Column.DATATYPE_INTEGER,
+                                  uindexes = 'uihash')
 
     #############################################
     # Build
@@ -238,7 +269,6 @@ class UsCensusBundle(BuildBundle):
         
         self.log("Initializing state: "+state+' ')
     
-        urls = yaml.load(file(self.urls_file, 'r')) 
         geo_processors = self.geo_processors()
       
         geo_partitions = self.geo_partition_map()
@@ -252,8 +282,8 @@ class UsCensusBundle(BuildBundle):
             counts[table_id] = 1
         
          
-        for state, logrecno, geo, segments, geodim in self.generate_rows(state, urls ): #@UnusedVariable
-            
+        for state, logrecno, geo, segments, geodim in self.generate_rows(state): #@UnusedVariable
+           
             if row_i == 0:
                 self.log("Starting loop for state: "+state+' ')
                 t_start = time.time()
@@ -327,102 +357,19 @@ class UsCensusBundle(BuildBundle):
     # Generate rows from multiple files. 
     #############################################
     
-    def generate_seg_rows(self, seg_number, source):
-        '''Generate rows for a segment file. Call this generator with send(), 
-        passing in the lexpected logrecno. If the next row does not have that 
-        value, return a blank row until the logrecno values match. '''
-        import csv
-        next_logrecno = None
-        with self.filesystem.download(source) as zip_file:
-            with self.filesystem.unzip(zip_file) as rf:
-                for row in csv.reader(open(rf, 'rbU') ):
-                    # The next_logrec bit takes care of a differece in the
-                    # segment files -- the PCT tables to not have entries for
-                    # tracts, so there are gaps in the logrecno sequence for those files. 
-                    while next_logrecno is not None and next_logrecno != row[4]:
-                        next_logrecno = (yield seg_number,  [])
-             
-                    next_logrecno = (yield seg_number,  row)
-                 
-        return
-    
     def generate_geodim_rows(self, state):
         '''Generate the rows that were created to link the geo split files with the
         segment tables'''
         import csv
     
-        f = self.geo_dim_file(state)
-        with open(f, 'r') as f:
+        file_name = self.geo_dim_file(state)
+        with open(file_name, 'r') as f:
             r = csv.reader(f)
             r.next() # Skip the header row
             for row in r:
                 yield row
         
         return
-                     
-    def generate_rows(self, state, urls, geodim=False):
-        '''A Generator that yelds a tuple that has the logrecno row
-        for all of the segment files and the geo file. '''
-
-        table = self.schema.table('sf1geo')
-        header, regex, regex_str = table.get_fixed_regex() #@UnusedVariable
-         
-        geo_source = urls['geos'][state]
-      
-        gens = [self.generate_seg_rows(n,source) for n,source in urls['tables'][state].items() ]
-
-        geodim_gen = self.generate_geodim_rows(state) if geodim else None
-     
-        with self.filesystem.download(geo_source) as geo_zip_file:
-            with self.filesystem.unzip(geo_zip_file) as grf:
-                with open(grf, 'rbU') as geofile:
-                    first = True
-                    for line in geofile.readlines():
-                        
-                        m = regex.match(line)
-                         
-                        if not m:
-                            raise ValueError("Failed to match regex on line: "+line) 
-    
-                        segments = {}
-                        geo = m.groups()
-                        lrn = geo[6]
-                     
-                        
-                        for g in gens:
-                            try:
-                                seg_number,  row = g.send(None if first else lrn)
-                                segments[seg_number] = row
-                                # The logrecno must match up across all files, except
-                                # when ( in PCT tables ) there is no entry
-                                if len(row) > 5 and row[4] != lrn:
-                                    raise Exception("Logrecno mismatch for seg {} : {} != {}"
-                                                    .format(seg_number, row[4],lrn))
-                            except StopIteration:
-                                # Apparently, the StopIteration exception, raised in
-                                # a generator function, gets propagated all the way up, 
-                                # ending all higher level generators. thanks for nuthin. 
-                                break
-                    
-                        geodim = geodim_gen.next() if geodim_gen is not None else None
-
-                        if geodim and geodim[0] != lrn:
-                            raise Exception("Logrecno mismatch for geodim : {} != {}"
-                                                    .format(geodim[0],lrn))
-
-                        first = False
-
-                        yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
-
-                    # Check that there are no extra lines. 
-                    for g in gens:
-                        try:
-                            while g.next(): 
-                                raise Exception("Should not have extra items left")
-                        except StopIteration:
-                            pass
-        return
-        
 
     #############
     # Fact Table and Partition Acessors. 
@@ -504,22 +451,7 @@ class UsCensusBundle(BuildBundle):
             
         return processor_set
    
-    def geo_table_names(self):
-        return (['recno',
-                 'area',
-                 'block',
-                 'cons_city',
-                 'county',
-                 'leg_district',
-                 'metro_type',
-                 'place',
-                 'schools',
-                 'spec_area',
-                 'state', 
-                 'urban_type',     
-                 ]
-                )
- 
+
     def geo_tables(self):
         
         m = { t.name:t for t in self.schema.tables }

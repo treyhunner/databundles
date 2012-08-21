@@ -345,7 +345,7 @@ class Table(Base):
     
         return row
    
-    def column(self, name_or_id):
+    def column(self, name_or_id, default=None):
         from sqlalchemy.sql import or_
         import sqlalchemy.orm.session
         s = sqlalchemy.orm.session.Session.object_session(self)
@@ -355,7 +355,13 @@ class Table(Base):
                .filter(Column.t_id == self.id_)
             )
       
-        return  q.one()
+        if not default is None:
+            try:
+                return  q.one()
+            except:
+                return default
+        else:
+            return  q.one()
     
     def get_fixed_regex(self):
             '''Using the size values for the columsn for the table, construct a
@@ -377,6 +383,27 @@ class Table(Base):
                 header.append(col.name)
            
             return header, re.compile(regex) , regex 
+
+    def get_fixed_unpack(self):
+            '''Using the size values for the columsn for the table, construct a
+            regular expression to  parsing a fixed width file.'''
+        
+            unpack_str = ''
+            header = []
+            length = 0
+            
+            for col in  self.columns:
+                
+                if not col.width:
+                    continue
+                
+                length += col.width
+            
+                unpack_str += "{}s".format(col.width)
+                
+                header.append(col.name)
+           
+            return header, unpack_str, length
      
 event.listen(Table, 'before_insert', Table.before_insert)
 event.listen(Table, 'before_update', Table.before_update)

@@ -17,6 +17,20 @@ def coerce_int_except(v, msg):
         return int(v)
     except:
         raise ValueError("Bad value: '{}'; {} ".format(v,msg) )
+  
+def coerce_float(v):   
+    '''Convert to an float, or return if isn't an int'''
+    try:
+        return float(v)
+    except:
+        return v
+    
+def coerce_float_except(v, msg):   
+    '''Convert to an float, throw an exception if it isn't'''
+    try:
+        return float(v)
+    except:
+        raise ValueError("Bad value: '{}'; {} ".format(v,msg) )
                 
 class PassthroughTransform(object):
     '''
@@ -70,6 +84,10 @@ class BasicTransform(object):
             #f = lambda v: int(v)
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
+        if column.datatype == 'real':
+            #f = lambda v: int(v)
+            msg = column.name
+            f = lambda v, msg = msg: coerce_float_except(v, msg)
         else:
             f = lambda v: v
 
@@ -162,6 +180,9 @@ class CensusTransform(BasicTransform):
         if column.datatype == 'integer':
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
+        if column.datatype == 'real':
+            msg = column.name
+            f = lambda v, msg = msg: coerce_float_except(v, msg)
         else:
             f = lambda v: v
 
