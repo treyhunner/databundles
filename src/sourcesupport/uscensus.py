@@ -632,14 +632,14 @@ class UsCensusBundle(BuildBundle):
             th[values[-1]] = r
             values[0] = r
             tf = partition.database.tempfile(table)
-            tf.writer.writerow(values)
+            tf.appender.writerow(values)
             tf.file.flush()
         
         return r
     
     def write_fact_table(self, state, partition, table,  values):
         tf = partition.database.tempfile(table, suffix=state)
-        tf = tf.writer.writerow(values)
+        tf = tf.appender.writerow(values)
         
         
     

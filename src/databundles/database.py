@@ -52,16 +52,25 @@ class TempFile(object):
         self._reader = None
         
     @property
-    def writer(self, mode = 'w'):
+    def writer(self):
         if self._writer is None:
             import csv
             self.close()
+            
+            if self.exist:
+                mode = 'a+'
+            else:
+                mode = 'w'
+            
             self.file = open(self.path, mode)
             self._writer = csv.writer(self.file)
-            self._writer.writerow(self.header)
+            
+            if not self.exists:
+                self._writer.writerow(self.header)
             
         return self._writer
             
+  
     
     @property
     def reader(self, mode='r'):
@@ -295,7 +304,7 @@ class Database(object):
         
         lr = tempfile.linereader
         
-        column_names = lr.next()
+        column_names = lr.next() # Get the header line. 
        
         self.dbapi_cursor.execute('DELETE FROM {} '.format(table.name))
        
