@@ -632,17 +632,15 @@ class UsCensusBundle(BuildBundle):
             th[values[-1]] = r
             values[0] = r
             tf = partition.database.tempfile(table)
-            tf.appender.writerow(values)
+            tf.writer.writerow(values)
             tf.file.flush()
         
         return r
     
     def write_fact_table(self, state, partition, table,  values):
         tf = partition.database.tempfile(table, suffix=state)
-        tf = tf.appender.writerow(values)
-        
-        
-    
+        tf = tf.writer.writerow(values)
+
     def store_geo_splits(self):
         '''Copy all of the geo split CSV files -- the tempfiles -- into
         database partition and store them in the library '''
@@ -664,5 +662,4 @@ class UsCensusBundle(BuildBundle):
             db.tempfile(table).delete()
             
             partition.database.delete()
-   
 

@@ -57,7 +57,7 @@ class TempFile(object):
             import csv
             self.close()
             
-            if self.exist:
+            if self.exists:
                 mode = 'a+'
             else:
                 mode = 'w'
@@ -65,13 +65,12 @@ class TempFile(object):
             self.file = open(self.path, mode)
             self._writer = csv.writer(self.file)
             
-            if not self.exists:
+            if mode == 'w':
                 self._writer.writerow(self.header)
             
         return self._writer
             
   
-    
     @property
     def reader(self, mode='r'):
         if self._reader is None:
