@@ -172,12 +172,15 @@ class Us2000CensusBundle(UsCensusBundle):
                  
         return
                     
-    def generate_rows(self, state, urls, geodim=False):
+    def generate_rows(self, state, geodim=False):
         '''A Generator that yelds a tuple that has the logrecno row
         for all of the segment files and the geo file. '''
-
+        import struct
+        
         table = self.schema.table('sf1geo')
-        header, regex, regex_str = table.get_fixed_regex() #@UnusedVariable
+        header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
+         
+        urls = yaml.load(file(self.urls_file, 'r'))
          
         geo_source = urls['geos'][state]
       
@@ -190,14 +193,13 @@ class Us2000CensusBundle(UsCensusBundle):
                 with open(grf, 'rbU') as geofile:
                     first = True
                     for line in geofile.readlines():
-                        
-                        m = regex.match(line)
+                        geo = struct.unpack(unpack_str, line[:-1])
                          
-                        if not m:
+                        if not geo:
                             raise ValueError("Failed to match regex on line: "+line) 
     
                         segments = {}
-                        geo = m.groups()
+                      
                         lrn = geo[6]
                      
                         

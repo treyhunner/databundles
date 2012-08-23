@@ -105,6 +105,7 @@ class TempFile(object):
             self.file.flush()
             self.file.close()
             self.file = None
+            self._writer = None
        
            
 class Database(object):
@@ -227,9 +228,9 @@ class Database(object):
     def tempfile(self, table, header=None, suffix=None):
         
         if table.name not in self.tempfiles:
-            self.tempfiles[table.name] = TempFile(self.bundle, self, table, header=header, suffix=suffix)
+            self.tempfiles[table.name+'-'+str(suffix)] = TempFile(self.bundle, self, table, header=header, suffix=suffix)
 
-        return self.tempfiles[table.name]
+        return self.tempfiles[table.name+'-'+str(suffix)]
 
     @property
     def inspector(self):
@@ -291,11 +292,12 @@ class Database(object):
         
         conn.commit()
         
-    def load_tempfile(self, table):
+    def clean_table(self, table):
+        self.dbapi_cursor.execute('DELETE FROM {} '.format(table.name))
+        
+    def load_tempfile(self, tempfile):
         '''Load a tempfile into the database. Uses the header line of the temp file
         for the column names '''
-        tempfile = self.tempfile(table)
-        
         
         if not tempfile.exists:
             self.bundle.log("Tempfile already deleted. Skipping")
@@ -303,22 +305,37 @@ class Database(object):
         
         lr = tempfile.linereader
         
-        column_names = lr.next() # Get the header line. 
-       
-        self.dbapi_cursor.execute('DELETE FROM {} '.format(table.name))
+        try:
+            column_names = lr.next() # Get the header line. 
+        except Exception as e:
+            self.bundle.error("Failed to get header line from {} ".format(tempfile.path))
+            raise e
+ 
        
         ins =  ("""INSERT INTO {table} ({columns}) VALUES ({values})"""
                             .format(
-                                 table=table.name,
+                                 table=tempfile.table.name,
                                  columns =','.join(column_names),
                                  values = ','.join(['?' for c in column_names]) #@UnusedVariable
                             )
                          )
         
-        self.dbapi_cursor.executemany(ins, lr)
-        self.dbapi_connection.commit()
+        try:
+            # Corrects the rare case when there is non-unicode 8-bit chars, 
+            #probably in the name fields for a sub-barrio in Puerto Rico
+            self.dbapi_connection.text_factory = lambda x: unicode(x, "utf-8", "ignore")
+     
+            self.dbapi_cursor.executemany(ins, lr)
+            self.dbapi_connection.commit()
+        except Exception as e:
+            self.bundle.error("Failed to store tempfile "+tempfile.path)
+            self.bundle.error("Insert code "+ins)
+            self.dbapi_connection.rollback()
+
+            raise e
+            
         self.dbapi_close()
-        
+    
     def create(self):
         
         """Create the database from the base SQL"""

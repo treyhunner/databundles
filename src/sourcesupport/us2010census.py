@@ -71,7 +71,7 @@ class Us2010CensusBundle(UsCensusBundle):
         
         tick('\n')
    
-        return urls
+        return {'geos': urls}
     
     def read_packing_list(self):
         '''The packing list is a file, in every state extract directory, 
