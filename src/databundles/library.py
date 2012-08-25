@@ -402,6 +402,7 @@ class LocalLibrary(Library):
         if copy:
             shutil.copyfile(src,dst)
         
+      
         self.install_database(bundle)
         
         return dst
@@ -578,6 +579,7 @@ class LocalLibrary(Library):
                     except Exception as e:
                         print "ERROR: Failed to merge column"+str(column.id_)+":"+ str(e)
     
+        print "Done"
         s.commit()
         
     def rebuild(self):

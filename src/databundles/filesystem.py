@@ -98,7 +98,13 @@ class Filesystem(object):
         p = os.path.normpath(os.path.join(*args))    
         dir_ = os.path.dirname(p)
         if not os.path.exists(dir_):
-            os.makedirs(dir_)
+            try:
+                os.makedirs(dir_) # MUltiple process may try to make, so it could already exist
+            except Exception as e:
+                pass
+            
+            if not os.path.exists(dir_):
+                raise Exception("Couldn't create directory "+dir_)
 
         return p
 
@@ -226,7 +232,6 @@ class Filesystem(object):
         '''Context manager to download a file, return it for us, 
         and delete it when done'''
         import shutil
-        
 
         file_path = None
         try:    
@@ -236,7 +241,7 @@ class Filesystem(object):
             download_path = file_path+".download"
             
             cache = kwargs.get('cache',self.bundle.cache_downloads)
-            
+
             if os.path.exists(download_path):
                 os.remove(download_path)
             

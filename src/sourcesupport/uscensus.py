@@ -9,6 +9,8 @@ Base class bundle for the US Census
 from  databundles.bundle import BuildBundle
 import os.path  
 import yaml
+import threading
+
 
 
 class UsCensusBundle(BuildBundle):
@@ -30,6 +32,10 @@ class UsCensusBundle(BuildBundle):
         
         self._table_id_cache = {}
         self._table_iori_cache = {}
+        
+        self._urls_cache = None
+    
+        self._geo_dim_locks = {} 
     
     #####################################
     # Peparation
@@ -63,7 +69,7 @@ class UsCensusBundle(BuildBundle):
    
         yaml.dump(urls, file(self.urls_file, 'w'),indent=4, default_flow_style=False)
             
-        return yaml.load(file(self.urls_file, 'r')) 
+        return self.urls
 
     def make_range_map(self):
         
@@ -79,10 +85,9 @@ class UsCensusBundle(BuildBundle):
        
         for table in self.schema.tables:
             
-            if segment != table.data['segment']:
-                last_col = 5
-         
-            segment = int(table.data['segment'])
+            if segment != int(table.data['segment']):
+                last_col = 4
+                segment = int(table.data['segment'])
             
             col_start = min(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
             col_end = max(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
@@ -99,16 +104,18 @@ class UsCensusBundle(BuildBundle):
                          
             #print "{:5s} {:4d} {:4d} {:4d} {:4d}".format(table.name,  int(segment), col_end-col_start + 1, 
             #                                        last_col + col_start, last_col + col_end  )
+
+            #print range_map[segment][table.id_.encode('ascii', 'ignore')]
          
             last_col += col_end
             
             self.ptick('.')
-         
 
     
         self.ptick('\n')
 
         yaml.dump(range_map, file(self.rangemap_file, 'w'),indent=4, default_flow_style=False)  
+
 
     def generate_partitions(self):
         from databundles.partition import PartitionIdentity
@@ -230,30 +237,30 @@ class UsCensusBundle(BuildBundle):
     
         from multiprocessing import Pool
 
-        urls = yaml.load(file(self.urls_file, 'r')) 
 
-        if False:
-            # Split up the state geo files into .csv files, and 
-            # create the build/geodim files that will link logrecnos to
-            # geo split table records. 
-            self.run_state_geo()
-           
-            # Load the .csv fiels for the geo split tables into database partitions, 
-            # and load the partitions into the library. 
-            self.store_geo_splits()
-          
-            # Combine the geodim tables with the  state population tables, and
-            # produce .csv files for each of the tables. 
-            if self.run_args.multi and run_state_tables_f:
-                pool = Pool(processes=int(self.run_args.multi))
-          
-                result = pool.map_async(run_state_tables_f, enumerate(urls['geos'].keys()))
-                print result.get()
-            else:
-                for state in urls['geos'].keys():
-                    self.log("Building fact tables for {}".format(state))
-                    self.run_state_tables(state)
-          
+        # Split up the state geo files into .csv files, and 
+        # create the build/geodim files that will link logrecnos to
+        # geo split table records. 
+        self.run_geo_dim()
+       
+        # Load the .csv fiels for the geo split tables into database partitions, 
+        # and load the partitions into the library. 
+        self.store_geo_splits()
+      
+        # Combine the geodim tables with the  state population tables, and
+        # produce .csv files for each of the tables. 
+        if self.run_args.multi and run_state_tables_f:
+            pool = Pool(processes=int(self.run_args.multi))
+      
+            result = pool.map_async(run_state_tables_f, enumerate(self.urls['geos'].keys()))
+            print result.get()
+        else:
+            for state in self.urls['geos'].keys():
+                self.log("Building fact tables for {}".format(state))
+                self.run_state_tables(state)
+      
+        # Load all of the fact table tempfiles into the fact table databases
+        # and store the databases in the library. 
         if self.run_args.multi and run_fact_db_f:
             pool = Pool(processes=int(self.run_args.multi))
             
@@ -266,28 +273,34 @@ class UsCensusBundle(BuildBundle):
           
         return True
     
-    def run_state_geo(self):
+    def run_geo_dim(self):
         
         geo_processors = self.geo_processors()
         geo_partitions = self.geo_partition_map()
-        urls = yaml.load(file(self.urls_file, 'r')) 
-        
+    
+        for t in self.geo_tables():
+            self._geo_dim_locks[t.id_] = threading.RLock()
+    
         row_hash = {} #@RservedAssignment
         counts = {}
         for table_id, cp in geo_processors.items(): #@UnusedVariable
             row_hash[table_id] = {}
             counts[table_id] = 1
             
-        n = len(urls['geos'].keys())
+        n = len(self.urls['geos'].keys())
         i = 1
         
-        for state in urls['geos'].keys():
+        for state in self.urls['geos'].keys():
             self.log("Building Geo state for {}, {} of {}".format(state, i, n))
-            self._run_state_geo(state, row_hash, geo_processors, geo_partitions)
+            self._run_geo_dim(state, row_hash, geo_processors, geo_partitions)
             i = i + 1
+
+    def _run_geo_dim_chunk(self, states, row_hash, geo_processors, geo_partitions):
+        '''Thread process for running a set of states for geo dim splits ''' 
+        for state in states:
+            self._run_geo_dim(state, row_hash, geo_processors, geo_partitions)    
             
-            
-    def _run_state_geo(self, state, row_hash, geo_processors, geo_partitions):
+    def _run_geo_dim(self, state, row_hash, geo_processors, geo_partitions):
         '''Break up the geo files into seperate files, combine them 
         nationally, and store them in temporary CSV files. Creates a set of 
         files for each state, the geodim files, that link the state and logrecnos
@@ -320,6 +333,8 @@ class UsCensusBundle(BuildBundle):
              
             geo_keys = []
             
+            # Iterate over all of the geo dimentino tables, taking part of this
+            # geo rwo and putting it into the temp file for that geo dim table. 
             for table_id, cp in geo_processors.items():
                 table, columns, processors = cp
             
@@ -327,10 +342,13 @@ class UsCensusBundle(BuildBundle):
                 values[-1] = self.row_hash(values)
                       
                 partition = geo_partitions[table_id]
+           
                 r = self.write_geo_row(row_hash, partition, table, columns, values)
  
                 geo_keys.append(r)    
                 
+            # Write a row in the ge_dim file for the state that maps the 
+            # logrecno to the key values we discovered for each of the geo dim tables
             geo_dim_writer.writerow([logrecno] + geo_keys)
             gd_file.flush()     
         
@@ -345,12 +363,19 @@ class UsCensusBundle(BuildBundle):
        
         range_map = yaml.load(file(self.rangemap_file, 'r')) 
         
-        # Market to note when the file is done. 
+        # Marker to note when the file is done. 
         marker_f = self.filesystem.build_path('markers',state+"_fact_table")
         
         if os.path.exists(marker_f):
             self.log("state table complete for {}, skipping ".format(state))
             return
+        else:
+            # If it isn't done, remove it if it exists. 
+            for partition in fact_partitions.values():
+                tf = partition.database.tempfile(partition.table, suffix=state)
+                if tf.exists:
+                    self.log("Cleaning up old Tempfile: {}".format(tf.path))
+                    tf.delete()
         
         row_i = 0
         
@@ -365,22 +390,42 @@ class UsCensusBundle(BuildBundle):
                 # Prints a number representing the processing rate, 
                 # in 1,000 records per sec.
                 self.log(state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
-
+       
             for seg_number, segment in segments.items():
                 for table_id, range in range_map[seg_number].iteritems(): #@ReservedAssignment
-                    seg = segment[range['start']:range['end']]
+                    
                     table = self.get_table_by_table_id(table_id)
-                    if len(seg) > 0:    
+                    #print segment
+                    #print seg_number, table.name, range
+                    if not segment:
+                        #Some segments have fewer lines than others. 
+                        #self.error("Failed to get segment data for {}".format(seg_number))
+                        continue
+                    
+                    seg = segment[range['start']:range['end']]
+                    
+                    if seg and len(seg) > 0:    
                         # The values can be null for the PCT tables, which don't 
                         # exist for some summary levels.       
                         values =  geo_keys[1:] + seg # Remove the logrec from the geo_key                                   
                         partition = fact_partitions[table_id]
-                        self.write_fact_table(state, partition, table, values)
+                        
+                        if not self.write_fact_table(state, partition, table, values):
+                            tf = partition.database.tempfile(table, suffix=state)
+                            print '------------'
+                            print segment, state, logrecno
+                            print len(tf.header), table.name, tf.header
+                            print len(values), values
+                            print seg_number, range
 
-            for seg_number, segment in segments.items():
-                for table_id, range in range_map[seg_number].iteritems(): #@ReservedAssignment
-                    table = self.get_table_by_table_id(table_id)
-                    tf = partition.database.tempfile(table, suffix=state)
+                    else:
+                        self.log("{} {} Seg {}, table {}  is empty".format(state, logrecno,  seg_number, table_id))
+
+        for partition in fact_partitions.values():
+            for tf in partition.database.tempfiles.values():
+                #print "EXAMINE ", tf.suffix, state,  tf.path
+                if tf.suffix == state:
+                    #self.log("CLOSING! "+tf.path)
                     tf.close()
 
         with open(marker_f, 'w') as f:
@@ -390,9 +435,7 @@ class UsCensusBundle(BuildBundle):
         '''Load the fact table for a single table into a database and
         put it in the library. Copies all of the temp files for the state
         into the database. '''
-        
-        urls = yaml.load(file(self.urls_file, 'r')) 
-        
+   
         try:
             table = self.schema.table(table_id)
         except:
@@ -401,7 +444,7 @@ class UsCensusBundle(BuildBundle):
         
         partition = self.fact_partition(table, True)
         
-        if self.library.get(partition):
+        if self.library.get(partition) and not self.run_args.test:
             self.log("Found in fact table bundle library, skipping.: "+table.name)
             return
         
@@ -409,7 +452,7 @@ class UsCensusBundle(BuildBundle):
         
         db.clean_table(table) # In case we are restarting this run
         
-        for state in urls['geos'].keys():
+        for state in self.urls['geos'].keys():
             tf = partition.database.tempfile(table, suffix=state)
         
             if not tf.exists:
@@ -426,12 +469,12 @@ class UsCensusBundle(BuildBundle):
 
         partition.database.delete()
         
-        for state in urls['geos'].keys():
+        for state in self.urls['geos'].keys():
             tf = partition.database.tempfile(table, suffix=state)
             tf.delete()
 
     #############################################
-    # Generate rows from multiple files. 
+    # Generate rows from multiple files?
     #############################################
     
     def generate_geodim_rows(self, state):
@@ -570,15 +613,18 @@ class UsCensusBundle(BuildBundle):
             partition.create_with_tables(table.name)
             
             # Ensure that the first record is the one with all of the null values
-            vals = [c.default for c in table.columns]
-            vals[-1] = self.row_hash(vals)
-            vals[0] = 0;
-            
-            ins = insert_or_ignore(table.name, table.columns)
-            db = partition.database
-            db.dbapi_cursor.execute(ins, vals)
-            db.dbapi_connection.commit()
-            db.dbapi_close()
+            if False:
+                # Having toubles with this causing duplicate hashes
+                pass
+                vals = [c.default for c in table.columns]
+                vals[-1] = self.row_hash(vals)
+                vals[0] = 0;
+                
+                ins = insert_or_ignore(table.name, table.columns)
+                db = partition.database
+                db.dbapi_cursor.execute(ins, vals)
+                db.dbapi_connection.commit()
+                db.dbapi_close()
             
         return partition
    
@@ -599,6 +645,22 @@ class UsCensusBundle(BuildBundle):
             self._table_id_cache[table_id] = t
 
         return t
+    
+    @property
+    def urls(self):
+
+        if self._urls_cache is None:
+            self._urls_cache =  yaml.load(file(self.urls_file, 'r')) 
+            
+            # In test mode, we only use the first state, to make
+            # things run faster. 
+            if self.run_args.test:
+                x = self._urls_cache['geos'].iteritems().next()
+                self._urls_cache['geos'] = dict([x])
+ 
+        return self._urls_cache
+        
+    
         
     #############
     # Writing Results to Disk        
@@ -610,7 +672,8 @@ class UsCensusBundle(BuildBundle):
         m = hashlib.md5()
         for x in values[1:]:  # The first record is the primary key
             m.update(str(x))   
-        hash = int(m.hexdigest()[:15], 16) # First 8 hex digits = 32 bit @ReservedAssignment
+        # Less than 16 to avoid integer overflow issues. Not sure it works. 
+        hash = int(m.hexdigest()[:14], 16) # First 8 hex digits = 32 bit @ReservedAssignment
      
         return hash
           
@@ -631,24 +694,38 @@ class UsCensusBundle(BuildBundle):
 
     def write_geo_row(self, hash, partition, table, columns,values): #@ReservedAssignment
         '''Write a geo split table row to the temporary file, but only
-        if the hash for the row has never been seen. '''
-        th = hash[table.id_]
-                
-        if values[-1] in th:
-            return th[values[-1]]
-        else:                   
-            r = len(th)+1
-            th[values[-1]] = r
-            values[0] = r
-            tf = partition.database.tempfile(table)
-            tf.writer.writerow(values)
-            tf.file.flush()
+        if the hash for the row has never been seen. 
         
-        return r
+        This operation is wrapped in a lock to protect both the hash and file
+        '''
+        
+        with self._geo_dim_locks[table.id_]:
+        
+            th = hash[table.id_]
+                    
+            if values[-1] in th:
+                return th[values[-1]]
+            else:                   
+                r = len(th)+1
+                th[values[-1]] = r
+                values[0] = r
+                tf = partition.database.tempfile(table)
+                tf.writer.writerow(values)
+                tf.file.flush()
+            
+            return r
     
     def write_fact_table(self, state, partition, table,  values):
         tf = partition.database.tempfile(table, suffix=state)
+        ok = True
+        
+        if True: # For testing. 
+            if len(values) != len(tf.header):
+                ok = False
+                
         tf = tf.writer.writerow(values)
+        
+        return ok
 
     def store_geo_splits(self):
         '''Copy all of the geo split CSV files -- the tempfiles -- into
@@ -657,7 +734,7 @@ class UsCensusBundle(BuildBundle):
         for table in self.geo_tables():
             partition = self.geo_partition(table)
             
-            if self.library.get(partition):
+            if self.library.get(partition)  and not self.run_args.test:
                 self.log("Found in bundle library, skipping. "+partition.identity.name)
                 continue
             

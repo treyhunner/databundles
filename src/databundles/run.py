@@ -5,29 +5,7 @@ Created on Jun 10, 2012
 '''
 
 
-def get_args(argv):
-    import argparse
-    
-    parser = argparse.ArgumentParser(prog='python bundle.py',
-                                     description='Run the bunble build process')
-    
-    parser.add_argument('phases', metavar='N', type=str, nargs='*',
-                   help='Build phases to run')
-    
-    parser.add_argument('-r','--reset',  default=False, action="store_true",  
-                        help='')
-    
-    parser.add_argument('-b','--build_opt', action='append', help='Set options for the build phase')
-    
-    parser.add_argument('-m','--multi', default=False, action="store", 
-                        help='Run the build process on multiple processors')
 
-    args = parser.parse_args()
-    
-    if args.build_opt is None:
-        args.build_opt = []
-        
-    return args
     
 
 import yaml
@@ -130,21 +108,23 @@ class RunConfig(object):
 
 def run(argv, bundle_class):
    
-    args = get_args(argv) #@UnusedVariable
-
-    if len(args.phases) ==  0 or (len(args.phases) == 1 and args.phases[0] == 'all'):    
-        phases = ['prepare','build', 'install']
-    else:
-        phases = args.phases
-
+  
     b = bundle_class()
-    b.run_args = args
+    args = b.parse_args(argv)
+   
+    if args.test:
+        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        print "!!!!!! In Test Mode !!!!!!!!!!"
+        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        import time
+        time.sleep(1)
+        
+        
 
-
-    if 'clean' in phases:
+    if 'clean' in args.phases:
         b.clean()
         
-    if 'prepare' in phases:
+    if 'prepare' in args.phases:
         if b.pre_prepare():
             b.log("---- Preparing ----")
             if b.prepare():
@@ -158,7 +138,15 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping prepare ---- ") 
         
-    if 'build' in phases:
+    if 'build' in args.phases:
+        
+        if b.run_args.test:
+            print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            print "!!!!!! In Test Mode !!!!!!!!!!"
+            print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            import time
+            time.sleep(1)
+            
         if b.pre_build():
             b.log("---- Build ---")
             if b.build():
@@ -172,7 +160,7 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Build ---- ") 
     
-    if 'install' in phases:
+    if 'install' in args.phases:
         if b.pre_install():
             b.log("---- Install ---")
             if b.install():
@@ -185,7 +173,7 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Install ---- ")      
      
-    if 'submit' in phases:
+    if 'submit' in args.phases:
         if b.pre_submit():
             b.log("---- Submit ---")
             if b.submit():
@@ -198,7 +186,7 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Submit ---- ")            
                 
-    if 'test' in phases:
+    if 'test' in args.phases:
         import nose
 
         dir = b.filesystem.path('test') #@ReservedAssignment

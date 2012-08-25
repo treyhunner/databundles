@@ -81,11 +81,9 @@ class Us2010CensusBundle(UsCensusBundle):
     
         # Descend into the first extract directory. The part of the packing list
         # we need is the same for every state. 
-        
-        urls = yaml.load(file(self.urls_file, 'r'))
-        
+      
         pack_list = None
-        for state, url in urls.items(): #@UnusedVariable
+        for state, url in self.urls['geos'].items(): #@UnusedVariable
             with self.filesystem.download(url) as state_file:
                 with self.filesystem.unzip_dir(state_file) as files:
                     for f in files:
@@ -129,7 +127,8 @@ class Us2010CensusBundle(UsCensusBundle):
                     table = {'type': 'table', 
                              'name':row['TABLE NUMBER'],
                              'description':row['FIELD NAME'],
-                             'segment':row['SEGMENT']
+                             'segment':row['SEGMENT'],
+                             'data':  {'segment':row['SEGMENT'], 'fact':True}
                              }
             else:
                 
@@ -137,7 +136,6 @@ class Us2010CensusBundle(UsCensusBundle):
                 # but the segment id is not included on the same lines ast the
                 # table name. 
                 if table:
-                    table['data'] = {'segment':row['SEGMENT'], 'fact':True}
                     yield table
                     table  = None
                     
@@ -176,16 +174,15 @@ class Us2010CensusBundle(UsCensusBundle):
         import struct
         import re
         
-        urls = yaml.load(file(self.urls_file, 'r'))
-        
         table = self.schema.table('sf1geo2010')
         header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
          
-        source_url = urls[state]
+        source_url = self.urls['geos'][state]
       
         geodim_gen = self.generate_geodim_rows(state) if geodim else None
       
         with self.filesystem.download(source_url) as state_file:
+    
             segment_files = {}
             geo_file_path = None
             gens = []
@@ -196,53 +193,59 @@ class Us2010CensusBundle(UsCensusBundle):
                     if g1:
                         segment = int(g1.group(2))
                         segment_files[segment] = f 
-                        gens.append(self.generate_seg_rows(segment,f))
+                        gens.append( (segment, self.generate_seg_rows(segment,f)) )
                     elif g2:
                         geo_file_path = f
-                
+            
                 with open(geo_file_path, 'rbU') as geofile:
                     first = True
                     
                     for line in geofile.readlines():
                         geo = struct.unpack(unpack_str, line[:-1])
-                       
+                    
                         if not geo:
                             raise ValueError("Failed to match regex on line: "+line) 
     
                         segments = {}
                        
-                        lrn = geo[6]
+                        logrecno = geo[6]
                           
-                        for g in gens:
+                        for seg_number, g in gens:
                             try:
-                                seg_number,  row = g.send(None if first else lrn)
+                                seg_number,  row = g.send(None if first else logrecno)
                                 segments[seg_number] = row
                                 # The logrecno must match up across all files, except
                                 # when ( in PCT tables ) there is no entry
-                                if len(row) > 5 and row[4] != lrn:
+                                if len(row) > 5 and row[4] != logrecno:
                                     raise Exception("Logrecno mismatch for seg {} : {} != {}"
-                                                    .format(seg_number, row[4],lrn))
+                                                    .format(seg_number, row[4],logrecno))
                             except StopIteration:
                                 # Apparently, the StopIteration exception, raised in
                                 # a generator function, gets propagated all the way up, 
                                 # ending all higher level generators. thanks for nuthin. 
-                                break
+                                
+                                #self.error("Breaking iteration for "+str(seg_number))
+                                segments[seg_number] = None
                     
                         geodim = geodim_gen.next() if geodim_gen is not None else None
 
-                        if geodim and geodim[0] != lrn:
+                        if geodim and geodim[0] != logrecno:
                             raise Exception("Logrecno mismatch for geodim : {} != {}"
-                                                    .format(geodim[0],lrn))
+                                                    .format(geodim[0],logrecno))
 
                         first = False
-
-                        yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
+                        
+                        yield state, logrecno, dict(zip(header,geo)), segments, geodim
 
                     # Check that there are no extra lines. 
-                    for g in gens:
+                    for seg_number, g in gens:
                         try:
-                            while g.next(): 
-                                raise Exception("Should not have extra items left")
+                            n = 0;
+                            for row in g:
+                                print row
+                                n = n + 1
+                            if n > 0:
+                                raise Exception("Should not have extra items left. got {} ".format(str(n)))
                         except StopIteration:
                             pass                 
 

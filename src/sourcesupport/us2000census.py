@@ -86,25 +86,6 @@ class Us2000CensusBundle(UsCensusBundle):
                             tables[state][segment] = final_url
         
         return {'tables':tables,'geos':geos}
-    
-    def _make_segment_map(self):
-        
-        import csv
-       
-        seg_map = {}
-        for row in csv.DictReader(open(self.headers_file, 'rbU') ):
-            if row['SEG'] and row['TABLE']:
-                seg = int(row['SEG'])
-                table = row['TABLE'].strip().lower()
-                
-                if not seg in seg_map:
-                    seg_map[seg] = []
-                    
-                # Want YAML to serialize a list, not a set. 
-                if table not in seg_map[seg]:
-                    seg_map[seg].append(table)
-                
-        return seg_map
 
     def generate_schema_rows(self):
         '''This generator yields schema rows from the schema defineition
@@ -140,6 +121,7 @@ class Us2000CensusBundle(UsCensusBundle):
                 if table:
                     # This is yielded  here so we can get the segment number. 
                     table['segment'] = row['SEG'] 
+                    table['data'] = {'segment':row['SEG'], 'fact':True}
                     yield table
                     table  = None
                     
@@ -180,11 +162,9 @@ class Us2000CensusBundle(UsCensusBundle):
         table = self.schema.table('sf1geo')
         header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
          
-        urls = yaml.load(file(self.urls_file, 'r'))
-         
-        geo_source = urls['geos'][state]
+        geo_source = self.urls['geos'][state]
       
-        gens = [self.generate_seg_rows(n,source) for n,source in urls['tables'][state].items() ]
+        gens = [self.generate_seg_rows(n,source) for n,source in self.urls['tables'][state].items() ]
 
         geodim_gen = self.generate_geodim_rows(state) if geodim else None
      

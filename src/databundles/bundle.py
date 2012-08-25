@@ -123,6 +123,49 @@ class BuildBundle(Bundle):
         self.cache_downloads = self.config.library.downloads is not None
     
 
+    def parse_args(self,argv):
+        import argparse
+        
+        parser = argparse.ArgumentParser(prog='python bundle.py',
+                                         description='Run the bunble build process')
+        
+        parser.add_argument('phases', metavar='N', type=str, nargs='*',
+                       help='Build phases to run')
+        
+        parser.add_argument('-r','--reset',  default=False, action="store_true",  
+                            help='')
+        
+        parser.add_argument('-t','--test',  default=False, action="store",  
+                            nargs='?', type = int, help='Enable bundle-specific test behaviour')
+    
+        
+        parser.add_argument('-b','--build_opt', action='append', help='Set options for the build phase')
+        
+        parser.add_argument('-m','--multi', default=False, action="store",  
+                            nargs='?', type = int, help='Run the build process on multiple processors')
+    
+        args = parser.parse_args()
+        
+        if args.build_opt is None:
+            args.build_opt = []
+            
+        
+        if len(args.phases) ==  0 or (len(args.phases) == 1 and args.phases[0] == 'all'):    
+            args.phases = ['prepare','build', 'install']
+      
+            self.run_args = args
+            
+        if args.test is None: # If not specified, is False. If specified with not value, is None
+            args.test = 1
+            
+         
+        if args.multi is None: # If not specified, is False. If specified with not value, is None
+            import multiprocessing
+            args.multi = multiprocessing.cpu_count()
+     
+            
+        return args
+
     @property
     def database(self):
         

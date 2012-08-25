@@ -33,6 +33,7 @@ class TempFile(object):
         self.db = db 
         self.table = table
         self.file = None
+        self.suffix = suffix
         
         if header is None:
             header = [ c.name for c in table.columns ]
@@ -92,6 +93,7 @@ class TempFile(object):
         return self._path
     
     
+    
     @property
     def exists(self):
         return os.path.exists(self.path)
@@ -106,6 +108,11 @@ class TempFile(object):
             self.file.close()
             self.file = None
             self._writer = None
+            
+            hk = self.table.name+'-'+str(self.suffix)
+            if hk in self.db.tempfiles:
+                del self.db.tempfiles[hk]
+            
        
            
 class Database(object):
@@ -227,10 +234,13 @@ class Database(object):
         
     def tempfile(self, table, header=None, suffix=None):
         
-        if table.name not in self.tempfiles:
-            self.tempfiles[table.name+'-'+str(suffix)] = TempFile(self.bundle, self, table, header=header, suffix=suffix)
+        hk = table.name+'-'+str(suffix)
+        
+        if hk not in self.tempfiles:
+            self.tempfiles[hk] = TempFile(self.bundle, self, table, header=header, suffix=suffix)
+      
+        return self.tempfiles[hk]
 
-        return self.tempfiles[table.name+'-'+str(suffix)]
 
     @property
     def inspector(self):
@@ -324,9 +334,16 @@ class Database(object):
             # Corrects the rare case when there is non-unicode 8-bit chars, 
             #probably in the name fields for a sub-barrio in Puerto Rico
             self.dbapi_connection.text_factory = lambda x: unicode(x, "utf-8", "ignore")
-     
-            self.dbapi_cursor.executemany(ins, lr)
-            self.dbapi_connection.commit()
+            
+            if False: # For debugging some hash conflicts
+                for row in lr:
+                    print 'ROW', row
+                    self.dbapi_cursor.execute(ins, row)
+                    self.dbapi_connection.commit()
+            else:
+                self.dbapi_cursor.executemany(ins, lr)
+                self.dbapi_connection.commit()
+                
         except Exception as e:
             self.bundle.error("Failed to store tempfile "+tempfile.path)
             self.bundle.error("Insert code "+ins)
