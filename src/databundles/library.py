@@ -15,19 +15,23 @@ from databundles.exceptions import ResultCountError, ConfigurationError
 library = None
 
 
-def get_library():
+def get_library(config=None):
     ''' Returns LocalLIbrary singleton'''
     global library
     if library is None:
-        library =  LocalLibrary()
+        library =  LocalLibrary(config=config)
         
     return library
 
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
-    
+    from collections import namedtuple
+    Dbci = namedtuple('Dbc', 'dsn sql') #Database connection information 
    
-    PROTO_SQL_FILE = 'support/configuration-pg.sql' # Stored in the databundles module. 
+    DBCI = {
+            'postgres':Dbci(dsn='postgresql+psycopg2://{user}:{password}@{server}/{name}',sql='support/configuration-pg.sql'), # Stored in the databundles module. 
+            'sqlite':Dbci(dsn='sqlite:///{name}',sql='support/configuration.sql')
+            }
     
     def __init__(self, driver=None, server=None, dbname = None, username=None, password=None):
         self.driver = driver
@@ -35,6 +39,9 @@ class LibraryDb(object):
         self.dbname = dbname
         self.username = username
         self.password = password
+        
+        self.dsn = self.DBCI[self.driver].dsn
+        self.sql = self.DBCI[self.driver].sql
         
         self._session = None
         self._engine = None
@@ -46,10 +53,15 @@ class LibraryDb(object):
         from sqlalchemy import create_engine  
         
         if not self._engine:
-            self._engine = create_engine(
-                     'postgresql+psycopg2://{}:{}@{}/{}'
-                     .format(self.username, self.password, self.server, self.dbname),
-                     echo=False) 
+          
+            dsn = self.dsn.format(user=self.username, password=self.password, 
+                            server=self.server, name=self.dbname)
+ 
+            self._engine = create_engine(dsn, echo=False) 
+            
+            from sqlalchemy import event
+            event.listen(self._engine, 'connect', _pragma_on_connect)
+            
             
         return self._engine
 
@@ -84,7 +96,14 @@ class LibraryDb(object):
         self.session.commit()     
         
     def exists(self):
+        
         self.engine
+        
+        if self.driver == 'sqlite':
+            return os.path.exists( self.dbname)
+        else :
+            return True; # Don't know how to check for a postgres database. 
+        
     
     def clean(self):
         s = self.session
@@ -111,7 +130,8 @@ class LibraryDb(object):
                 # Not sure where to find pkg_resources, so this will probably
                 # fail. 
                 from pkg_resources import resource_string #@UnresolvedImport
-                script_str = resource_string(databundles.__name__, self.PROTO_SQL_FILE)
+                
+                script_str = resource_string(databundles.__name__, self.sql)
             
             self.load_sql(script_str)
             
@@ -133,31 +153,52 @@ class LibraryDb(object):
 
         
     
-    def load_sql(self, sql_file):
+    def load_sql(self, sql_text):
         
         #conn = self.engine.connect()
         #conn.close()
         
-        import psycopg2
-        dsn = ("host={} dbname={} user={} password={} "
-                .format(self.server, self.dbname, self.username, self.password))
-       
-        conn = psycopg2.connect(dsn)
-        procedures  = open(sql_file,'r').read() 
-        cur = conn.cursor()
-      
-        cur.execute('DROP TABLE IF EXISTS columns')
-        cur.execute('DROP TABLE IF EXISTS partitions')
-        cur.execute('DROP TABLE IF EXISTS tables')
-        cur.execute('DROP TABLE IF EXISTS config')
-        cur.execute('DROP TABLE IF EXISTS datasets')
-        cur.execute('DROP TABLE IF EXISTS files')
+        if self.driver == 'postgres':
+            import psycopg2
+            dsn = ("host={} dbname={} user={} password={} "
+                    .format(self.server, self.dbname, self.username, self.password))
+           
+            conn = psycopg2.connect(dsn)
+         
+            cur = conn.cursor()
+          
+            cur.execute('DROP TABLE IF EXISTS columns')
+            cur.execute('DROP TABLE IF EXISTS partitions')
+            cur.execute('DROP TABLE IF EXISTS tables')
+            cur.execute('DROP TABLE IF EXISTS config')
+            cur.execute('DROP TABLE IF EXISTS datasets')
+            cur.execute('DROP TABLE IF EXISTS files')
+            
+            cur.execute("COMMIT")
+            cur.execute(sql_text) 
+            cur.execute("COMMIT")
+            
+            conn.close()
+        elif self.driver == 'sqlite':
+            
+            import sqlite3
+            conn = sqlite3.connect( self.dbname)
+          
+           
+            conn.execute('DROP TABLE IF EXISTS columns')
+            conn.execute('DROP TABLE IF EXISTS partitions')
+            conn.execute('DROP TABLE IF EXISTS tables')
+            conn.execute('DROP TABLE IF EXISTS config')
+            conn.execute('DROP TABLE IF EXISTS datasets')
+            conn.execute('DROP TABLE IF EXISTS files')
+            
+            conn.commit()
+            conn.executescript(sql_text)  
         
-        cur.execute("COMMIT")
-        cur.execute(procedures) 
-        cur.execute("COMMIT")
-        
-        conn.close()
+            conn.commit()
+
+        else:
+            raise RuntimeError("Unknown database driver: {} ".format(self.driver))
         
   
         
@@ -344,7 +385,7 @@ class LocalLibrary(Library):
     classdocs
     '''
 
-    def __init__(self, directory=None, **kwargs):
+    def __init__(self, directory=None,config=None):
         '''
         Libraries are constructed on the root directory name for the library. 
         If the directory does not exist, it will be created. 
@@ -353,7 +394,9 @@ class LocalLibrary(Library):
             self.directory = directory
         else:
             # Try to get the library directory name from the 
-            self.config = kwargs.get('config',RunConfig())
+            
+            self.config = config if config is not None else RunConfig()
+       
             self.directory = self.config.group('library').get('root',None)
             
         if not os.path.exists(self.directory):
@@ -362,10 +405,9 @@ class LocalLibrary(Library):
         if not self.directory:
             raise ConfigurationError("Must specify a root directory for the library in bundles.yaml")
 
-        self._named_bundles = kwargs.get('named_bundles', None)
-
         self._database = None
 
+        
 
     @property
     def root(self):
@@ -402,7 +444,6 @@ class LocalLibrary(Library):
         if copy:
             shutil.copyfile(src,dst)
         
-      
         self.install_database(bundle)
         
         return dst
@@ -517,16 +558,26 @@ class LocalLibrary(Library):
         if self._database is None:
             config = self.config.library.database
      
+          
             self._database = LibraryDb(**config)
+            
+            self._database.create() # creates if does not exist. 
             
         return self._database
   
     @property
-    def datasets(self):
+    def dataset_ids(self):
         '''Return an array of all of the dataset identities in the library'''
         from databundles.orm import Dataset
        
         return [d.identity for d in self.database.session.query(Dataset).all()]
+
+    @property
+    def datasets(self):
+        '''Return an array of all of the dataset records in the library database'''
+        from databundles.orm import Dataset
+       
+        return [d for d in self.database.session.query(Dataset).all()]
 
   
     def install_database(self, bundle):
@@ -579,7 +630,6 @@ class LocalLibrary(Library):
                     except Exception as e:
                         print "ERROR: Failed to merge column"+str(column.id_)+":"+ str(e)
     
-        print "Done"
         s.commit()
         
     def rebuild(self):
@@ -617,7 +667,7 @@ class LocalLibrary(Library):
     def remove_database(self, bundle):
         '''remove a bundle from the database'''
         
-        from databundles.orm import Dataset, Partition
+        from databundles.orm import Dataset, Partition, Table, Column
         import sqlalchemy.orm.exc
         from sqlalchemy.sql import or_
         
@@ -627,15 +677,16 @@ class LocalLibrary(Library):
         
         if not b:
             return False
-        
-        s.query(Dataset).filter(Dataset.id_==b.identity.id_).delete()
-        
-        s.commit()
-     
-        s.query(Partition).filter(Partition.id_==b.identity.id_).delete()
-        
-        s.commit()
 
+        
+        dataset = s.query(Dataset).filter(Dataset.id_==b.identity.id_).one()
+
+        # Can't use delete() on the query -- bulk delete queries do not 
+        # trigger in-ython cascades!
+        s.delete(dataset)
+  
+        s.commit()
+        
      
     def find(self, query_command):
         from databundles.orm import Dataset
@@ -805,6 +856,16 @@ class RemoteLibrary(Library):
     '''A remote library has its files stored on a remote server.  This class 
     will download and cache the library databse file, keeping it up to date
     when it changes. '''
+
+def _pragma_on_connect(dbapi_con, con_record):
+    '''ISSUE some Sqlite pragmas when the connection is created'''
+    dbapi_con.execute('PRAGMA foreign_keys = ON;')
+    return # Not clear that there is a performance improvement. 
+    dbapi_con.execute('PRAGMA journal_mode = MEMORY')
+    dbapi_con.execute('PRAGMA synchronous = OFF')
+    dbapi_con.execute('PRAGMA temp_store = MEMORY')
+    dbapi_con.execute('PRAGMA cache_size = 500000')
+    dbapi_con.execute('pragma foreign_keys=ON')
 
     
     

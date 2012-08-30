@@ -19,7 +19,7 @@ class Us2010CensusBundle(UsCensusBundle):
         self._table_iori_cache = {}
         
 
-    def _scrape_urls(self, rootUrl, states_file):
+    def _scrape_urls(self, rootUrl, states_file,  suffix='_uf1'):
         '''Extract all of the URLS from the Census website and store them. 
         Unline the Us2000 version, this one lists one file per state'''
         import urllib
@@ -154,9 +154,10 @@ class Us2010CensusBundle(UsCensusBundle):
         '''Generate rows for a segment file. Call this generator with send(), 
         passing in the lexpected logrecno. If the next row does not have that 
         value, return a blank row until the logrecno values match. '''
-        import csv
+        import csv #, cStringIO
         next_logrecno = None
         with open(source, 'rbU') as f:
+            #b = cStringIO.StringIO(f.read()) # Read whole file into memory
             for row in csv.reader( f ):
                 # The next_logrec bit takes care of a differece in the
                 # segment files -- the PCT tables to not have entries for
@@ -168,19 +169,90 @@ class Us2010CensusBundle(UsCensusBundle):
                  
         return
     
+    def merge_strings(self,first, overlay):
+        '''return a new buffer that loads the first string, then loverlays the second'''
+    
+        if len(overlay) > len(first):
+            raise ValueError("Overlay can't be longer then string")
+
+        o = bytearray(first) 
+        for i in range(len(overlay)):
+            o[i] = overlay[i]
+            
+        return str(o)
+    
+    def _generate_row(self, first, gens, geodim_gen,  geo_file_path, gln, unpack_str, line, last_line):
+        
+        import struct 
+        
+        try:
+            geo = struct.unpack(unpack_str, line[:-1])
+        except Exception as e:
+            self.error("Failed to unpack geo line from line {} of {}".format(gln, geo_file_path))
+            self.error("Unpack_str: "+unpack_str)
+            self.error("Line: "+line[:-1])
+            self.error("Line Length "+str(len(line[:-1])))
+            
+            # There are a few GEO files that have problems, like the
+            # Colorado file. This is a total Hack to fix them. 
+            
+            if not last_line:
+                raise e
+            
+            # Copy the last line ( which presumably worked OK,with 
+            # the shorter current line. The missing fields will "peek through"
+            # to make the line the right length
+            line = self.merge_strings(last_line, line)
+            
+            geo = struct.unpack(unpack_str, line[:-1])
+        
+        last_line = line
+        
+        if not geo:
+            raise ValueError("Failed to match regex on line: "+line) 
+    
+        segments = {}
+       
+        logrecno = geo[6]
+          
+        for seg_number, g in gens:
+            try:
+                seg_number,  row = g.send(None if first else logrecno)
+                segments[seg_number] = row
+                # The logrecno must match up across all files, except
+                # when ( in PCT tables ) there is no entry
+                if len(row) > 5 and row[4] != logrecno:
+                    raise Exception("Logrecno mismatch for seg {} : {} != {}"
+                                    .format(seg_number, row[4],logrecno))
+            except StopIteration:
+                # Apparently, the StopIteration exception, raised in
+                # a generator function, gets propagated all the way up, 
+                # ending all higher level generators. thanks for nuthin. 
+                
+                #self.error("Breaking iteration for "+str(seg_number))
+                segments[seg_number] = None
+    
+        geodim = geodim_gen.next() if geodim_gen is not None else None
+    
+        if geodim and geodim[0] != logrecno:
+            raise Exception("Logrecno mismatch for geodim : {} != {}"
+                                    .format(geodim[0],logrecno))
+    
+        return logrecno, geo, segments, geodim
+    
+    
     def generate_rows(self, state, geodim=False):
         '''A Generator that yelds a tuple that has the logrecno row
         for all of the segment files and the geo file. '''
-        import struct
         import re
         
         table = self.schema.table('sf1geo2010')
         header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
          
         source_url = self.urls['geos'][state]
-      
+        
         geodim_gen = self.generate_geodim_rows(state) if geodim else None
-      
+        
         with self.filesystem.download(source_url) as state_file:
     
             segment_files = {}
@@ -196,58 +268,31 @@ class Us2010CensusBundle(UsCensusBundle):
                         gens.append( (segment, self.generate_seg_rows(segment,f)) )
                     elif g2:
                         geo_file_path = f
-            
+                
                 with open(geo_file_path, 'rbU') as geofile:
                     first = True
                     
+                    gln = 0
+                    last_line = None
                     for line in geofile.readlines():
-                        geo = struct.unpack(unpack_str, line[:-1])
-                    
-                        if not geo:
-                            raise ValueError("Failed to match regex on line: "+line) 
-    
-                        segments = {}
-                       
-                        logrecno = geo[6]
-                          
-                        for seg_number, g in gens:
-                            try:
-                                seg_number,  row = g.send(None if first else logrecno)
-                                segments[seg_number] = row
-                                # The logrecno must match up across all files, except
-                                # when ( in PCT tables ) there is no entry
-                                if len(row) > 5 and row[4] != logrecno:
-                                    raise Exception("Logrecno mismatch for seg {} : {} != {}"
-                                                    .format(seg_number, row[4],logrecno))
-                            except StopIteration:
-                                # Apparently, the StopIteration exception, raised in
-                                # a generator function, gets propagated all the way up, 
-                                # ending all higher level generators. thanks for nuthin. 
-                                
-                                #self.error("Breaking iteration for "+str(seg_number))
-                                segments[seg_number] = None
-                    
-                        geodim = geodim_gen.next() if geodim_gen is not None else None
+                        gln += 1
 
-                        if geodim and geodim[0] != logrecno:
-                            raise Exception("Logrecno mismatch for geodim : {} != {}"
-                                                    .format(geodim[0],logrecno))
+                        logrecno, geo, segments, geodim =  self._generate_row(
+                            first, gens, geodim_gen,  geo_file_path, gln, unpack_str, line, last_line)
 
-                        first = False
-                        
                         yield state, logrecno, dict(zip(header,geo)), segments, geodim
-
+                    
+                        first = False
+            
                     # Check that there are no extra lines. 
-                    for seg_number, g in gens:
-                        try:
-                            n = 0;
-                            for row in g:
-                                print row
-                                n = n + 1
-                            if n > 0:
-                                raise Exception("Should not have extra items left. got {} ".format(str(n)))
-                        except StopIteration:
-                            pass                 
+                    lines_left = 0;
+                    for seg_number, g in gens: #@UnusedVariable
+                        for row in g:
+                            print 'Left Over', row
+                            lines_left = lines_left + 1    
+                    if lines_left > 0:
+                        raise Exception("Should not hae extra items left. got {} ".format(str(lines_left)))
+
 
     def geo_table_names(self):
         return (['recno',

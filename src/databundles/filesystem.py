@@ -234,42 +234,56 @@ class Filesystem(object):
         import shutil
 
         file_path = None
-        try:    
+        yields = 0
+        for attempts in range(3):
+            excpt = None
             
-            file_name = urllib.quote_plus(url)
-            file_path = self.downloads_path(file_name)
-            download_path = file_path+".download"
+            if attempts > 0:
+                self.bundle.error("Retrying download of {}".format(url))
             
-            cache = kwargs.get('cache',self.bundle.cache_downloads)
-
-            if os.path.exists(download_path):
-                os.remove(download_path)
-            
-            if not cache or not os.path.exists(file_path):
-                self.bundle.log("Downloading "+url)
-                self.bundle.log("  --> "+file_path)
-                download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
+            try:    
                 
-                shutil.move(download_path, file_path)
+                file_name = urllib.quote_plus(url)
+                file_path = self.downloads_path(file_name)
+                download_path = file_path+".download"
                 
-                if not os.path.exists(file_path):
-                    raise Exception("Failed to download "+url)
-         
-            yield file_path
-            
-        except IOError as e:
-            self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            raise e
-        except urllib.ContentTooShortError as e:
-            print "Bye"
-            raise e
-            
-        finally:
-            if file_path and os.path.exists(file_path) and not cache:
-                os.remove(file_path)
+                cache = kwargs.get('cache',self.bundle.cache_downloads)
+    
+                if os.path.exists(download_path):
+                    os.remove(download_path)
+                
+                if not cache or not os.path.exists(file_path):
+                    self.bundle.log("Downloading "+url)
+                    self.bundle.log("  --> "+file_path)
+                    download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
+                    
+                    shutil.move(download_path, file_path)
+                    
+                    if not os.path.exists(file_path):
+                        raise Exception("Failed to download "+url)
+             
+                yields += 1
+                yield file_path
+                
+            except IOError as e:
+                self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                excpt = e
+            except urllib.ContentTooShortError as e:
+                self.bundle.error("Content too short. ")
+                excpt = e
+                
+            finally:
+                if file_path and os.path.exists(file_path) and not cache:
+                    os.remove(file_path) 
+                break
         
+        if excpt:
+            raise excpt
+        
+        if yields == 0:
+            raise RuntimeError("Generators must yield atleast once")
         
 
     def get_url(self,source_url, create=False):

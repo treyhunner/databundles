@@ -8,6 +8,7 @@ import os.path
 from  testbundle.bundle import Bundle
 import databundles.library
 from sqlalchemy import *
+from databundles.run import  RunConfig
 
 class Test(unittest.TestCase):
 
@@ -21,6 +22,13 @@ class Test(unittest.TestCase):
         
         self.bundle.prepare()
         self.bundle.build()
+        
+    def get_library(self):
+        
+        cfg = self.bundle.config
+        rc = RunConfig()
+        rc.overlay(cfg.dict)
+        return  databundles.library.get_library(rc)
         
     def tearDown(self):
         pass
@@ -43,14 +51,12 @@ class Test(unittest.TestCase):
             self.assertEquals(partition.identity.id_, resolve_id(partition.identity.id_))
             self.assertEquals(partition.identity.id_, resolve_id(str(partition.identity.id_)))
 
-        
-
     def test_library_install(self):
         '''Install the bundle and partitions, and check that they are
         correctly installed. Check that installation is idempotent'''
         
-        l =  databundles.library.get_library()
-        
+        l = self.get_library()
+     
         l.put(self.bundle)
         l.put(self.bundle)
         
@@ -122,7 +128,7 @@ class Test(unittest.TestCase):
         r = l.find(l.query().table(name='tthree').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
         
-        
+
     def x_test_basic(self):
         import sqlite3
 
@@ -158,8 +164,7 @@ class Test(unittest.TestCase):
 
     def x_test_BuildCombinedFile(self):
 
-        import os.path
-        import subprocess
+
         import sqlite3
         
         l =  databundles.library.get_library()

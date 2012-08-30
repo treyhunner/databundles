@@ -84,8 +84,10 @@ class Dataset(Base):
 
     path = None  # Set by the LIbrary and other queries. 
 
-    tables = relationship("Table", backref='dataset', cascade="delete")
-    partitions = relationship("Partition", cascade="delete")
+    tables = relationship("Table", backref='dataset', cascade="all, delete-orphan", 
+                          passive_updates=False)
+    partitions = relationship("Partition", backref='dataset', cascade="all, delete-orphan",
+                               passive_updates=False)
    
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("oid",kwargs.get("id", None)) 
@@ -258,8 +260,8 @@ class Table(Base):
     keywords = SAColumn('t_keywords',Text)
     data = SAColumn('t_data',MutationDict.as_mutable(JSONEncodedDict))
     
-    columns = relationship(Column, backref='table', cascade="delete")
-    partitions = relationship('Partition', backref='table', cascade="delete")
+    columns = relationship(Column, backref='table', cascade="all, delete-orphan")
+
 
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",None) 
@@ -340,7 +342,7 @@ class Table(Base):
                     setattr(row, key, value)
       
         s.add(row)
-       
+     
         s.commit()
     
         return row
@@ -464,10 +466,8 @@ class Partition(Base):
     data = SAColumn('p_data',MutationDict.as_mutable(JSONEncodedDict))
     
     grain = deferred(SAColumn('p_grain',Text))
-    
-    dataset = relationship("Dataset")
-    
-    
+   
+    table = relationship('Table', backref='partitions')
     
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",kwargs.get("id_",None)) 

@@ -12,15 +12,13 @@ identity:
     variation: variation
 library:
     database:
-        dbname: databundles-dev
-        driver: postgresql+psycopg2
+        dbname: /Volumes/DataLibrary/data/databundles.db
+        driver: sqlite
         password: databundles
         server: lorne
         username: databundles
     downloads: /net/nas2/c/proj/data-library-downloads/
     root: /Volumes/DataLibrary/data
-loaded:
-- /etc/databundles.yaml
 repository:
     main:
         access: none

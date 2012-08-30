@@ -40,7 +40,7 @@ class Schema(object):
             raise ValueError("self.bundle.identity.oid not set")
         self._seen_tables = {}
       
-        self.table_sequence = 1
+        self.table_sequence = len(self.tables)+1
         self.col_sequence = 1 
 
     def clean(self):
@@ -89,7 +89,6 @@ class Schema(object):
         
         id_ = str(TableNumber(ObjectNumber.parse(self.d_id), self.table_sequence))
       
-        
         data = { k.replace('d_','',1): v for k,v in kwargs.items() if k.startswith('d_') }
       
         row = Table(id = id_,
@@ -97,10 +96,9 @@ class Schema(object):
                     d_id=self.d_id, 
                     sequence_id=self.table_sequence,
                     data=data)
-        
+     
         self.bundle.database.session.add(row)
-        #
-        #
+
         for key, value in kwargs.items():    
             if key[0] != '_' and key not in ['id','id_', 'd_id','name','sequence_id','table','column']:       
                 setattr(row, key, value)
@@ -278,11 +276,15 @@ class Schema(object):
                 if self.table(row['table']):
                     self.bundle.log("schema_from_file found existing table, exiting. "+row['table'])
                     return
+   
                 try:
                     t = self.add_table(row['table'], **row)
                 except Exception as e:
-                    self.bundle.log("schema_from_file Failed to add table: "+row['table'])
+                    self.bundle.error("schema_from_file Failed to add table: "+row['table'])
+                    self.bundle.error(str(row))
+                    self.bundle.error(str(e))
                     self.bundle.database.session.rollback()
+                    raise e
                     return 
                 new_table = False
               

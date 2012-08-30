@@ -59,13 +59,13 @@ class UsCensusBundle(BuildBundle):
         
         return True
     
-    def scrape_urls(self):
+    def scrape_urls(self, suffix='_uf1'):
         
         if os.path.exists(self.urls_file):
             self.log("Urls file already exists. Skipping")
             return 
        
-        urls = self._scrape_urls(self.config.build.rootUrl,self.states_file)
+        urls = self._scrape_urls(self.config.build.rootUrl,self.states_file, suffix)
    
         yaml.dump(urls, file(self.urls_file, 'w'),indent=4, default_flow_style=False)
             
@@ -412,7 +412,7 @@ class UsCensusBundle(BuildBundle):
                         
                         if not self.write_fact_table(state, partition, table, values):
                             tf = partition.database.tempfile(table, suffix=state)
-                            print '------------'
+                            self.error("Fact Table write error. Value not same length as header")
                             print segment, state, logrecno
                             print len(tf.header), table.name, tf.header
                             print len(values), values
@@ -480,11 +480,11 @@ class UsCensusBundle(BuildBundle):
     def generate_geodim_rows(self, state):
         '''Generate the rows that were created to link the geo split files with the
         segment tables'''
-        import csv
-    
+        import csv, cStringIO # cStringIO reads the while file into memory
         file_name = self.geo_dim_file(state)
         with open(file_name, 'r') as f:
-            r = csv.reader(f)
+            b = cStringIO.StringIO(f.read())
+            r = csv.reader(b)
             r.next() # Skip the header row
             for row in r:
                 yield row

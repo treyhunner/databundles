@@ -28,7 +28,7 @@ class Us2000CensusBundle(UsCensusBundle):
         self._table_iori_cache = {}
         
 
-    def _scrape_urls(self, rootUrl, states_file, log=lambda msg: True, tick=lambda msg: True):
+    def _scrape_urls(self, rootUrl, states_file, suffix='_uf1'):
         '''Extract all of the URLS from the Census website and store them'''
         import urllib
         import urlparse
@@ -70,13 +70,17 @@ class Us2000CensusBundle(UsCensusBundle):
                     if link.get('href') and  '.zip' in link.get('href'):
                         final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
                        
-                        if 'geo_uf1' in final_url:
+                        if 'geo'+suffix in final_url:
                             tick('g')
-                            state = re.match('.*/(\w{2})geo_uf1', final_url).group(1)
+                            state = re.match('.*/(\w{2})geo'+suffix, final_url).group(1)
                             geos[state] = final_url
                         else:
                             tick('T')
-                            m = re.match('.*/(\w{2})(\d{5})_uf1', final_url)
+                            res = '.*/(\w{2})(\d{5})'+suffix
+                            m = re.match(res, final_url)
+
+                            if not m:
+                                raise Exception("Failed to match {} to {} ".format(res, final_url))
 
                             state,segment = m.groups()
                             segment = int(segment.lstrip('0'))
@@ -102,17 +106,18 @@ class Us2000CensusBundle(UsCensusBundle):
             
             if row['SEG'] and row['SEG'] != last_seg:
                 last_seg = row['SEG']
-            
+         
+            text = row['TEXT'].decode('utf8','ignore').strip()
 
             # The first two rows for the table give information about the title
             # and population universe, but don't have any column info. 
-            if( not row['FIELDNUM']):
+            if( not row['FIELDNUM'] or row['FIELDNUM'] == 'A' ):
                 if  row['TABNO']:
                     table = {'type': 'table', 
-                             'name':row['TABLE'],'description':row['TEXT']
+                             'name':row['TABLE'],'description':text
                              }
                 else:
-                    table['universe'] = row['TEXT'].replace('Universe:','').strip()  
+                    table['universe'] = text.replace('Universe:','').strip()  
             else:
                 
                 # The whole table will exist in one segment ( file number ) 
@@ -129,7 +134,7 @@ class Us2000CensusBundle(UsCensusBundle):
                 
                 yield {
                        'type':'column','name':row['FIELDNUM'], 
-                       'description':row['TEXT'].strip(),
+                       'description':text.strip(),
                        'segment':int(row['SEG']),
                        'col_pos':col_pos,
                        'decimal':int(row['DECIMAL'])
@@ -141,9 +146,11 @@ class Us2000CensusBundle(UsCensusBundle):
         value, return a blank row until the logrecno values match. '''
         import csv
         next_logrecno = None
+        l = 0
         with self.filesystem.download(source) as zip_file:
             with self.filesystem.unzip(zip_file) as rf:
                 for row in csv.reader(open(rf, 'rbU') ):
+                    l += 1
                     # The next_logrec bit takes care of a differece in the
                     # segment files -- the PCT tables to not have entries for
                     # tracts, so there are gaps in the logrecno sequence for those files. 
@@ -151,6 +158,9 @@ class Us2000CensusBundle(UsCensusBundle):
                         next_logrecno = (yield seg_number,  [])
              
                     next_logrecno = (yield seg_number,  row)
+                 
+        if l == 0:
+            raise RuntimeError("Didn't get any lines from {} ".format(zip_file))
                  
         return
                     
@@ -215,8 +225,7 @@ class Us2000CensusBundle(UsCensusBundle):
                                 raise Exception("Should not have extra items left")
                         except StopIteration:
                             pass
-        return
-               
+                           
     def geo_table_names(self):
         return (['recno',
                  'area',
