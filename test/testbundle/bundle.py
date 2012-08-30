@@ -16,8 +16,7 @@ class Bundle(BuildBundle):
         bg = self.config.build
        
         self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
-        
-        
+
     
     def prepare(self):
         from databundles.partition import PartitionIdentity 

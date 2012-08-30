@@ -29,6 +29,7 @@ setup(name='databundles',
 		'pyyaml',
         'petl',
         'beautifulsoup4',
+        'boto'
       ]
      )
 

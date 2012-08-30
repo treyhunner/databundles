@@ -14,7 +14,16 @@ class Test(unittest.TestCase):
 
 
     def setUp(self):
+
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
+        
+        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
+        
+        ldb = self.rc.library.database['dbname']
+        
+        if os.path.exists(ldb):
+            os.remove(ldb)
+        
         self.bundle = Bundle(self.bundle_dir)
         
         self.bundle.clean()
@@ -128,7 +137,34 @@ class Test(unittest.TestCase):
         r = l.find(l.query().table(name='tthree').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
         
+        for id_ in l.dataset_ids:
+            self.assertIn(id_.name, ['source-dataset-subset-variation-ca0d-r1'])
+       
+        for ds in l.datasets:
+            self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
+        
+    def test_server(self):
+        import uuid
+        from  boto.s3.connection import S3Connection, Key
+        
+        access = self.rc.library.repository['access']
+        secret = self.rc.library.repository['secret']
+        bucket = self.rc.library.repository['bucket']
+        
+        conn = S3Connection(access, secret)
 
+        for b in conn.get_all_buckets():
+            print 'BUCKET', b.name
+        
+        
+        b = conn.get_bucket(bucket)
+        
+        k = b.new_key('foo/bar')
+        k.set_acl('public-read')
+        
+        k.set_contents_from_string(str(uuid.uuid4()))
+        
+        
     def x_test_basic(self):
         import sqlite3
 
@@ -137,7 +173,6 @@ class Test(unittest.TestCase):
         t = Table('sf1geo', MetaData('sqlite:///'+path), autoload=True)
         db = create_engine('sqlite:///'+path)
         conn = db.connect()
-        
         
         for c in t.columns:
             if str(c.type) == 'TEXT':
@@ -221,7 +256,6 @@ class Test(unittest.TestCase):
             
             geo = l.get(q.one.Partition)
             
-           
             print "GEO",geo.database.path
             
             for table in part.schema.tables:

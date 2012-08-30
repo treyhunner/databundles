@@ -86,6 +86,11 @@ class RunConfig(object):
         inner = self.dict[group]
         
         class attrdict(object):
+            
+            @property 
+            def dict(self):
+                return inner
+            
             def __setattr__(self, key, value):
                 key = key.strip('_')
                 inner[key] = value
@@ -144,7 +149,7 @@ def run(argv, bundle_class):
             print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
             print "!!!!!! In Test Mode !!!!!!!!!!"
             print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-            import time
+
             time.sleep(1)
             
         if b.pre_build():

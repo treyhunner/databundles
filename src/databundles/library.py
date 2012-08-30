@@ -374,13 +374,10 @@ class Library(object):
         '''Return an array of all of the dataset identities in the library'''
         raise NotImplementedError()
     
-    def query(self):
-        q = BundleQueryCommand()
-        q._library = self
-        return q
+
     
     
-class LocalLibrary(Library):
+class LocalLibrary(object):
     '''
     classdocs
     '''
@@ -585,8 +582,7 @@ class LocalLibrary(Library):
         from databundles import resolve_id
         from databundles.orm import Dataset
         from databundles.orm import Partition as OrmPartition
-        from databundles.orm import Table
-        from databundles.orm import Column
+
         from partition import Partition
         from bundle import Bundle
                 
@@ -667,9 +663,7 @@ class LocalLibrary(Library):
     def remove_database(self, bundle):
         '''remove a bundle from the database'''
         
-        from databundles.orm import Dataset, Partition, Table, Column
-        import sqlalchemy.orm.exc
-        from sqlalchemy.sql import or_
+        from databundles.orm import Dataset
         
         s = self.database.session
         
@@ -678,7 +672,6 @@ class LocalLibrary(Library):
         if not b:
             return False
 
-        
         dataset = s.query(Dataset).filter(Dataset.id_==b.identity.id_).one()
 
         # Can't use delete() on the query -- bulk delete queries do not 
@@ -735,6 +728,11 @@ class LocalLibrary(Library):
                 query = query.filter(  getattr(Table, k) == v )
 
         return query
+
+    def query(self):
+        q = BundleQueryCommand()
+        q._library = self
+        return q
         
     def queryByIdentity(self, identity):
         from databundles.orm import Dataset, Partition
@@ -809,10 +807,6 @@ class LocalLibrary(Library):
 
         return self.findByIdentity(self._named_bundles[key])
 
-    def bundle_db(self,name):
-        '''Return a bundle database from the library'''
-    
-
     def stream(self, id_, query=None):
         '''Stream the data from a table in a dataset or a partition 
         
@@ -859,7 +853,8 @@ class RemoteLibrary(Library):
 
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''
-    dbapi_con.execute('PRAGMA foreign_keys = ON;')
+    
+    #dbapi_con.execute('PRAGMA foreign_keys = ON;')
     return # Not clear that there is a performance improvement. 
     dbapi_con.execute('PRAGMA journal_mode = MEMORY')
     dbapi_con.execute('PRAGMA synchronous = OFF')
@@ -868,4 +863,55 @@ def _pragma_on_connect(dbapi_con, con_record):
     dbapi_con.execute('pragma foreign_keys=ON')
 
     
+class Repository:
+    '''A Repository is the place that files are stored, usually Amazon S3, or
+    a file system. A library can copy files from the repository to its local
+    filesystem for use. This can be valuable, even when the repository is a
+    filesystem, because Sqlite files don't work well over NFS. 
+
+    ''' 
+    
+    def __init__(self, library):
+        self.library = library
+        self.config = library.config.repository
+        
+        
+    def get(self):
+        '''Get a bundle by id or name'''
+        raise NotImplementedError()
+    
+    def put(self):
+        '''Store a bundle in the library'''
+        raise NotImplementedError() 
+    
+    def list(self):
+        '''get a list of all of the files in the repository'''
+        raise NotImplementedError() 
+    
+    
+class FsRepository(Repository):
+
+    def __init__(self, library):
+        super(FsRepository, self).__init__(library)
+        
+        self.root = library.config.library.root
+    
+    def get(self, path):
+        '''Get a file py path name. Will copy the file into the
+        library's root for local access. 
+        
+        Returns: a path name to a local file. 
+        '''
+        
+    
+    def put(self, path):
+        '''Store a bundle in the library'''
+        raise NotImplementedError() 
+    
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
     

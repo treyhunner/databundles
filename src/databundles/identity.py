@@ -177,7 +177,7 @@ class ObjectNumber(object):
             dataset = int(ObjectNumber.base62_decode(input[1:-4]))
             return ColumnNumber(TableNumber(DatasetNumber(dataset), table), column)
         else:
-            raise ValueError('Unknow type character: '+input[0]+ ' in '+str(dataset))
+            raise ValueError('Unknow type character: '+input[0]+ ' in '+str(input))
        
     
     def __init__(self, primary, suffix=None):
