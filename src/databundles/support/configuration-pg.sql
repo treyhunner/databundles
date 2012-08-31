@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-08-30 16:27                                */
+/* Created on:            2012-08-30 20:23                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -53,7 +53,8 @@ CREATE TABLE files (
     f_path TEXT  NOT NULL,
     f_source_url TEXT,
     f_process TEXT,
-    f_group CHARACTER VARYING(40),
+    f_ref TEXT,
+    f_group TEXT,
     f_state TEXT,
     f_hash TEXT,
     f_modified TIMESTAMP,

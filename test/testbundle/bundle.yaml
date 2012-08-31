@@ -12,11 +12,13 @@ identity:
     variation: variation
 library:
     database:
-        dbname: /Volumes/DataLibrary/library.db
+        dbname: /Volumes/DataLibrary/test/library.db
         driver: sqlite
     downloads: /net/nas2/c/proj/data-library-downloads/
-    cache: /Volumes/DataLibrary/data
+    cache: /Volumes/DataLibrary/test/cache
     repository:
+      path: /net/nas2/c/proj/data-library-test/
+    s3-repository:
       access: AKIAIOKK4KSYYGYXWQJQ
       bucket: test.s3.clarinova.net
       secret: 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

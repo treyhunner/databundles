@@ -12,7 +12,7 @@
 <DESCRIPTION></DESCRIPTION>
 <AUTHOR></AUTHOR>
 <COPYRIGHT></COPYRIGHT>
-<LASTGENERATEDFILES>Y:\proj\github.com\databundles\src\databundles\support\configuration.sql;Y:\proj\github.com\databundles\src\databundles\support\drop-configuration.sql;C:\Users\eric\Documents\CreateDBLog_201208303.txt</LASTGENERATEDFILES>
+<LASTGENERATEDFILES>Y:\proj\github.com\databundles\src\databundles\support\configuration.sql;Y:\proj\github.com\databundles\src\databundles\support\drop-configuration.sql;C:\Users\eric\Documents\CreateDBLog_201208306.txt</LASTGENERATEDFILES>
 <PRINTORIENTATION>PORTRAIT</PRINTORIENTATION>
 <PRINTPAGETYPE>A4</PRINTPAGETYPE>
 <DEFTABLEOPTIONS></DEFTABLEOPTIONS>
@@ -1119,7 +1119,7 @@
 <DESC></DESC>
 <NOTE></NOTE>
 <ABBR>f</ABBR>
-<ATTRLASTID>10</ATTRLASTID>
+<ATTRLASTID>11</ATTRLASTID>
 <IDXLASTID>1</IDXLASTID>
 <TRGLASTID>1</TRGLASTID>
 <CONLASTID>1</CONLASTID>
@@ -1213,6 +1213,20 @@
 <ATTR>
 <NAME>f_process</NAME>
 <ID>4</ID>
+<POSNR>0</POSNR>
+<SCHEMA></SCHEMA>
+<DESC></DESC>
+<NOTE></NOTE>
+<DOMAINID>-1</DOMAINID>
+<DT>
+<DTLISTNAME>TEXT</DTLISTNAME>
+<SD>0</SD>
+<INC>1</INC>
+</DT>
+</ATTR>
+<ATTR>
+<NAME>f_ref</NAME>
+<ID>11</ID>
 <POSNR>0</POSNR>
 <SCHEMA></SCHEMA>
 <DESC></DESC>
@@ -1880,7 +1894,7 @@
 <ID>15</ID>
 <DIAGRAMID>1</DIAGRAMID>
 <W>90</W>
-<H>168</H>
+<H>183</H>
 <L>85</L>
 <T>317</T>
 <BRUSH>0,16777215</BRUSH>

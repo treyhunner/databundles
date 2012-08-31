@@ -34,7 +34,6 @@ class Test(unittest.TestCase):
         ldb = self.rc.library.database['dbname']
         
         if os.path.exists(ldb):
-            pass
             os.remove(ldb)
         
         cfg = self.bundle.config
@@ -43,6 +42,9 @@ class Test(unittest.TestCase):
         return  databundles.library.get_library(rc)
         
     def tearDown(self):
+        pass
+
+    def delete(self):
         pass
 
 
@@ -117,7 +119,18 @@ class Test(unittest.TestCase):
         r = l.find(l.query().table(name='tthree').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
         
+        #
+        #  Try getting the files 
+        # 
+        
+        b_id,p_id = l.find(l.query().table(name='tthree').partition(any=True)).one() #@UnusedVariable
+        
+        b = l.get(b_id)
+        
+        self.assertTrue(os.path.exists(b.database.path))
+        
         # Put the bundle with remove to check that the partitions are reset
+        
         l.put(self.bundle, remove=True)
         
         r = l.find(l.query().table(name='tone'))
@@ -126,8 +139,19 @@ class Test(unittest.TestCase):
         r = l.find(l.query().table(name='tone').partition(any=True)).all()
         self.assertEquals(0, len(r))
         
+        for id_ in l.dataset_ids:
+            self.assertIn(id_.name, ['source-dataset-subset-variation-ca0d-r1'])
+       
+        for ds in l.datasets:
+            self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
+        
+
+    
+    def x_text_rebuild(self):
         #
         # Rebuild from installed bundles. 
+        
+        l = self.get_library()
         
         l.rebuild()
         
@@ -140,12 +164,7 @@ class Test(unittest.TestCase):
         r = l.find(l.query().table(name='tthree').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
         
-        for id_ in l.dataset_ids:
-            self.assertIn(id_.name, ['source-dataset-subset-variation-ca0d-r1'])
-       
-        for ds in l.datasets:
-            self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
-        
+
     def x_test_server(self):
         import uuid
         from  boto.s3.connection import S3Connection, Key

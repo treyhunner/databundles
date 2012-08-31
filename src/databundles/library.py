@@ -33,15 +33,21 @@ class LibraryDb(object):
             'sqlite':Dbci(dsn='sqlite:///{name}',sql='support/configuration.sql')
             }
     
-    def __init__(self, driver=None, server=None, dbname = None, username=None, password=None):
+    def __init__(self, library,  driver=None, server=None, dbname = None, username=None, password=None):
         self.driver = driver
         self.server = server
         self.dbname = dbname
         self.username = username
         self.password = password
+        self.library = library
         
         self.dsn = self.DBCI[self.driver].dsn
         self.sql = self.DBCI[self.driver].sql
+        
+        if driver == 'sqlite':
+            # If dbname is an absolute path, the os.path.join in cache_path
+            # will have no effect
+            self.dbname = self.library.cache_path(dbname)
         
         self._session = None
         self._engine = None
@@ -100,7 +106,7 @@ class LibraryDb(object):
         self.engine
         
         if self.driver == 'sqlite':
-            return os.path.exists( self.dbname)
+            return os.path.exists(self.dbname)
         else :
             return True; # Don't know how to check for a postgres database. 
         
@@ -117,7 +123,6 @@ class LibraryDb(object):
         s.query(File).delete()
         s.commit()
         
-         
     def create(self):
         
         """Create the database from the base SQL"""
@@ -151,8 +156,7 @@ class LibraryDb(object):
         s.execute("DROP TABLE IF EXISTS datasets")
         s.commit()
 
-        
-    
+
     def load_sql(self, sql_text):
         
         #conn = self.engine.connect()
@@ -182,7 +186,7 @@ class LibraryDb(object):
         elif self.driver == 'sqlite':
             
             import sqlite3
-            conn = sqlite3.connect( self.dbname)
+            conn = sqlite3.connect(self.dbname)
            
             conn.execute('DROP TABLE IF EXISTS columns')
             conn.execute('DROP TABLE IF EXISTS partitions')
@@ -257,12 +261,12 @@ class LibraryDb(object):
         
         s = self.session
         
-        b = self.get(bundle.identity)
+        dataset, partition = self.get(bundle.identity)
         
-        if not b:
+        if not dataset:
             return False
 
-        dataset = s.query(Dataset).filter(Dataset.id_==b.identity.id_).one()
+        dataset = s.query(Dataset).filter(Dataset.id_==dataset.identity.id_).one()
 
         # Can't use delete() on the query -- bulk delete queries do not 
         # trigger in-ython cascades!
@@ -327,15 +331,152 @@ class LibraryDb(object):
 
                 dataset = query.one();
         except sqlalchemy.orm.exc.NoResultFound as e: #@UnusedVariable
-            return None
+            return None, None
             #raise ResultCountError("Failed to find dataset or partition for: {}".format(str(bp_id)))
         
         return dataset, partition
         
+    def find(self, query_command):
+        from databundles.orm import Dataset
+        from databundles.orm import Partition
+        from databundles.identity import Identity
+        from databundles.orm import Table
+        s = self.session
+        
+        if isinstance(query_command, Identity):
+            return self.findByIdentity(query_command)
+        
+        if len(query_command.partition) == 0:
+            query = s.query(Dataset)
+        else:
+            query = s.query(Dataset, Partition)
+        
+        if len(query_command.identity) > 0:
+            for k,v in query_command.identity.items():
+                try:
+                    query = query.filter( getattr(Dataset, k) == v )
+                except AttributeError:
+                    # Dataset doesn't have the attribute, so ignore it. 
+                    pass
+                
+        
+        if len(query_command.partition) > 0:     
+            query = query.join(Partition)
+            for k,v in query_command.partition.items():
+                
+                if k == 'any': continue # Just join the partition
+                
+                if k == 'table':
+                    # The 'table" value could be the table id
+                    # or a table name
+                    from sqlalchemy.sql import or_
+                    
+                    query = query.join(Table)
+                    query = query.filter( or_(Partition.t_id  == v,
+                                              Table.name == v))
+                else:
+                    query = query.filter(  getattr(Partition, k) == v )
+        
+        if len(query_command.table) > 0:
+            query = query.join(Table)
+            for k,v in query_command.table.items():
+                query = query.filter(  getattr(Table, k) == v )
+
+        return query
+
+    def query(self):
+        q = BundleQueryCommand()
+        q._library = self
+        return q
+        
+    def queryByIdentity(self, identity):
+        from databundles.orm import Dataset, Partition
+        from databundles.identity import Identity
+        from databundles.partition import PartitionIdentity
+        from sqlalchemy import desc
+        
+        s = self.database.session
+        
+        # If it is a string, it is a name or a dataset id
+        if isinstance(identity, str) or isinstance(identity, unicode) : 
+            query = (s.query(Dataset)
+                     .filter( (Dataset.id_==identity) | (Dataset.name==identity)) )
+        elif isinstance(identity, PartitionIdentity):
+            
+            query = s.query(Dataset, Partition)
+            
+            for k,v in identity.to_dict().items():
+                d = {}
+              
+                if k == 'revision':
+                    v = int(v)
+                    
+                d[k] = v
+         
+            query = query.filter_by(**d)
+                
+        elif isinstance(identity, Identity):
+            query = s.query(Dataset)
+            
+            for k,v in identity.to_dict().items():
+                d = {}
+                d[k] = v
+                
+            query = query.filter_by(**d)
+
+           
+        elif isinstance(identity, dict):
+            query = s.query(Dataset)
+            
+            for k,v in identity.items():
+                d = {}
+                d[k] = v
+                query = query.filter_by(**d)
+      
+        else:
+            raise ValueError("Invalid type for identity")
+    
+        query.order_by(desc(Dataset.revision))
+     
+        return query
+    
+    def findByIdentity(self,identity):
+        
+        out = []
+        for d in self.queryByIdentity(identity).all():
+            id_ = d.identity
+            d.path = os.path.join(self.cache,id_.path+'.db')
+            out.append(d)
+            
+        return out
+        
+    def findByKey(self,key):
+        '''Find a bundle in the library by the shorthand name given in the
+        'requires' section of the configuration '''    
+        
+        if  self._named_bundles is None:
+            raise ValueError("Didn't get 'named_bundles' configuration from the constructor")
+         
+        if key not in self._named_bundles:
+            raise ValueError("named_bundles key {} not specified in configuration".format(key))
+
+        return self.findByIdentity(self._named_bundles[key])
 
         
-    def add_file(self,path):
-        pass
+    def add_file(self,path, group, ref):
+        from databundles.orm import  File
+        stat = os.stat(path)
+      
+        s = self.session
+      
+        s.query(File).filter(File.path == path).delete()
+      
+        file = File(path=path, group=group, ref=ref,
+                    modified=stat.st_mtime, size=stat.st_size)
+    
+        s.add(file)
+        s.commit()
+
 
     def remove_file(self,path):
         pass
@@ -519,6 +660,7 @@ class LocalLibrary(Library):
 
         self._database = None
 
+        self.repository = FsRepository(self)
 
     @property
     def cache_dir(self):
@@ -542,7 +684,7 @@ class LocalLibrary(Library):
         
         dataset, partition = self.database.get(bp_id)
         
-        path = self.cache_path(dataset.identity.path)+".db"
+        path = self.repository.get(dataset.identity.path+".db")
        
         if not os.path.exists(path):
             return False
@@ -561,28 +703,37 @@ class LocalLibrary(Library):
         else:
             return bundle
         
-    def put(self, bundle,  remove=True, copy=True):
+    def find(self, query_command):
+        return self.database.find(query_command)
+        
+    def query(self):
+        return self.database.query()
+        
+    def put(self, bundle,  remove=True):
         '''Install a bundle file, and all of its partitions, into the library.
         Copies in the files that don't exist, and loads data into the library
         database'''
         
         # First, check if the bundle is already installed. If so, remove it. 
         if remove:
-            self.remove(bundle)
+            self.database.remove_bundle(bundle)
 
         src = bundle.database.path
-        dst = os.path.join(self.cache, bundle.identity.path+".db")
-        
-        if not os.path.isdir(os.path.dirname(dst)):
-            os.makedirs(os.path.dirname(dst))
+        rel_path = bundle.identity.path+".db"
      
-        if copy:
-            shutil.copyfile(src,dst)
+        cache_path = self.cache_path(rel_path)
         
+        # Remove anhy old cached database file
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+     
+        dst = self.repository.put(src,rel_path)
+        self.database.add_file(dst, self.repository.repo_id, bundle.identity.id_)
+        
+                 
         self.database.install_bundle(bundle)
         
         return dst
-  
     
     def require(self,key):
         from databundles.bundle import DbBundle
@@ -597,13 +748,11 @@ class LocalLibrary(Library):
         
         return DbBundle(set_.pop(0).path)
 
-    
-        
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
         it from the library database'''
         
-        self.remove_database(bundle)
+        self.database.remove_bundle(bundle)
         
         path = os.path.join(self.cache, bundle.identity.path+".db")
         
@@ -615,9 +764,9 @@ class LocalLibrary(Library):
         '''Return databundles.database.Database object'''
         if self._database is None:
             config = self.config.library.database
-     
+
           
-            self._database = LibraryDb(**config)
+            self._database = LibraryDb(self,**config)
             
             self._database.create() # creates if does not exist. 
             
@@ -670,134 +819,6 @@ class LocalLibrary(Library):
         self.database.commit()
         return bundles
         
-
-        
-     
-    def find(self, query_command):
-        from databundles.orm import Dataset
-        from databundles.orm import Partition
-        from databundles.identity import Identity
-        from databundles.orm import Table
-        s = self.database.session
-        
-        if isinstance(query_command, Identity):
-            return self.findByIdentity(query_command)
-        
-        if len(query_command.partition) == 0:
-            query = s.query(Dataset)
-        else:
-            query = s.query(Dataset, Partition)
-        
-        if len(query_command.identity) > 0:
-            for k,v in query_command.identity.items():
-                try:
-                    query = query.filter( getattr(Dataset, k) == v )
-                except AttributeError:
-                    # Dataset doesn't have the attribute, so ignore it. 
-                    pass
-                
-        
-        if len(query_command.partition) > 0:     
-            query = query.join(Partition)
-            for k,v in query_command.partition.items():
-                
-                if k == 'any': continue # Just join the partition
-                
-                if k == 'table':
-                    # The 'table" value could be the table id
-                    # or a table name
-                    from sqlalchemy.sql import or_
-                    
-                    query = query.join(Table)
-                    query = query.filter( or_(Partition.t_id  == v,
-                                              Table.name == v))
-                else:
-                    query = query.filter(  getattr(Partition, k) == v )
-        
-        if len(query_command.table) > 0:
-            query = query.join(Table)
-            for k,v in query_command.table.items():
-                query = query.filter(  getattr(Table, k) == v )
-
-        return query
-
-    def query(self):
-        q = BundleQueryCommand()
-        q._library = self
-        return q
-        
-    def queryByIdentity(self, identity):
-        from databundles.orm import Dataset, Partition
-        from databundles.identity import Identity
-        from databundles.partition import PartitionIdentity
-        from sqlalchemy import desc
-        
-        s = self.database.session
-        
-        # If it is a string, it is a name or a dataset id
-        if isinstance(identity, str) or isinstance(identity, unicode) : 
-            query = (s.query(Dataset)
-                     .filter( (Dataset.id_==identity) | (Dataset.name==identity)) )
-        elif isinstance(identity, PartitionIdentity):
-            
-            query = s.query(Dataset, Partition)
-            
-            for k,v in identity.to_dict().items():
-                d = {}
-              
-                if k == 'revision':
-                    v = int(v)
-                    
-                d[k] = v
-         
-            query = query.filter_by(**d)
-                
-        elif isinstance(identity, Identity):
-            query = s.query(Dataset)
-            
-            for k,v in identity.to_dict().items():
-                d = {}
-                d[k] = v
-                
-            query = query.filter_by(**d)
-
-           
-        elif isinstance(identity, dict):
-            query = s.query(Dataset)
-            
-            for k,v in identity.items():
-                d = {}
-                d[k] = v
-                query = query.filter_by(**d)
-      
-        else:
-            raise ValueError("Invalid type for identity")
-    
-        query.order_by(desc(Dataset.revision))
-     
-        return query
-    
-    def findByIdentity(self,identity):
-        
-        out = []
-        for d in self.queryByIdentity(identity).all():
-            id_ = d.identity
-            d.path = os.path.join(self.cache,id_.path+'.db')
-            out.append(d)
-            
-        return out
-        
-    def findByKey(self,key):
-        '''Find a bundle in the library by the shorthand name given in the
-        'requires' section of the configuration '''    
-        
-        if  self._named_bundles is None:
-            raise ValueError("Didn't get 'named_bundles' configuration from the constructor")
-         
-        if key not in self._named_bundles:
-            raise ValueError("named_bundles key {} not specified in configuration".format(key))
-
-        return self.findByIdentity(self._named_bundles[key])
 
     def stream(self, id_, query=None):
         '''Stream the data from a table in a dataset or a partition 
@@ -852,7 +873,7 @@ def _pragma_on_connect(dbapi_con, con_record):
     dbapi_con.execute('pragma foreign_keys=ON')
 
     
-class Repository:
+class Repository(object):
     '''A Repository is the place that files are stored, usually Amazon S3, or
     a file system. A library can copy files from the repository to its local
     filesystem for use. This can be valuable, even when the repository is a
@@ -897,20 +918,21 @@ class FsRepository(Repository):
         import hashlib
         m = hashlib.md5()
         m.update(self.root)
-        m.digest()
+
+        return m.hexdigest()
     
-    
-    def get(self, path):
-        '''Get a file by path name. Will copy the file to 
+    def get(self, rel_path):
+        '''Get a file by rel_path name. Will copy the file to 
         the library cache. 
         
-        Returns: a path name to a local file. 
+        Returns: a rel_path name to a local file. 
         '''
         
-        repo_path = os.path.join(self.root, path)
-        cache_path = self.library.cache_path(path)
+        repo_path = os.path.join(self.root, rel_path)
+        cache_path = self.library.cache_path(rel_path)
         
         if not os.path.exists(repo_path):
+            # error even if the file exists in the cache. 
             False
             
         if not os.path.isfile(repo_path):
@@ -926,10 +948,31 @@ class FsRepository(Repository):
         
         return repo_path
     
-    def put(self, path):
-        '''Store a bundle in the library'''
-        raise NotImplementedError() 
+    def put(self, abs_path, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            abs_path: Absolute path to the source file
+            rel_path: path relative to the root of the repository
+        
+        '''
     
+        repo_path = os.path.join(self.root, rel_path)
+      
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+    
+        shutil.copyfile(abs_path, repo_path)
+    
+        return repo_path
+    
+    def delete(self,rel_path):
+        
+        repo_path = os.path.join(self.root, rel_path)
+        
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+        
     def list(self, path=None):
         '''get a list of all of the files in the repository'''
         

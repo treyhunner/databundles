@@ -439,6 +439,9 @@ class File(Base, SavableMixin):
     process = SAColumn('f_process',Text)
     content_hash = SAColumn('f_hash',Text)
     modified = SAColumn('f_modified',Integer)
+    size = SAColumn('f_size',Integer)
+    group = SAColumn('f_group',Integer)
+    ref = SAColumn('f_ref',Text)
  
     def __init__(self,**kwargs):
         self.oid = kwargs.get("oid",None) 
@@ -446,6 +449,9 @@ class File(Base, SavableMixin):
         self.source_url = kwargs.get("source_url",None) 
         self.process = kwargs.get("process",None) 
         self.modified = kwargs.get("modified",None) 
+        self.size = kwargs.get("size",None)
+        self.group = kwargs.get("group",None)
+        self.ref = kwargs.get("ref",None)
         self.content_hash = kwargs.get("content_hash",None) 
       
      
