@@ -105,7 +105,7 @@ class BuildBundle(Bundle):
         
         if bundle_dir is None or not os.path.isdir(bundle_dir):
             from exceptions import BundleError
-            raise BundleError("BuildBundle must be constructed on a directory")
+            raise BundleError("BuildBundle must be constructed on a cache")
   
         self.bundle_dir = bundle_dir
         
@@ -118,7 +118,7 @@ class BuildBundle(Bundle):
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
         self.ptick_count = 0;
 
-        # If a download directory is defined, cache the download
+        # If a download cache is defined, cache the download
         # otherwize, don't
         self.cache_downloads = self.config.library.downloads is not None
     
@@ -285,7 +285,7 @@ class BundleFileConfig(BundleConfig):
     
     BUNDLE_CONFIG_FILE = 'bundle.yaml'
 
-    def __init__(self, directory):
+    def __init__(self, cache):
         '''Load the bundle.yaml file and create a config object
         
         If the 'id' value is not set in the yaml file, it will be created and the
@@ -294,9 +294,9 @@ class BundleFileConfig(BundleConfig):
 
         super(BundleFileConfig, self).__init__()
         
-        self.directory = directory
+        self.cache = cache
     
-        self._run_config = RunConfig(os.path.join(self.directory,'databundles.yaml'))
+        self._run_config = RunConfig(os.path.join(self.cache,'databundles.yaml'))
      
         self._config_dict = None
         self.dict # Fetch the dict. 
@@ -375,7 +375,7 @@ class BundleFileConfig(BundleConfig):
 
     @property
     def path(self):
-        return os.path.join(self.directory, BundleFileConfig.BUNDLE_CONFIG_FILE)
+        return os.path.join(self.cache, BundleFileConfig.BUNDLE_CONFIG_FILE)
 
     def reload(self): #@ReservedAssignment
         '''Reload the configuation from the file'''

@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-08-15 22:35                                */
+/* Created on:            2012-08-30 16:27                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -41,7 +41,6 @@ CREATE TABLE "config" (
     "co_key" TEXT NOT NULL,
     "co_value" TEXT,
     "co_source" TEXT,
-    "co_bar" TEXT,
     CONSTRAINT "PK_config" PRIMARY KEY ("co_d_id", "co_group", "co_key"),
     FOREIGN KEY ("co_d_id") REFERENCES "datasets" ("d_id")
 );
@@ -53,11 +52,13 @@ CREATE TABLE "config" (
 CREATE TABLE "files" (
     "f_id" INTEGER NOT NULL,
     "f_path" TEXT NOT NULL,
-    "f_process" TEXT,
     "f_source_url" TEXT,
-    "f_hash" TEXT,
+    "f_process" TEXT,
+    "f_group" TEXT,
     "f_state" TEXT,
+    "f_hash" TEXT,
     "f_modified" INTEGER,
+    "f_size" INTEGER,
     CONSTRAINT "PK_files" PRIMARY KEY ("f_id")
 );
 

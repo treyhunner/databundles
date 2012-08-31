@@ -19,10 +19,6 @@ class Test(unittest.TestCase):
         
         self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
         
-        ldb = self.rc.library.database['dbname']
-        
-        if os.path.exists(ldb):
-            os.remove(ldb)
         
         self.bundle = Bundle(self.bundle_dir)
         
@@ -32,7 +28,14 @@ class Test(unittest.TestCase):
         self.bundle.prepare()
         self.bundle.build()
         
+        
     def get_library(self):
+        
+        ldb = self.rc.library.database['dbname']
+        
+        if os.path.exists(ldb):
+            pass
+            os.remove(ldb)
         
         cfg = self.bundle.config
         rc = RunConfig()
@@ -143,7 +146,7 @@ class Test(unittest.TestCase):
         for ds in l.datasets:
             self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
         
-    def test_server(self):
+    def x_test_server(self):
         import uuid
         from  boto.s3.connection import S3Connection, Key
         

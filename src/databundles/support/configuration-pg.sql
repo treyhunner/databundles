@@ -5,7 +5,7 @@
 /* Project name:                                                          */
 /* Author:                                                                */
 /* Script type:           Database creation script                        */
-/* Created on:            2012-08-15 22:35                                */
+/* Created on:            2012-08-30 16:27                                */
 /* ---------------------------------------------------------------------- */
 
 
@@ -51,11 +51,13 @@ CREATE TABLE config (
 CREATE TABLE files (
     f_id INTEGER  NOT NULL,
     f_path TEXT  NOT NULL,
-    f_process TEXT,
     f_source_url TEXT,
-    f_hash TEXT,
+    f_process TEXT,
+    f_group CHARACTER VARYING(40),
     f_state TEXT,
-    f_modified INTEGER,
+    f_hash TEXT,
+    f_modified TIMESTAMP,
+    f_size INTEGER,
     CONSTRAINT PK_files PRIMARY KEY (f_id)
 );
 
