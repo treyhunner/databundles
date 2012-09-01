@@ -1,15 +1,16 @@
 '''
+Rest interface for accessing a remote library. 
+
 Created on Aug 31, 2012
 
 @author: eric
 '''
-from siesta import API
+from siesta  import API
 
 class Rest(object):
     '''
     classdocs
     '''
-
 
     def __init__(self, url):
         '''
@@ -38,4 +39,13 @@ class Rest(object):
     
     def datasets(self):
         return self.api.datasets.get()
+        
+        
+    def config(self):
+        return self.api.config.get()
+    
+    
+    def test_put(self,o):
+        return self.api.test.put(o)
+    
         

@@ -883,7 +883,9 @@ class Repository(object):
     
     def __init__(self, library):
         self.library = library
-        self.config = library.config.repository
+        
+        
+        self.config = library.config.library.repository
         
     @property
     def repo_id(self):
@@ -910,7 +912,8 @@ class FsRepository(Repository):
     def __init__(self, library):
         super(FsRepository, self).__init__(library)
         
-        self.root = library.config.library.repository['path']
+        
+        self.root = self.config['path']
     
     @property
     def repo_id(self):

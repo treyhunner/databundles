@@ -2,7 +2,7 @@
 REST Server For DataBundle Libraries. 
 '''
 
-from bottle import  run, get, post #@UnresolvedImport
+from bottle import  run, get, put, post, request #@UnresolvedImport
 
 import databundles.library 
 import databundles.run
@@ -15,7 +15,6 @@ def get_config():
     '''Return all of the dataset identities, as a dict, 
     indexed by id'''
     rc = databundles.run.RunConfig().dict
-    print rc
     return rc
 
 @get('/datasets')
@@ -74,5 +73,19 @@ def get_dataset_partitions_info(id_):
 @get('/partition/:pid/table/:tid/data')
 def get_partition_data(pid,tid):
     pass
+
+@put('/test')
+def put_test():
+    print "TEST PUT"
+    
+    if request.content_type == 'application/json':
+            v = request.json
+            return {str(type(v)): v}
+    else:
+            v = request.body.getvalue() #@UndefinedVariable
+            return {str(type(v)): v}
+    
+    print request.content_type
+
 
 run(host='localhost', port=8080, reloader=True)
