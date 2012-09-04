@@ -4,46 +4,23 @@ Created on Jun 22, 2012
 @author: eric
 '''
 import unittest
+import os.path
 from  testbundle.bundle import Bundle
 
 class Test(unittest.TestCase):
 
     def setUp(self):
-        
-        import os.path, yaml
-        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-        Bundle(self.bundle_dir).clean()
-     
-        bundle_yaml = '''
-identity:
-    creator: creator
-    dataset: dataset
-    revision: 1
-    source: source
-    subset: subset
-    variation: variation
-build:
-  rootUrl: 
-  headers: 
-  geoheaderFile: meta/geoschema.csv
-    
-    '''
-     
-        cf = os.path.join(self.bundle_dir,'bundle.yaml')
-      
-        yaml.dump(yaml.load(bundle_yaml), file(cf, 'w'), indent=4, default_flow_style=False)
-      
-        self.bundle = Bundle(self.bundle_dir)
-    
-        self.bundle.database.create()
-        
 
-    def test_library_create(self):
-        pass
-      
-        #l = LocalLibrary()
-        #ldb = l.database
-        #ldb.clean()
+        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
+    
+        self.bundle = Bundle(self.bundle_dir)
+        
+        self.bundle.clean()
+        self.bundle = Bundle(self.bundle_dir)
+        
+        self.bundle.prepare()
+        self.bundle.build()
+
    
       
     def test_identity(self):
@@ -88,8 +65,8 @@ build:
         
         self.assertRaises(Exception,  s.add_table, ('table 1', ))
       
-        self.assertIn('cTest01', [t.id_ for t in self.bundle.schema.tables])
-        self.assertIn('cTest02', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('c1qSlv01', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('c1qSlv02', [t.id_ for t in self.bundle.schema.tables])
         self.assertNotIn('cTest03', [t.id_ for t in self.bundle.schema.tables])
         
         t = s.add_table('table 3', altname='alt name')
@@ -100,9 +77,9 @@ build:
       
         self.bundle.database.session.commit()
         
-        self.assertIn('dTest0301', [c.id_ for c in t.columns])
-        self.assertIn('dTest0302', [c.id_ for c in t.columns])
-        self.assertIn('dTest0303', [c.id_ for c in t.columns])
+        self.assertIn('d1qSlv0601', [c.id_ for c in t.columns])
+        self.assertIn('d1qSlv0602', [c.id_ for c in t.columns])
+        self.assertIn('d1qSlv0603', [c.id_ for c in t.columns])
         
     def test_generate_schema(self):
         '''Uses the generateSchema method in the bundle'''
@@ -183,7 +160,8 @@ build:
         
         self.bundle.database.session.commit()
         
-        self.assertEqual(3, len(self.bundle.partitions.all))
+        # 3 partitions from the build, three we just created. 
+        self.assertEqual(6, len(self.bundle.partitions.all))
         
         p = self.bundle.partitions.new_partition(pid1)   
         self.assertEquals('pid1',p.data['pid'] )
@@ -215,8 +193,6 @@ build:
         print p.database.path
         s.commit()
         p.database.create()
-
-        self.bundle.library.put(p)
         
     def test_tempfile(self):
   

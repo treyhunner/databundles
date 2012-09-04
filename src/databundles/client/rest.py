@@ -6,6 +6,10 @@ Created on Aug 31, 2012
 @author: eric
 '''
 from siesta  import API
+from databundles.library import BundleQueryCommand
+
+class NotFound(Exception):
+    pass
 
 class Rest(object):
     '''
@@ -20,11 +24,7 @@ class Rest(object):
         self.url = url
         self.api = API(self.url)
         
-    def put(self, bundle):
-        '''Send the bundle to the remote server and store it in the database.'''
-        pass
-    
-    def get(self, id_or_name, file_=None):
+    def get(self, id_or_name, file_):
         '''Get a bundle by name or id and either return a file object, or
         store it in the given file object
         
@@ -32,9 +32,29 @@ class Rest(object):
             file_ A string or file object where the bundle data should be stored
         
         '''
-        pass
+        resource, response  = self.api.dataset(id_or_name).bundle.get()
+  
+        if response.status != 200:
+            raise NotFound("Didn't file a file for {}".format(id_or_name))
+  
+        chunksize = 8192
+        chunk =  response.read(chunksize) #@UndefinedVariable
+        while chunk:
+            file_.write(chunk)
+            chunk =  response.read(chunksize) #@UndefinedVariable
+
+        return response.getheaders()
+        
+   
+    def put(self,o):
+        resource, response = self.api.datasets.post(o)
+        
+        return  resource.attrs
     
-    def find(self, bundle):
+    def query(self):
+        return  BundleQueryCommand()
+    
+    def find(self, query):
         pass
     
     def datasets(self):
@@ -45,7 +65,6 @@ class Rest(object):
         return self.api.config.get()
     
     
-    def test_put(self,o):
-        return self.api.test.put(o)
+
     
         

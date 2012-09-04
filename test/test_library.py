@@ -19,7 +19,6 @@ class Test(unittest.TestCase):
         
         self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
         
-        
         self.bundle = Bundle(self.bundle_dir)
         
         self.bundle.clean()

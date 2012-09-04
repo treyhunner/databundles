@@ -253,9 +253,12 @@ class LibraryDb(object):
                         print "ERROR: Failed to merge column"+str(column.id_)+":"+ str(e)
     
         s.commit()
+        
+        return dataset
            
     def remove_bundle(self, bundle):
         '''remove a bundle from the database'''
+        
         
         from databundles.orm import Dataset
         
@@ -714,6 +717,8 @@ class LocalLibrary(Library):
         Copies in the files that don't exist, and loads data into the library
         database'''
         
+        bundle.identity.name # throw exception if not right type. 
+        
         # First, check if the bundle is already installed. If so, remove it. 
         if remove:
             self.database.remove_bundle(bundle)
@@ -731,9 +736,9 @@ class LocalLibrary(Library):
         self.database.add_file(dst, self.repository.repo_id, bundle.identity.id_)
         
                  
-        self.database.install_bundle(bundle)
+        dataset = self.database.install_bundle(bundle)
         
-        return dst
+        return dataset, dst
     
     def require(self,key):
         from databundles.bundle import DbBundle
@@ -934,13 +939,16 @@ class FsRepository(Repository):
         repo_path = os.path.join(self.root, rel_path)
         cache_path = self.library.cache_path(rel_path)
         
+        # The target file always has to exist in the repo
         if not os.path.exists(repo_path):
             # error even if the file exists in the cache. 
             False
             
         if not os.path.isfile(repo_path):
             raise ValueError("Path does not point to a file")
-            
+         
+        # Copy the file to the cache if the file does not exist in the cache, 
+        # or the repo file is newer than the cache.     
         if ( not os.path.exists(cache_path) or
              os.path.getmtime(repo_path) > os.path.getmtime(cache_path) ):
                         

@@ -106,9 +106,8 @@ class Resource(object):
         return self._getresponse()
 
     # POST /resource
-    def post(self, **kwargs):
-        data = kwargs
-        meta = dict([(k, data.pop(k)) for k in data.keys() if k.startswith("__")])
+    def post(self, data, **kwargs):
+        meta = dict([(k, kwargs.pop(k)) for k in kwargs.keys() if k.startswith("__")])
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         self._request("POST", self.url, data, headers, meta)
         return self._getresponse()
@@ -157,7 +156,7 @@ class Resource(object):
             headers = {"Content-Type": "text/plain"}
             pass
         elif  hasattr(body, 'read'):
-            # File like object, httplib can handle it. 
+            # File like object, httplib can handle it, so just pass it through. 
             headers = {"Content-Type": "application/octet-stream"}
             pass
         else:
@@ -239,11 +238,13 @@ class Resource(object):
         elif mime == 'application/xml':
             raise Exception('application/xml not supported yet!')
             ret = resp.read()
-        else:
+        elif mime == 'text/html':
             ret = resp.read()
-        resp.close()
+        else:
+            ret = None
         
-        print 'RET',mime, ret
+        if ret:
+            resp.close()
         
         errors = True
         if str(resp.status).startswith("2") or str(resp.status).startswith("3"):

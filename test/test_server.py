@@ -34,9 +34,22 @@ class Test(unittest.TestCase):
     def test_basic(self):
         r = Rest('http://localhost:8080')
         
-        resource, response =  r.test_put(open('/etc/hosts','r'))
+        bf = self.bundle.database.path
+        response =  r.put(open(bf,'r'))
+        print response
+        
+        for p in self.bundle.partitions.all:
+            db = p.database
+            response =  r.put(open(db.path,'r'))
+            print response
+       
+        print "------"
+        
+        with open('/tmp/foo','w') as f:
+            b = r.get(self.bundle.identity.id_, f)
 
-        print resource.attrs
+        
+        print b
         
 
 

@@ -13,6 +13,7 @@ def coerce_int(v):
     
 def coerce_int_except(v, msg):   
     '''Convert to an int, throw an exception if it isn't'''
+   
     try:
         return int(v)
     except:
@@ -72,7 +73,7 @@ class BasicTransform(object):
         else:
             return f(v)
 
-    def __init__(self, column, useIndex=None):
+    def __init__(self, column, useIndex=False):
         """
         
         """
@@ -80,11 +81,11 @@ class BasicTransform(object):
   
         # for numbers try to coerce to an integer. We'd have to use a helper func
         # with a try/catch, except in this case, integers are always all digits here 
-        if column.datatype == 'integer':
+        if str(column.datatype) == 'integer':
             #f = lambda v: int(v)
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
-        if column.datatype == 'real':
+        elif column.datatype == 'real':
             #f = lambda v: int(v)
             msg = column.name
             f = lambda v, msg = msg: coerce_float_except(v, msg)
@@ -106,8 +107,6 @@ class BasicTransform(object):
         # Strip test values, but not numbers
         f = lambda v, f=f:  f(v.strip()) if isinstance(v,basestring) else f(v)
         
-        # Extract the value from a position in the row
-        f = lambda row, column=column, f=f: f(row[column.name])
         
         if useIndex:
             f = lambda row, column=column, f=f: f(row[column.sequence_id-1])
@@ -180,7 +179,7 @@ class CensusTransform(BasicTransform):
         if column.datatype == 'integer':
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
-        if column.datatype == 'real':
+        elif column.datatype == 'real':
             msg = column.name
             f = lambda v, msg = msg: coerce_float_except(v, msg)
         else:
