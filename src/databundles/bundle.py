@@ -77,7 +77,6 @@ class DbBundle(Bundle):
         
         self.run_args = None
         
-
     def table_data(self, query):
         '''Return a petl container for a data table'''
         import petl 
@@ -112,6 +111,9 @@ class BuildBundle(Bundle):
         self._database  = None
        
         self.filesystem = Filesystem(self, self.bundle_dir)
+        
+        # For build bundles, always use the FileConfig though self.config
+        # to get configuration. 
         self.config = BundleFileConfig(self.bundle_dir)
 
         import base64
@@ -173,6 +175,10 @@ class BuildBundle(Bundle):
             self._database  = Database(self)
          
         return self._database
+
+    @property
+    def db_config(self):
+        return BundleDbConfig(self.database)
 
     @classmethod
     def rm_rf(cls, d):
@@ -353,7 +359,7 @@ class BundleFileConfig(BundleConfig):
         return dict1
 
     def __getattr__(self, group):
-        '''Fetch a confiration group and return the contents as an 
+        '''Fetch a configuration group and return the contents as an 
         attribute-accessible dict'''
         
       
@@ -392,36 +398,59 @@ class BundleFileConfig(BundleConfig):
 class BundleDbConfig(BundleConfig):
     '''Binds configuration items to the database, and processes the bundle.yaml file'''
 
+    database = None
+    dataset = None
+
     def __init__(self, database):
         '''Maintain link between bundle.yam file and Config record in database'''
         
         super(BundleDbConfig, self).__init__()
+        
+        if not database:
+            raise Exception("Didn't get database")
+        
         self.database = database
         self.dataset = self.get_dataset()
-
+       
     @property
     def dict(self): #@ReservedAssignment
         '''Return a dict/array object tree for the bundle configuration'''
       
         return {'identity':self.dataset.to_dict()}
 
+
+
     def __getattr__(self, group):
         '''Fetch a confiration group and return the contents as an 
         attribute-accessible dict'''
         
-        inner = self.dict[group]
-        
+        from databundles.orm import Config as SAConfig
+        s = self.database.session
+        dataset = self.dataset
         class attrdict(object):
             def __setattr__(self, key, value):
                 key = key.strip('_')
-                inner[key] = value
-
+             
+                s.query(SAConfig).filter(SAConfig.group == group,
+                                         SAConfig.key == key,
+                                         SAConfig.d_id == dataset.id_).delete()
+                
+                o = SAConfig(group=group,key=key,d_id=dataset.id_,value = value)
+                s.add(o)
+                s.commit()
+           
             def __getattr__(self, key):
                 key = key.strip('_')
-                if key not in inner:
+
+
+                try:
+                    r = s.query(SAConfig).filter(SAConfig.group == group,
+                                             SAConfig.key == key,
+                                             SAConfig.d_id == dataset.id_).one()
+                    return r.value
+                except:
                     return None
-                
-                return inner[key]
+
         
         return attrdict()
 
@@ -435,24 +464,7 @@ class BundleDbConfig(BundleConfig):
 
         return  (s.query(Dataset).one())
 
-    def write_dict_to_db(self, dict): #@ReservedAssignment
-        from databundles.orm import Config as SAConfig
-     
-        s = self.database.session
-        ds = self.get_or_new_dataset()
-         
-        s.query(SAConfig).filter(SAConfig.d_id == ds.id_).delete()
-        
-        for group,gvalues in dict.items():
-            if group in ['identity']:
-                for key, value in gvalues.items():
-                    o = SAConfig(group=group,key=key,d_id=ds.id_,value = value)
-                    s.add(o)
-
-        s.commit()
-
    
 
 
-    
     

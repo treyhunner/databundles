@@ -416,7 +416,7 @@ class Config(Base):
     d_id = SAColumn('co_d_id',Text, primary_key=True)
     group = SAColumn('co_group',Text, primary_key=True)
     key = SAColumn('co_key',Text, primary_key=True)
-    value = SAColumn('co_value', PickleType)
+    value = SAColumn('co_value', PickleType(protocol=0))
     source = SAColumn('co_source',Text)
 
     def __init__(self,**kwargs):

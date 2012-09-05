@@ -35,18 +35,17 @@ class Test(unittest.TestCase):
         r = Rest('http://localhost:8080')
         
         bf = self.bundle.database.path
-        response =  r.put(open(bf,'r'))
-        print response
+        response =  r.put(open(bf))
+        print "Put Bundle: ", response
         
         for p in self.bundle.partitions.all:
-            db = p.database
-            response =  r.put(open(db.path,'r'))
-            print response
+            response =  r.put(open(p.database.path))
+            print "Put Partition: ",response
        
         print "------"
-        
+       
         with open('/tmp/foo','w') as f:
-            b = r.get(self.bundle.identity.id_, f)
+            b = r.get(self.bundle.identity.id_,f)
 
         
         print b

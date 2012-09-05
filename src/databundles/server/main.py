@@ -10,21 +10,12 @@ from databundles.bundle import DbBundle
 
 library = databundles.library.get_library()
 
-
-@get('/config')
-def get_config():
-    '''Return all of the dataset identities, as a dict, 
-    indexed by id'''
-    rc = databundles.run.RunConfig().dict
-    return rc
-
 @get('/datasets')
 def get_datasets():
     '''Return all of the dataset identities, as a dict, 
     indexed by id'''
     return { i.id_ : i.to_dict() for i in library.dataset_ids}
     
-
 @post('/datasets')
 def post_dataset(): 
     '''Store a bundle, calling put() on the bundle file in the Library'''
@@ -57,7 +48,6 @@ def post_dataset():
 
     return r
 
-    
 @post('/datasets/find')
 def post_datasets_find():
     ''' '''
@@ -71,19 +61,18 @@ def get_dataset_record(id):
         
     if len(ds) > 1:
         raise Exception("Got more than one result")
-    
 
     return ds.pop()
 
 @get('/dataset/<did>')    
-def get_dataset_info(did):
-    '''Return a single dataset given an id_ or name'''
+def get_dataset_identity(did):
+    '''Return a single dataset identity record given an id_ or name'''
     
     return get_dataset_record(did).identity.to_dict()
 
 @get('/dataset/:did/bundle')
 def get_dataset_bundle(did):
-    '''Get a bundle database file. 
+    '''Get a bundle database file, given an id or name
     
     Args:
         id    The Name or id of the dataset bundle. 
@@ -97,7 +86,10 @@ def get_dataset_bundle(did):
     
     return static_file(bp.database.path, root='/', mimetype="application/octet-stream")
 
-
+@get('/dataset/:did/info')
+def get_dataset_info(did):
+    '''Return the complete record for a dataset, including
+    the schema and all partitions. '''
 
 @get('/dataset/<id_>/partitions')
 def get_dataset_partitions_info(id_):
@@ -116,10 +108,10 @@ def get_dataset_partitions_info(id_):
         
     return out;
 
-@get('/partition/:pid/table/:tid/data')
+@get('/dataset/<did>/table/:<tid>/data')
 def get_partition_data(pid,tid):
+    '''Return a stream of data from a table in a dataset'''
     pass
-
 
 
 run(host='localhost', port=8080, reloader=True)

@@ -20,8 +20,6 @@ class Test(unittest.TestCase):
         
         self.bundle.prepare()
         self.bundle.build()
-
-   
       
     def test_identity(self):
         self.assertEqual('source', self.bundle.identity.source)
@@ -188,13 +186,22 @@ class Test(unittest.TestCase):
         
         p = self.bundle.partitions.find(pid3)   
         self.assertEquals('bar',p.data['foo'] ) 
-        
-        
-        print p.database.path
+       
         s.commit()
         p.database.create()
         
-    def test_tempfile(self):
+    def test_config(self):
+        
+        c = self.bundle.config
+        
+        db_config = self.bundle.db_config
+       
+        db_config.foo.bar = 'bingo'
+       
+        self.assertEquals('bingo', db_config.foo.bar)
+     
+        
+    def x_test_tempfile(self):
   
         self.test_generate_schema()
   

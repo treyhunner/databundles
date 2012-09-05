@@ -11,9 +11,7 @@ import databundles
 
 from databundles.exceptions import ResultCountError, ConfigurationError
 
-
 library = None
-
 
 def get_library(config=None):
     ''' Returns LocalLIbrary singleton'''
