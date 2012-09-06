@@ -385,9 +385,8 @@ class LibraryDb(object):
 
         return query
 
-    def query(self):
-        q = BundleQueryCommand()
-        q._library = self
+    def query(self, dict_ = {} ):
+        q = BundleQueryCommand(dict_)
         return q
         
     def queryByIdentity(self, identity):
@@ -534,10 +533,17 @@ class BundleQueryCommand(object):
     
     '''
 
-    def __init__(self):
-        self._dict = {}
-        self._library = None
+    def __init__(self, dict_ = {}):
+        self._dict = dict_
+    
+    def to_dict(self):
+        return self._dict
+    
+    def from_dict(self, dict):
+        for k,v in dict.items():
+            print "FROM DICT",k,v
 
+    
     def getsubdict(self, group):
         '''Fetch a confiration group and return the contents as an 
         attribute-accessible dict'''
@@ -600,28 +606,11 @@ class BundleQueryCommand(object):
         '''Return an array of terms for partition searches'''
         return self.getsubdict('partition')   
 
-    @property 
-    def all(self):
-        return self._library.find(self).all()
-    
-    @property 
-    def one(self):
-        return self._library.find(self).one()    
 
-    @property 
-    def first(self):
-        
-        # Uses limit(), instead of first(), because first()
-        # will only return one olbject, while all() will return
-        # a tuple of (Dataset, Partition) if that was requested. 
-        return self._library.find(self).limit(1).all()[0]
 
-    @property 
-    def query(self):
-        return self._library.find(self)
-    
     def __str__(self):
         return str(self._dict)
+
 
 class Library(object):
     pass
@@ -707,8 +696,8 @@ class LocalLibrary(Library):
     def find(self, query_command):
         return self.database.find(query_command)
         
-    def query(self):
-        return self.database.query()
+    def query(self, dict_ = {} ):
+        return self.database.query(dict_)
         
     def put(self, bundle,  remove=True):
         '''Install a bundle file, and all of its partitions, into the library.
@@ -732,8 +721,7 @@ class LocalLibrary(Library):
      
         dst = self.repository.put(src,rel_path)
         self.database.add_file(dst, self.repository.repo_id, bundle.identity.id_)
-        
-                 
+          
         dataset = self.database.install_bundle(bundle)
         
         return dataset, dst

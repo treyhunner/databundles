@@ -5,7 +5,7 @@ Created on Aug 31, 2012
 
 @author: eric
 '''
-from siesta  import API
+from siesta  import API #@UnresolvedImport
 from databundles.library import BundleQueryCommand
 from databundles.bundle import DbBundle
 
@@ -19,7 +19,6 @@ class Rest(object):
 
     def __init__(self, url):
         '''
-        
         '''
         
         self.url = url
@@ -56,11 +55,13 @@ class Rest(object):
         return  BundleQueryCommand()
     
     def find(self, query):
-        pass
+        resource, response =  self.api.datasets.find.post(query.to_dict())
+        return resource.ret
     
     def datasets(self):
-        '''Return alist of all of the datasets in the library'''
-        return self.api.datasets.get()
+        '''Return a list of all of the datasets in the library'''
+        resource, response =   self.api.datasets.get()
+        return resource.attrs
         
 
     

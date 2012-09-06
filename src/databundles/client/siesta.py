@@ -39,6 +39,17 @@ USER_AGENT = "Python-siesta/%s" % __version__
 
 logging.basicConfig(level=0)
 
+class Response(object):
+    object = None
+    is_error = False
+    code = None
+    message = None
+    header = None
+    content_type = None
+   
+    def to_dict(self):
+        return self.__dict__
+    
 
 class Resource(object):
 
@@ -165,12 +176,13 @@ class Resource(object):
 
         self.conn.request(method, url, body, headers)
 
+    
+
     def _getresponse(self):
         resp = self.conn.getresponse()
       
-        #logging.info("status: %s" % resp.status)
-        #logging.info("getheader: %s" % resp.getheader('content-type'))
-        #logging.info("__read: %s" % resp.read())
+        ro =  Response()
+        
         # TODO: Lets support redirects and more advanced responses
         # see: http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 
@@ -202,74 +214,76 @@ class Resource(object):
         #          the reason for failure.
 
         if resp.status == 202:
+            return self.handle_202(resp)
+
+        ro.content_type, encoding = self.get_mime_type(resp)
+
+        ro.object = self.type_handlers.get(ro.content_type, self.type_handlers.get('default'))(self,resp)
+    
+        ro.code = int(resp.status)
+        ro.message = resp.reason
+        ro.headers = resp.getheaders()
+        
+        if ro.code >= 400:
+            ro.is_error = True
             
-            status_url = resp.getheader('content-location')
-            if not status_url:
-                raise Exception('Empty content-location from server')
+        return ro
+    
 
-            status_uri = urlparse(status_url).path
-            status, st_resp  = Resource(uri=status_uri, api=self.api).get()
-            retries = 0
-            MAX_RETRIES = 3
-            resp_status = st_resp.status
+    def handle_json_object(self, resp):
+        o = json.loads(resp.read())
+        resp.close()
+        return o
+    
+    def handle_xml_object(self, resp):
+        raise Exception('application/xml not supported yet!')
+    
+    def handle_html_object(self, resp):
+        o = resp.read()
+        resp.close()
+        return o
+    
+    def handle_default_object(self, resp):
+        pass
 
-            while resp_status != 303 and retries < MAX_RETRIES:
-                retries += 1
-                status.get()
-                time.sleep(5)
-                
-            if retries == MAX_RETRIES:
-                raise Exception('Max retries limit reached without success')
-            
-            location = status.conn.getresponse().getheader('location')
-            resource = Resource(uri=urlparse(location).path, api=self.api).get()
-            return resource, None
+    type_handlers = {
+        'application/json' : handle_json_object,
+        'application/xml' : handle_xml_object, 
+        'text/html' : handle_html_object,
+        'default' : handle_default_object }
 
-        m = re.match('^([^;]*)(?:; charset=(.*))?$',
-                     resp.getheader('content-type'))
+    def get_mime_type(self, resp):
+        m = re.match('^([^;]*)(?:; charset=(.*))?$',resp.getheader('content-type'))
         if m == None:
             mime, encoding = ('', '')
         else:
             mime, encoding = m.groups()
+            
+        return mime, encoding
+            
+    def handle_202(self, resp):
+        status_url = resp.getheader('content-location')
+        if not status_url:
+            raise Exception('Empty content-location from server')
 
-        if mime == 'application/json':        
-            ret = json.loads(resp.read())
+        status_uri = urlparse(status_url).path
+        status, st_resp  = Resource(uri=status_uri, api=self.api).get()
+        retries = 0
+        MAX_RETRIES = 3
+        resp_status = st_resp.status
 
-        elif mime == 'application/xml':
-            raise Exception('application/xml not supported yet!')
-            ret = resp.read()
-        elif mime == 'text/html':
-            ret = resp.read()
-        else:
-            ret = None
+        while resp_status != 303 and retries < MAX_RETRIES:
+            retries += 1
+            status.get()
+            time.sleep(5)
+            
+        if retries == MAX_RETRIES:
+            raise Exception('Max retries limit reached without success')
         
-        if ret:
-            resp.close()
-        
-        errors = True
-        if str(resp.status).startswith("2") or str(resp.status).startswith("3"):
-            errors = False
-
-        if isinstance(ret, list):
-           
-            ret_list = []
-            for i in ret:
-                resource = Resource(uri=self.uri + "/" + i.get('name', ''), api=self.api)
-                if errors:
-                    resource._errors = i
-                else:
-                    resource.attrs = i
-                ret_list.append(resource)
-            return ret_list, resp
-        elif isinstance(ret, dict):
-            if errors:
-                self._errors.update(ret.get("error", {}))
-            else:
-                self.attrs.update(ret)
-                self._errors = {}
-        
-        return self, resp
-
+        location = status.conn.getresponse().getheader('location')
+        resource = Resource(uri=urlparse(location).path, api=self.api).get()
+        return resource, None
+    
 class API(object):
     def __init__(self, base_url, auth=None):
         self.base_url = base_url + '/' if not base_url.endswith('/') else base_url

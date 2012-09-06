@@ -2,13 +2,56 @@
 REST Server For DataBundle Libraries. 
 '''
 
-from bottle import  run, get, put, post, request, static_file #@UnresolvedImport
+from bottle import  run, get, put, post, request, response, static_file, install #@UnresolvedImport
 
 import databundles.library 
 import databundles.run
 from databundles.bundle import DbBundle
 
 library = databundles.library.get_library()
+
+class CaptureException(object):
+
+    def __init__(self, f):
+        self.f = f
+
+    def __call__(self, *args, **kwargs):
+        print "Entering", self.f.__name__
+        try:
+            r =  self.f(*args, **kwargs)
+        except Exception as e:
+            r =  {'exception':e}
+        
+        print "Exited", self.f.__name__
+        return r
+
+class AllJSONPlugin(object):
+    '''A copy of the bottle JSONPlugin, but this one tries to convert
+    all objects to json ''' 
+    
+    from json import dumps as json_dumps
+    
+    name = 'json'
+    api  = 2
+
+    def __init__(self, json_dumps=json_dumps):
+        self.json_dumps = json_dumps
+
+    def apply(self, callback, context):
+        dumps = self.json_dumps
+        if not dumps: return callback
+        def wrapper(*a, **ka):
+            rv = callback(*a, **ka)
+          
+            #Attempt to serialize, raises exception on failure
+            json_response = dumps(rv)
+            #Set content type only if serialization succesful
+            response.content_type = 'application/json'
+            return json_response
+            return rv
+        return wrapper
+
+install(AllJSONPlugin())
 
 @get('/datasets')
 def get_datasets():
@@ -51,6 +94,10 @@ def post_dataset():
 @post('/datasets/find')
 def post_datasets_find():
     ''' '''
+   
+    bq = library.query(request.json)
+    results = library.find(bq).all()
+    print results
     return post_datasets_find.__doc__
 
 def get_dataset_record(id):
@@ -66,7 +113,11 @@ def get_dataset_record(id):
 
 @get('/dataset/<did>')    
 def get_dataset_identity(did):
-    '''Return a single dataset identity record given an id_ or name'''
+    '''Return a single dataset identity record given an id_ or name.
+    Returns only the dataset record, excluding chld objects like partitions, 
+    tables, and columns. 
+    
+    '''
     
     return get_dataset_record(did).identity.to_dict()
 
@@ -108,10 +159,15 @@ def get_dataset_partitions_info(id_):
         
     return out;
 
-@get('/dataset/<did>/table/:<tid>/data')
-def get_partition_data(pid,tid):
-    '''Return a stream of data from a table in a dataset'''
-    pass
+#### Test Code
+
+@get('/test/<arg>')
+@CaptureException
+def get_test(arg):
+    print "Arg",arg
+    print 
+    raise  Exception("Fobar Exception")
+    return  arg
 
 
 run(host='localhost', port=8080, reloader=True)

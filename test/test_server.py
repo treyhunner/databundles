@@ -8,7 +8,7 @@ import os.path
 from  testbundle.bundle import Bundle
 from databundles.run import  RunConfig
 
-from  databundles.client.rest import Rest
+from  databundles.client.rest import Rest #@UnresolvedImport
 
 class Test(unittest.TestCase):
 
@@ -31,6 +31,15 @@ class Test(unittest.TestCase):
         pass
 
 
+    def test_test(self):
+        from databundles.client.siesta import  API
+        a = API('http://localhost:8080')
+        
+        r = a.test('foobar').get(bar='baz')
+        
+        print r.to_dict()
+        print r.object
+
     def test_basic(self):
         r = Rest('http://localhost:8080')
         
@@ -47,10 +56,15 @@ class Test(unittest.TestCase):
         with open('/tmp/foo','w') as f:
             b = r.get(self.bundle.identity.id_,f)
 
+        print "Bundles",b
         
-        print b
+        datasets = r.datasets()
+        print "Datasets", datasets
         
-
+        response = r.find(r.query().table(name='tone'))
+        
+        print "Query",response
+        
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
