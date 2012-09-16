@@ -151,7 +151,7 @@ class Database(object):
             self.file_path = file_path
             
             if not os.path.exists(self.file_path):
-                from exceptions import BundleError
+                from databundles.dbexceptions import BundleError
                 raise BundleError('Database file must exist '+self.file_path)
             
         else:
@@ -357,9 +357,9 @@ class Database(object):
         
         """Create the database from the base SQL"""
         if not self.exists():    
-            import databundles  
-            from orm import Dataset
-            from identity import Identity
+            import databundles  #@UnresolvedImport
+            from databundles.orm import Dataset
+            from databundles.identity import Identity
             try:   
                 script_str = os.path.join(os.path.dirname(databundles.__file__),
                                           Database.PROTO_SQL_FILE)
@@ -420,7 +420,7 @@ class Database(object):
             table. The name or Id of the table
         
         '''
-        from schema import Schema
+        from databundles.schema import Schema
         table = Schema.get_table_from_database(source_db, table_name)
         
         s = self.session

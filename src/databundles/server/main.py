@@ -2,28 +2,47 @@
 REST Server For DataBundle Libraries. 
 '''
 
-from bottle import  run, get, put, post, request, response, static_file, install #@UnresolvedImport
+from bottle import  run, get, put, post, request, response #@UnresolvedImport
+from bottle import HTTPResponse, static_file, install #@UnresolvedImport
 
 import databundles.library 
 import databundles.run
 from databundles.bundle import DbBundle
+from decorator import  decorator #@UnresolvedImport
 
 library = databundles.library.get_library()
 
-class CaptureException(object):
+def make_exception_response(e):
+    
+    import sys
+    import traceback
+    
+    (exc_type, exc_value, exc_traceback) = sys.exc_info() #@UnusedVariable
+    
+    tb_list = traceback.format_list(traceback.extract_tb(sys.exc_info()[2]))
+    
+    return {'exception':
+     {'class':e.__class__.__name__, 
+      'args':e.args,
+      'trace': "\n".join(tb_list)
+     }
+    }   
 
-    def __init__(self, f):
-        self.f = f
+def _CaptureException(f, *args, **kwargs):
+    '''Decorator implementation for capturing exceptions '''
+    try:
+        r =  f(*args, **kwargs)
+    except Exception as e:
+        r = make_exception_response(e)
+    
+    return r
 
-    def __call__(self, *args, **kwargs):
-        print "Entering", self.f.__name__
-        try:
-            r =  self.f(*args, **kwargs)
-        except Exception as e:
-            r =  {'exception':e}
-        
-        print "Exited", self.f.__name__
-        return r
+def CaptureException(f, *args, **kwargs):
+    '''Decorator to capture exceptions and convert them
+    to a dict that can be returned as JSON ''' 
+
+    return decorator(_CaptureException, f) # Preserves signature
+
 
 class AllJSONPlugin(object):
     '''A copy of the bottle JSONPlugin, but this one tries to convert
@@ -38,17 +57,25 @@ class AllJSONPlugin(object):
         self.json_dumps = json_dumps
 
     def apply(self, callback, context):
+      
         dumps = self.json_dumps
         if not dumps: return callback
         def wrapper(*a, **ka):
             rv = callback(*a, **ka)
-          
+
+            if isinstance(rv, HTTPResponse ):
+                return rv
+            
             #Attempt to serialize, raises exception on failure
-            json_response = dumps(rv)
+            try:
+                json_response = dumps(rv)
+            except Exception as e:
+                r =  make_exception_response(e)
+                json_response = dumps(r)
+                
             #Set content type only if serialization succesful
             response.content_type = 'application/json'
             return json_response
-            return rv
         return wrapper
 
 install(AllJSONPlugin())
@@ -63,7 +90,6 @@ def get_datasets():
 def post_dataset(): 
     '''Store a bundle, calling put() on the bundle file in the Library'''
     import uuid # For a random filename. 
-    import io
     import os
     
     cf = library.cache_path('downloads',str(uuid.uuid4()))
@@ -81,27 +107,62 @@ def post_dataset():
             chunk =  body.read(chunksize) #@UndefinedVariable
     
     # Now we have the bundle in cf. Stick it in the library. 
-    dataset,library_path = library.put(DbBundle(cf))
+    
+    # Is this a partition or a bundle?
+    tb = DbBundle(cf)
+    
+    force_partition = (tb.db_config.info.type == 'partition')
+    remove = (tb.db_config.info.type != 'partition')
+        
+    dataset, partition, library_path = library.put(tb, remove=remove, force_partition=force_partition)
     
     # if that worked, OK to remove the temporary file. 
     os.remove(cf)
-    
-    r = {'dataset':{'id':dataset.id_, 'name':dataset.name}, 
-            'path': library_path}
+
+    if partition:
+        partition = {'id':partition.identity.id_, 'name':partition.name}
+    else:
+        partition = None 
+        
+    r = {
+         'path': library_path,
+         'dataset':{'id':dataset.id_, 'name':dataset.name}, 
+         'partition' : partition
+         }
+        
 
     return r
 
 @post('/datasets/find')
 def post_datasets_find():
-    ''' '''
+    '''This is the doc'''
    
-    bq = library.query(request.json)
-    results = library.find(bq).all()
-    print results
-    return post_datasets_find.__doc__
+    q = request.json
+   
+    bq = library.query(q)
+    db_query = library.find(bq)
+    results = db_query.all() #@UnusedVariable
+  
+    out = []
+    for r in results:
+        if isinstance(r, tuple):
+            e = { 'dataset': {'id_': r.Dataset.id_, 'name': r.Dataset.name} ,
+                  'partition' : {'id_': r.Partition.id_, 'name': r.Partition.name}
+                 
+                 }
+        else:
+            e = { 'dataset': {'id_': r.Dataset.id_, 'name': r.Dataset.name},
+                  'partition': None
+                 }
+  
+        out.append(e)
+        
+        return out
+  
+   
 
-def get_dataset_record(id):
-    ds =  library.findByIdentity(id)
+def get_dataset_record(id_):
+    ds =  library.findByIdentity(id_)
     
     if len(ds) == 0:
         return None
@@ -132,9 +193,7 @@ def get_dataset_bundle(did):
     '''
     
     bp = library.get(did)
-    
-    print "FILE", bp.database.path
-    
+ 
     return static_file(bp.database.path, root='/', mimetype="application/octet-stream")
 
 @get('/dataset/:did/info')
@@ -161,13 +220,23 @@ def get_dataset_partitions_info(id_):
 
 #### Test Code
 
-@get('/test/<arg>')
-@CaptureException
+@get('/test/echo/<arg>')
 def get_test(arg):
-    print "Arg",arg
-    print 
-    raise  Exception("Fobar Exception")
-    return  arg
+    '''just echo the argument'''
+    return  (arg, dict(request.query.items()))
+
+@put('/test/echo')
+def put_test():
+    '''just echo the argument'''
+    return  (request.json, dict(request.query.items()))
+
+
+@get('/test/exception')
+@CaptureException
+def get_test_exception():
+    '''Throw an exception'''
+    raise Exception("throws exception")
+
 
 
 run(host='localhost', port=8080, reloader=True)

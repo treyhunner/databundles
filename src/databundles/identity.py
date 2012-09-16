@@ -4,7 +4,6 @@ Created on Jun 23, 2012
 @author: eric
 '''
 
-import exceptions
 import os.path
 
 class Identity(object):
@@ -78,24 +77,25 @@ class Identity(object):
     @staticmethod
     def name_parts(o=None):
         """Return the parts of the name as a list, for additional processing. """
+        from databundles.dbexceptions import ConfigurationError
         name_parts = [];
      
         if o is None:
-            raise exceptions.ConfigurationError('name_parts must be given an object')  
+            raise ConfigurationError('name_parts must be given an object')  
 
         try: 
             if o.source is None:
-                raise exceptions.ConfigurationError('Source is None ')  
+                raise ConfigurationError('Source is None ')  
             name_parts.append(o.source)
         except Exception as e:
-            raise exceptions.ConfigurationError('Missing identity.source: '+str(e))  
+            raise ConfigurationError('Missing identity.source: '+str(e))  
   
         try: 
             if o.dataset is None:
-                raise exceptions.ConfigurationError('Dataset is None ')  
+                raise ConfigurationError('Dataset is None ')  
             name_parts.append(o.dataset)
         except Exception as e:
-            raise exceptions.ConfigurationError('Missing identity.dataset: '+str(e))  
+            raise ConfigurationError('Missing identity.dataset: '+str(e))  
         
         try: 
             if o.subset is not None:
@@ -115,12 +115,12 @@ class Identity(object):
             # input object doesn't have 'creatorcode'
             name_parts.append(Identity._creatorcode(o))
         except Exception as e:
-            raise exceptions.ConfigurationError('Missing identity.creatorcode: '+str(e))
+            raise ConfigurationError('Missing identity.creatorcode: '+str(e))
    
         try: 
             name_parts.append('r'+str(o.revision))
         except Exception as e:
-            raise exceptions.ConfigurationError('Missing identity.revision: '+str(e))  
+            raise ConfigurationError('Missing identity.revision: '+str(e))  
 
         
         import re

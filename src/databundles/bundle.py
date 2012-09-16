@@ -4,14 +4,15 @@ Created on Jun 9, 2012
 @author: eric
 '''
 
-from database import Database
-from identity import Identity 
-from filesystem import  Filesystem
-from schema import Schema
-from partition import Partitions
+from databundles.database import Database
+from databundles.identity import Identity 
+from databundles.filesystem import  Filesystem
+from databundles.schema import Schema
+from databundles.partition import Partitions
 import os.path
-from exceptions import  ConfigurationError
-from run import RunConfig
+from databundles.dbexceptions import  ConfigurationError
+from databundles.run import RunConfig
+import logging
 
 
 class Bundle(object):
@@ -24,9 +25,7 @@ class Bundle(object):
     
         self._schema = None
         self._partitions = None
-    
- 
-    
+
     @property
     def schema(self):
         if self._schema is None:
@@ -73,7 +72,7 @@ class DbBundle(Bundle):
         super(DbBundle, self).__init__()
        
         self.database = Database(self, database_file)
-        self.config = BundleDbConfig(self.database)
+        self.db_config = self.config = BundleDbConfig(self.database)
         
         self.run_args = None
         
@@ -103,7 +102,7 @@ class BuildBundle(Bundle):
             bundle_dir = Filesystem.find_root_dir()
         
         if bundle_dir is None or not os.path.isdir(bundle_dir):
-            from exceptions import BundleError
+            from databundles.dbexceptions import BundleError
             raise BundleError("BuildBundle must be constructed on a cache")
   
         self.bundle_dir = bundle_dir
@@ -173,6 +172,12 @@ class BuildBundle(Bundle):
         
         if self._database is None:
             self._database  = Database(self)
+            
+            def add_type(database):
+                self.db_config.info.type = 'bundle'
+                
+            self._database._post_create = add_type 
+            
          
         return self._database
 

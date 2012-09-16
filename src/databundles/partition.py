@@ -118,7 +118,7 @@ class Partition(object):
         '''Initialize the partition, loading in any SQL, etc. '''
         if not self.database.exists():
             self.database.create()
-
+    
     @property
     def name(self):
         return self.pid.name
@@ -138,14 +138,24 @@ class Partition(object):
         return  os.path.join(source, '-'.join(parts), *pparts )
     
     @property
+    def db_config(self):
+        from databundles.bundle import BundleDbConfig
+        return BundleDbConfig(self.database)
+    
+    @property
     def database(self):
         if self._database is None:
             self._database = self._get_database()
             
+            def add_type(database):
+                self.db_config.info.type = 'partition'
+                
+            self._database._post_create = add_type 
+            
         return self._database
     
     def _get_database(self):
-        from database import PartitionDb
+        from databundles.database import PartitionDb
         
         # If the library is set, the path to the database is relative to the
         # library, not to the dataset
@@ -167,7 +177,7 @@ class Partition(object):
     
     @property
     def schema(self):
-        from schema import Schema
+        from databundles.schema import Schema
         if self._schema is None:
             self._schema = Schema(self)
             
@@ -203,6 +213,7 @@ class Partition(object):
             self.database.delete()
         
         self.database.create(copy_tables = False)
+       
         
         if tables is not None:
         

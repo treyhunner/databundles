@@ -30,7 +30,7 @@ setup(name='databundles',
         'petl',
         'beautifulsoup4',
         'boto',
-        'siesta'
+        'decorator'
       ]
      )
 

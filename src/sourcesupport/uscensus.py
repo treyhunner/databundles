@@ -327,8 +327,7 @@ class UsCensusBundle(BuildBundle):
             row_i += 1
             
             if row_i % 10000 == 0:
-                # Prints a number representing the processing rate, 
-                # in 1,000 records per sec.
+                # Prints the processing rate in 1,000 records per sec.
                 self.log(state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
              
             geo_keys = []

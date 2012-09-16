@@ -100,7 +100,7 @@ class Filesystem(object):
         if not os.path.exists(dir_):
             try:
                 os.makedirs(dir_) # MUltiple process may try to make, so it could already exist
-            except Exception as e:
+            except Exception as e: #@UnusedVariable
                 pass
             
             if not os.path.exists(dir_):

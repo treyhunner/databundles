@@ -7,9 +7,9 @@ from databundles.run import  RunConfig
 
 import os.path
 import shutil
-import databundles
+import databundles #@UnresolvedImport
 
-from databundles.exceptions import ResultCountError, ConfigurationError
+from databundles.dbexceptions import ResultCountError, ConfigurationError
 
 library = None
 
@@ -17,7 +17,7 @@ def get_library(config=None):
     ''' Returns LocalLIbrary singleton'''
     global library
     if library is None:
-        library =  LocalLibrary(config=config)
+        library =  Library(config=config)
         
     return library
 
@@ -111,7 +111,7 @@ class LibraryDb(object):
     
     def clean(self):
         s = self.session
-        from orm import Column, Partition, Table, Dataset, Config, File
+        from databundles.orm import Column, Partition, Table, Dataset, Config, File
         
         s.query(Column).delete()
         s.query(Partition).delete()
@@ -120,6 +120,7 @@ class LibraryDb(object):
         s.query(Config).delete()
         s.query(File).delete()
         s.commit()
+        
         
     def create(self):
         
@@ -144,8 +145,7 @@ class LibraryDb(object):
     
     def drop(self):
         s = self.session
-        from orm import Column, Partition, Table, Dataset, Config, File
-        
+      
         s.execute("DROP TABLE IF EXISTS files")
         s.execute("DROP TABLE IF EXISTS columns")
         s.execute("DROP TABLE IF EXISTS partitions")
@@ -201,37 +201,48 @@ class LibraryDb(object):
         else:
             raise RuntimeError("Unknown database driver: {} ".format(self.driver))
         
-    def install_bundle(self, bundle):
+    def install_bundle(self, bundle, force_partition=False):
         '''Copy the schema and partitions lists into the library database'''
         from databundles import resolve_id
         from databundles.orm import Dataset
         from databundles.orm import Partition as OrmPartition
 
-        from partition import Partition
-        from bundle import Bundle
+        from databundles.partition import Partition
+        from databundles.bundle import Bundle
                 
         bdbs = bundle.database.session 
         s = self.session
         dataset = bdbs.query(Dataset).one()
+        partition = None
         s.merge(dataset)
         s.commit()
 
         if not isinstance(bundle, (Partition, Bundle)):
             raise ValueError("Can only install a Partition or Bindle object")
 
-        if isinstance(bundle, Partition):
+        if force_partition:
+            # This looks like a bundle, but is actually a partition, so
+            # we can't get the actual partition
+            partition =  bdbs.query(OrmPartition).first()
+        
+            s.merge(partition)
+            s.commit()
+           
+        elif isinstance(bundle, Partition):
 
             try: 
+                # Find the partition record from the bundle
                 
-                partition =  (bdbs
-                              .query(OrmPartition)
-                              .filter(OrmPartition.id_ == str(resolve_id(bundle)))
-                              .one())
-                
+                q = (bdbs
+                      .query(OrmPartition)
+                      .filter(OrmPartition.id_ == str(resolve_id(bundle))))
+      
+                partition =  q.one()
+ 
                 s.merge(partition)
                 s.commit()
             except Exception as e:
-                        print "ERROR: Failed to merge partition "+str(bundle.identity)+":"+ str(e)
+                print "ERROR: Failed to merge partition "+str(bundle.identity)+":"+ str(e)
         else:
             pass
             # The Tables only get installed when the dataset is installed, 
@@ -252,7 +263,7 @@ class LibraryDb(object):
     
         s.commit()
         
-        return dataset
+        return dataset, partition
            
     def remove_bundle(self, bundle):
         '''remove a bundle from the database'''
@@ -262,7 +273,7 @@ class LibraryDb(object):
         
         s = self.session
         
-        dataset, partition = self.get(bundle.identity)
+        dataset, partition = self.get(bundle.identity) #@UnusedVariable
         
         if not dataset:
             return False
@@ -297,9 +308,9 @@ class LibraryDb(object):
         
         '''
 
-        from identity import ObjectNumber, PartitionNumber, Identity
-        from orm import Dataset
-        from orm import Partition
+        from databundles.identity import ObjectNumber, PartitionNumber, Identity
+        from databundles.orm import Dataset
+        from databundles.orm import Partition
         import sqlalchemy.orm.exc 
         
         s = self.session
@@ -386,7 +397,9 @@ class LibraryDb(object):
         return query
 
     def query(self, dict_ = {} ):
+      
         q = BundleQueryCommand(dict_)
+      
         return q
         
     def queryByIdentity(self, identity):
@@ -471,10 +484,10 @@ class LibraryDb(object):
       
         s.query(File).filter(File.path == path).delete()
       
-        file = File(path=path, group=group, ref=ref,
+        file_ = File(path=path, group=group, ref=ref,
                     modified=stat.st_mtime, size=stat.st_size)
     
-        s.add(file)
+        s.add(file_)
         s.commit()
 
 
@@ -539,8 +552,8 @@ class BundleQueryCommand(object):
     def to_dict(self):
         return self._dict
     
-    def from_dict(self, dict):
-        for k,v in dict.items():
+    def from_dict(self, dict_):
+        for k,v in dict_.items():
             print "FROM DICT",k,v
 
     
@@ -613,16 +626,6 @@ class BundleQueryCommand(object):
 
 
 class Library(object):
-    pass
-    
-class RemoteLibrary(Library):
-    '''A remote library has its files stored on a remote server.  This class 
-    will download and cache the library databse file, keeping it up to date
-    when it changes. '''
-    
-    pass
-    
-class LocalLibrary(Library):
     '''
     classdocs
     '''
@@ -631,6 +634,12 @@ class LocalLibrary(Library):
         '''
         Libraries are constructed on the root cache name for the library. 
         If the cache does not exist, it will be created. 
+        
+        Args:
+        
+            cache: a path name to a directory where bundle files will be stored
+            config: A RunConfig object. If not given, use the default RunConfig
+        
         '''
         if cache is not None:
             self.cache = cache
@@ -670,7 +679,7 @@ class LocalLibrary(Library):
         return p
         
     def get(self,bp_id):
-        from bundle import DbBundle
+        from databundles.bundle import DbBundle
         
         dataset, partition = self.database.get(bp_id)
         
@@ -699,7 +708,7 @@ class LocalLibrary(Library):
     def query(self, dict_ = {} ):
         return self.database.query(dict_)
         
-    def put(self, bundle,  remove=True):
+    def put(self, bundle,  remove=True, force_partition=False):
         '''Install a bundle file, and all of its partitions, into the library.
         Copies in the files that don't exist, and loads data into the library
         database'''
@@ -715,16 +724,16 @@ class LocalLibrary(Library):
      
         cache_path = self.cache_path(rel_path)
         
-        # Remove anhy old cached database file
+        # Remove any old cached database file
         if os.path.exists(cache_path):
             os.remove(cache_path)
      
         dst = self.repository.put(src,rel_path)
         self.database.add_file(dst, self.repository.repo_id, bundle.identity.id_)
           
-        dataset = self.database.install_bundle(bundle)
+        dataset, partition = self.database.install_bundle(bundle,force_partition=force_partition)
         
-        return dataset, dst
+        return dataset, partition, dst
     
     def require(self,key):
         from databundles.bundle import DbBundle
@@ -781,19 +790,17 @@ class LocalLibrary(Library):
     def rebuild(self):
         '''Rebuild the database from the bundles that are already installed
         in the repositry cache'''
-        
-        import os.path
-        
-        from bundle import DbBundle
+    
+        from databundles.bundle import DbBundle
    
         bundles = []
-        for r,d,f in os.walk(self.cache):
-            for file in f:
+        for r,d,f in os.walk(self.cache): #@UnusedVariable
+            for file_ in f:
                 if file.endswith(".db"):
-                    b = DbBundle(os.path.join(r,file))
+                    b = DbBundle(os.path.join(r,file_))
                     # This is a fragile hack -- there should be a flag in the database
                     # that diferentiates a partition from a bundle. 
-                    f = os.path.splitext(file)[0]
+                    f = os.path.splitext(file_)[0]
 
                     if b.identity.name.endswith(f):
                         bundles.append(b)
@@ -976,4 +983,87 @@ class FsRepository(Repository):
         path = path.strip('/')
         
         raise NotImplementedError() 
+    
+   
+class RestRepository(Repository):
+    '''A repository that transfers files to and from a remote 
+    server via the REST Interface'''
+
+    def __init__(self, library):
+        super(FsRepository, self).__init__(library)
+        
+        
+        self.root = self.config['path']
+    
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.root)
+
+        return m.hexdigest()
+    
+    def get(self, rel_path):
+        '''Get a file by rel_path name. Will copy the file to 
+        the library cache. 
+        
+        Returns: a rel_path name to a local file. 
+        '''
+        
+        repo_path = os.path.join(self.root, rel_path)
+        cache_path = self.library.cache_path(rel_path)
+        
+        # The target file always has to exist in the repo
+        if not os.path.exists(repo_path):
+            # error even if the file exists in the cache. 
+            False
+            
+        if not os.path.isfile(repo_path):
+            raise ValueError("Path does not point to a file")
+         
+        # Copy the file to the cache if the file does not exist in the cache, 
+        # or the repo file is newer than the cache.     
+        if ( not os.path.exists(cache_path) or
+             os.path.getmtime(repo_path) > os.path.getmtime(cache_path) ):
+                        
+            shutil.copyfile(repo_path,cache_path)
+            
+        if not os.path.exists(cache_path):
+            raise RuntimeError("Failed to copy the file {} to {} ".format(repo_path, cache_path))
+        
+        return repo_path
+    
+    def put(self, abs_path, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            abs_path: Absolute path to the source file
+            rel_path: path relative to the root of the repository
+        
+        '''
+    
+        repo_path = os.path.join(self.root, rel_path)
+      
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+    
+        shutil.copyfile(abs_path, repo_path)
+    
+        return repo_path
+    
+    def delete(self,rel_path):
+        
+        repo_path = os.path.join(self.root, rel_path)
+        
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
+    
     

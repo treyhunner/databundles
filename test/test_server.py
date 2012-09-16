@@ -35,36 +35,58 @@ class Test(unittest.TestCase):
         from databundles.client.siesta import  API
         a = API('http://localhost:8080')
         
-        r = a.test('foobar').get(bar='baz')
+        # Test echo for get. 
+        r = a.test.echo('foobar').get(bar='baz')
         
-        print r.to_dict()
-        print r.object
+        self.assertEquals(200,r.status)
+        self.assertIsNone(r.exception)
+        
+        self.assertEquals('foobar',r.object[0])
+        self.assertEquals('baz',r.object[1]['bar'])
+        
+        # Test echo for put. 
+        r = a.test.echo().put(['foobar'],bar='baz')
+        
+        self.assertEquals(200,r.status)
+        self.assertIsNone(r.exception)
 
-    def test_basic(self):
+        self.assertEquals('foobar',r.object[0][0])
+        self.assertEquals('baz',r.object[1]['bar'])
+        
+        with self.assertRaises(Exception):
+            r = a.test.exception.get()
+
+                  
+
+    def test_put_bundle(self):
         r = Rest('http://localhost:8080')
         
         bf = self.bundle.database.path
         response =  r.put(open(bf))
-        print "Put Bundle: ", response
-        
+        self.assertEquals(self.bundle.identity.id_, response.object.get('dataset').get('id'))
+      
+        # The bundle should have already installed the partitions, if they existsed, 
+        # but it doesn't hurt to do it again. 
         for p in self.bundle.partitions.all:
             response =  r.put(open(p.database.path))
-            print "Put Partition: ",response
-       
-        print "------"
-       
-        with open('/tmp/foo','w') as f:
-            b = r.get(self.bundle.identity.id_,f)
+            self.assertEquals(p.identity.id_, response.object.get('partition').get('id'))
 
-        print "Bundles",b
+        # Now get the bundles
+        bundle = r.get(self.bundle.identity.id_,'/tmp/foo')
+
+        self.assertIsNot(bundle, None)
+        self.assertEquals('a1qSlv',bundle.identity.id_)
+
+        # Should show up in datasets list. 
+        o = r.datasets()
         
-        datasets = r.datasets()
-        print "Datasets", datasets
-        
-        response = r.find(r.query().table(name='tone'))
-        
-        print "Query",response
-        
+        self.assertTrue('a1qSlv' in o.keys() )
+    
+        o = r.find(r.query().table(name='tone').partition(any=True))
+      
+        self.assertTrue( 'b1qSlv001' in [i.Partition.id_ for i in o])
+        self.assertTrue( 'a1qSlv' in [i.Dataset.id_ for i in o])
+      
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

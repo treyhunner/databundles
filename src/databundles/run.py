@@ -72,7 +72,7 @@ class RunConfig(object):
             try:
                 d = yaml.load(file(path, 'r'))
             except yaml.scanner.ScannerError as e:
-                from exceptions import ConfigurationError
+                from databundles.exceptions import ConfigurationError #@UnresolvedImport
                 raise ConfigurationError("Error in YAML configuration file {} : {}"
                                          .format(path, str(e)))
             self.overlay(d)

@@ -131,9 +131,6 @@ class Test(unittest.TestCase):
         # Put the bundle with remove to check that the partitions are reset
         
         l.put(self.bundle, remove=True)
-        
-        r = l.find(l.query().table(name='tone'))
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
     
         r = l.find(l.query().table(name='tone').partition(any=True)).all()
         self.assertEquals(0, len(r))

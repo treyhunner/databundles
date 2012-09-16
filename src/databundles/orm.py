@@ -117,7 +117,7 @@ class Dataset(Base):
         
     @property
     def identity(self):
-        from databundles.identity import Identity
+        from identity import Identity
         return Identity(**self.to_dict() )
         
     def to_dict(self):
