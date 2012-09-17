@@ -21,6 +21,16 @@ def get_library(config=None):
         
     return library
 
+def copy_stream_to_file(stream, file_path):
+    '''Copy an open file-list object to a file'''
+
+    with open(file_path,'w') as f:
+        chunksize = 8192
+        chunk =  stream.read(chunksize) #@UndefinedVariable
+        while chunk:
+            f.write(chunk)
+            chunk =  stream.read(chunksize) #@UndefinedVariable
+
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
     from collections import namedtuple
@@ -43,9 +53,9 @@ class LibraryDb(object):
         self.sql = self.DBCI[self.driver].sql
         
         if driver == 'sqlite':
-            # If dbname is an absolute path, the os.path.join in cache_path
+            # If dbname is an absolute path, the os.path.join in _cache_path
             # will have no effect
-            self.dbname = self.library.cache_path(dbname)
+            self.dbname = self.library._cache_path(dbname)
         
         self._session = None
         self._engine = None
@@ -359,9 +369,9 @@ class LibraryDb(object):
             return self.findByIdentity(query_command)
         
         if len(query_command.partition) == 0:
-            query = s.query(Dataset)
+            query = s.query(Dataset, Dataset.id_) # Dataset.id_ is included to ensure result is always a tuple
         else:
-            query = s.query(Dataset, Partition)
+            query = s.query(Dataset, Partition, Dataset.id_)
         
         if len(query_command.identity) > 0:
             for k,v in query_command.identity.items():
@@ -396,11 +406,6 @@ class LibraryDb(object):
 
         return query
 
-    def query(self, dict_ = {} ):
-      
-        q = BundleQueryCommand(dict_)
-      
-        return q
         
     def queryByIdentity(self, identity):
         from databundles.orm import Dataset, Partition
@@ -498,7 +503,7 @@ class LibraryDb(object):
         pass
 
         
-class BundleQueryCommand(object):
+class QueryCommand(object):
     '''An object that contains and transfers a query for a bundle
     
     Components of the query can include. 
@@ -627,7 +632,7 @@ class BundleQueryCommand(object):
 
 class Library(object):
     '''
-    classdocs
+    
     '''
 
     def __init__(self, cache=None,config=None):
@@ -648,28 +653,32 @@ class Library(object):
             # Try to get the library cache name from the 
             
             self.config = config if config is not None else RunConfig()
-       
-            self.cache = self.config.group('library').get('cache',None)
-            
-        if not os.path.exists(self.cache):
-            os.makedirs(self.cache)
+     
+            self.cache_dir = self.config.group('library').get('cache',False)
+            self.cache = FsCache(self.cache_dir)
             
         if not self.cache:
-            raise ConfigurationError("Must specify a root cache for the library in bundles.yaml")
+            raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
+        
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
+        
 
         self._database = None
 
-        self.repository = FsRepository(self)
-
-    @property
-    def cache_dir(self):
-        return self.cache
+        repo_path = self.config.library.repository.get('path',False)
         
-    def cache_path(self, *args):
+        if not repo_path:
+            raise ConfigurationError("Configuration key library.repository.path must have path to repo")
+
+        self.repository = FsRepository(repo_path, self._cache_path)
+
+        
+    def _cache_path(self, *args):
         '''Resolve a path that is relative to the bundle root into an 
         absoulte path'''
      
-        args = (self.cache,) + args
+        args = (self.cache_dir,) + args
 
         p = os.path.normpath(os.path.join(*args))    
         dir_ = os.path.dirname(p)
@@ -677,6 +686,20 @@ class Library(object):
             os.makedirs(dir_)
 
         return p
+        
+            
+    @property
+    def database(self):
+        '''Return databundles.database.Database object'''
+        if self._database is None:
+            config = self.config.library.database
+
+          
+            self._database = LibraryDb(self,**config)
+            
+            self._database.create() # creates if does not exist. 
+            
+        return self._database
         
     def get(self,bp_id):
         from databundles.bundle import DbBundle
@@ -704,10 +727,7 @@ class Library(object):
         
     def find(self, query_command):
         return self.database.find(query_command)
-        
-    def query(self, dict_ = {} ):
-        return self.database.query(dict_)
-        
+           
     def put(self, bundle,  remove=True, force_partition=False):
         '''Install a bundle file, and all of its partitions, into the library.
         Copies in the files that don't exist, and loads data into the library
@@ -722,7 +742,7 @@ class Library(object):
         src = bundle.database.path
         rel_path = bundle.identity.path+".db"
      
-        cache_path = self.cache_path(rel_path)
+        cache_path = self._cache_path(rel_path)
         
         # Remove any old cached database file
         if os.path.exists(cache_path):
@@ -734,19 +754,7 @@ class Library(object):
         dataset, partition = self.database.install_bundle(bundle,force_partition=force_partition)
         
         return dataset, partition, dst
-    
-    def require(self,key):
-        from databundles.bundle import DbBundle
-        '''Like 'require' but returns a Bundle object. '''
-        set_ =  self.findByKey(key)
-        
-        if len(set_) > 1:
-            raise ResultCountError('Got to many results for library require query for key: '+key)
-        
-        if len(set_) == 0:
-            raise ResultCountError('Got no results for library require query for key: '+key)       
-        
-        return DbBundle(set_.pop(0).path)
+
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -758,27 +766,7 @@ class Library(object):
         
         if os.path.exists(path):
             os.remove(path)
-              
-    @property
-    def database(self):
-        '''Return databundles.database.Database object'''
-        if self._database is None:
-            config = self.config.library.database
-
-          
-            self._database = LibraryDb(self,**config)
-            
-            self._database.create() # creates if does not exist. 
-            
-        return self._database
   
-    @property
-    def dataset_ids(self):
-        '''Return an array of all of the dataset identities in the library'''
-        from databundles.orm import Dataset
-       
-        return [d.identity for d in self.database.session.query(Dataset).all()]
-
     @property
     def datasets(self):
         '''Return an array of all of the dataset records in the library database'''
@@ -816,47 +804,386 @@ class Library(object):
             
         self.database.commit()
         return bundles
-        
+    
+    
+class FsRepository(object):
+    '''A repository that transfers files to and from a remote filesystem
+    
+    A Repository is the place that files are stored, usually Amazon S3, or
+    a file system. A library can copy files from the repository to its local
+    filesystem for use. This can be valuable, even when the repository is a
+    filesystem, because Sqlite files don't work well over NFS. '''
 
-    def stream(self, id_, query=None):
-        '''Stream the data from a table in a dataset or a partition 
+
+    def __init__(self, repo_path,  cache_path_f):
+        '''Init a new FileSystem Repository
         
         Args:
-            id_: String generated from DatasetNumber, PartitionNumber or TableNumber
-            query: A string, or a Table object. 
-                If it is a string, it is a query that is passed to the Sqlite database
-                If it is a table, the query is "select * from {} ".format(table.name)
+            cache_path_f. A callback function that resolves a relative path into
+            a path in the library's cache
+        ''' 
+  
+        self.cache_path_f = cache_path_f
+        self.repo_path = repo_path
+   
         
-        returns a PETL table, so the first row will be the headers. 
+        if not self.repo_path:
+            raise ConfigurationError("Must specify a root_path for the repo") 
+       
+        if not os.path.isdir(self.repo_path):
+            raise ConfigurationError("Repo path '{}' is not valid".format(self.repo_path)) 
+        
+    
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.repo_path)
+
+        return m.hexdigest()
+    
+    def get(self, rel_path):
+        '''Get a file by rel_path name. Will copy the file to 
+        the library cache. 
+        
+        Returns: a rel_path name to a local file. 
+        '''
+        
+        repo_path = os.path.join(self.repo_path, rel_path)
+        cache_path = self.cache_path_f(rel_path)
+        
+        # The target file always has to exist in the repo
+        if not os.path.exists(repo_path):
+            # error even if the file exists in the cache. 
+            False
+            
+        if not os.path.isfile(repo_path):
+            raise ValueError("Path does not point to a file")
+         
+        # Copy the file to the cache if the file does not exist in the cache, 
+        # or the repo file is newer than the cache.     
+        if ( not os.path.exists(cache_path) or
+             os.path.getmtime(repo_path) > os.path.getmtime(cache_path) ):
+                        
+            shutil.copyfile(repo_path,cache_path)
+            
+        if not os.path.exists(cache_path):
+            raise RuntimeError("Failed to copy the file {} to {} ".format(repo_path, cache_path))
+        
+        return cache_path
+    
+    def put(self, abs_path, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            abs_path: Absolute path to the source file
+            rel_path: path relative to the root of the repository
         
         '''
+    
+        repo_path = os.path.join(self.repo_path, rel_path)
       
-        import petl
-        from identity import ObjectNumber, DatasetNumber, PartitionNumber, TableNumber
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+    
+        shutil.copyfile(abs_path, repo_path)
+    
+        return repo_path
+    
+    def delete(self,rel_path):
         
+        repo_path = os.path.join(self.repo_path, rel_path)
         
-        if not isinstance(query,basestring ):
-            query = "select * from {} ".format(query.name)
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
         
-        on = ObjectNumber.parse(id_)
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
         
-        if isinstance(on, DatasetNumber):
-            dataset = self.get(on)
-            database = dataset.database
-        elif isinstance(on, PartitionNumber):
-            partition = self.get(on)
-            database = partition.database
-        elif isinstance(on, TableNumber):
-            # For table numbers, we will extract the table data from the dataset, 
-            # since the table number doesn't specify a partition. 
-            # For datasets with partitions, should probably stream all of the
-            # tables. 
-            pass
-        else:
-            raise Exception("NUmber {} is not for a dataset nor a partition ".format(id_))
-            
-        return petl.fromsqlite3(database.path, query)
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
 
+class NullCache(object):
+    '''A cache that implements on the find() method. All others pass through to 
+    the mandatory upstream. '''
+
+
+    def __init__(self,upstream=None):
+        '''Init a new FileSystem Cache'''
+
+        self.upstream = upstream
+   
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        return 'null'
+    
+    def get_stream(self, rel_path):
+        if self.upstream:
+            return self.upstream.get_stream(rel_path)
+        
+    
+    def get(self, rel_path):
+        '''
+        '''
+        if self.upstream:
+            return self.upstream.get(rel_path)
+        else:
+            return None
+        
+    
+    def put(self, source, rel_path):
+        ''''''
+        if self.upstream:
+            return self.upstream.put(source, rel_path)
+        else:
+            return None
+        
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        if self.upstream:
+            return self.upstream.find(query)
+        else:
+            return None
+        
+    
+    def remove(self,rel_path, propagate = False):
+        ''''''
+        if self.upstream:
+            return self.upstream.remove(rel_path, propagate)
+        else:
+            return None     
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        if self.upstream:
+            return self.upstream.list(path)
+        else:
+            return None   
+    
+class FsCache(object):
+    '''A repository that transfers files to and from a remote filesystem
+    
+    A Repository is the place that files are stored, usually Amazon S3, or
+    a file system. A library can copy files from the repository to its local
+    filesystem for use. This can be valuable, even when the repository is a
+    filesystem, because Sqlite files don't work well over NFS. '''
+
+
+    def __init__(self, cache_dir, upstream=None):
+        '''Init a new FileSystem Cache'''
+
+        self.cache_dir = cache_dir
+        self.upstream = upstream
+   
+        if not os.path.isdir(self.cache_dir):
+            raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.cache_dir)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        p = self.get(rel_path)
+        
+        if not p:
+            return None
+        
+        return open(p)
+        
+    
+    def get(self, rel_path):
+        '''Return the file path referenced but rel_path, or None if
+        it can't be found. If an upstream is declared, it will try to get the file
+        from the upstream before declaring failure. 
+        '''
+        
+        path = os.path.join(self.cache_dir, rel_path)
+      
+        # The target file always has to exist in the repo
+        if  os.path.exists(path):
+            
+            if not os.path.isfile(path):
+                raise ValueError("Path does not point to a file")
+            
+            return path
+            
+        if not self.upstream:
+            # If we don't have an upstream, then we are done. 
+            return None
+        
+        stream = self.upstream.get_stream(rel_path)
+        
+        if not stream:
+            return None
+        
+        with open(path,'w') as f:
+            shutil.copyfileobj(stream, f)
+        
+        stream.close()
+        
+        if not os.path.exists(path):
+            raise Exception("Failed to copy upstream data to {} ".format(path))
+        
+        return path
+    
+    def put(self, source, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            soruce: Absolute path to the source file, or a file-like object
+            rel_path: path relative to the root of the repository
+        
+        '''
+    
+        repo_path = os.path.join(self.cache_dir, rel_path)
+      
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+    
+        try:
+            shutil.copyfileobj(source, repo_path)
+            source.seek(0)
+        except AttributeError: 
+            shutil.copyfile(source, repo_path)
+            
+    
+        if self.upstream:
+            self.upstream.put(source, rel_path)
+    
+        return repo_path
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        if self.upstream:
+            return self.upstream.find(query)
+        else:
+            return False
+    
+    def remove(self,rel_path, propagate = False):
+        '''Delete the file from the cache, and from the upstream'''
+        repo_path = os.path.join(self.cache_dir, rel_path)
+        
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+            
+        if self.upstream and propagate :
+            self.upstream.remove(rel_path)    
+            
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
+
+
+class LibraryDbCache(object):
+    '''A cache that implements on the find() method. All others pass through to 
+    the mandatory upstream. '''
+
+
+    def __init__(self, library_db, upstream):
+        '''Init a new FileSystem Cache'''
+
+        self.database = library_db
+        self.upstream = upstream
+   
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.library_db.path)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        return self.upstream.get_stream(rel_path)
+        
+    
+    def get(self, rel_path):
+        '''
+        '''
+        
+        return self.upstream.get(rel_path)
+    
+    def put(self, source, rel_path):
+        ''''''
+    
+        return self.upstream.put(source, rel_path)
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        return self.database.find(query)
+    
+    def remove(self,rel_path, propagate = False):
+        ''''''
+        return self.upstream.remove(rel_path, propagate)
+            
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        return self.upstream.list(path)
+
+
+class RestCache(object):
+    '''Cache that use the REST interface'''
+    from  databundles.client.rest import Rest #@UnresolvedImport
+
+
+    def __init__(self, url):
+        '''Init a new FileSystem Cache'''
+
+        self.url = url
+   
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.url)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        return self.upstream.get_stream(rel_path)
+        
+    
+    def get(self, rel_path):
+        '''
+        '''
+        
+        return self.upstream.get(rel_path)
+    
+    def put(self, source, rel_path):
+        ''''''
+    
+        return self.upstream.put(source, rel_path)
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        return self.database.find(query)
+    
+    def remove(self,rel_path, propagate = False):
+        ''''''
+        return self.upstream.remove(rel_path, propagate)
+            
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        return self.upstream.list(path)
 
 
 def _pragma_on_connect(dbapi_con, con_record):
@@ -870,200 +1197,6 @@ def _pragma_on_connect(dbapi_con, con_record):
     dbapi_con.execute('PRAGMA cache_size = 500000')
     dbapi_con.execute('pragma foreign_keys=ON')
 
-    
-class Repository(object):
-    '''A Repository is the place that files are stored, usually Amazon S3, or
-    a file system. A library can copy files from the repository to its local
-    filesystem for use. This can be valuable, even when the repository is a
-    filesystem, because Sqlite files don't work well over NFS. 
+ 
 
-    ''' 
-    
-    def __init__(self, library):
-        self.library = library
-        
-        
-        self.config = library.config.library.repository
-        
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        raise NotImplementedError()
-           
-        
-    def get(self):
-        '''Get a bundle by id or name'''
-        raise NotImplementedError()
-    
-    def put(self):
-        '''Store a bundle in the library'''
-        raise NotImplementedError() 
-    
-    def list(self):
-        '''get a list of all of the files in the repository'''
-        raise NotImplementedError() 
-    
-    
-class FsRepository(Repository):
-    '''A repository that transfers files to and from a remote filesystem'''
-
-    def __init__(self, library):
-        super(FsRepository, self).__init__(library)
-        
-        
-        self.root = self.config['path']
-    
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        import hashlib
-        m = hashlib.md5()
-        m.update(self.root)
-
-        return m.hexdigest()
-    
-    def get(self, rel_path):
-        '''Get a file by rel_path name. Will copy the file to 
-        the library cache. 
-        
-        Returns: a rel_path name to a local file. 
-        '''
-        
-        repo_path = os.path.join(self.root, rel_path)
-        cache_path = self.library.cache_path(rel_path)
-        
-        # The target file always has to exist in the repo
-        if not os.path.exists(repo_path):
-            # error even if the file exists in the cache. 
-            False
-            
-        if not os.path.isfile(repo_path):
-            raise ValueError("Path does not point to a file")
-         
-        # Copy the file to the cache if the file does not exist in the cache, 
-        # or the repo file is newer than the cache.     
-        if ( not os.path.exists(cache_path) or
-             os.path.getmtime(repo_path) > os.path.getmtime(cache_path) ):
-                        
-            shutil.copyfile(repo_path,cache_path)
-            
-        if not os.path.exists(cache_path):
-            raise RuntimeError("Failed to copy the file {} to {} ".format(repo_path, cache_path))
-        
-        return repo_path
-    
-    def put(self, abs_path, rel_path):
-        '''Copy a file to the repository
-        
-        Args:
-            abs_path: Absolute path to the source file
-            rel_path: path relative to the root of the repository
-        
-        '''
-    
-        repo_path = os.path.join(self.root, rel_path)
-      
-        if not os.path.isdir(os.path.dirname(repo_path)):
-            os.makedirs(os.path.dirname(repo_path))
-    
-        shutil.copyfile(abs_path, repo_path)
-    
-        return repo_path
-    
-    def delete(self,rel_path):
-        
-        repo_path = os.path.join(self.root, rel_path)
-        
-        if os.path.exists(repo_path):
-            os.remove(repo_path)
-        
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        
-        path = path.strip('/')
-        
-        raise NotImplementedError() 
-    
-   
-class RestRepository(Repository):
-    '''A repository that transfers files to and from a remote 
-    server via the REST Interface'''
-
-    def __init__(self, library):
-        super(FsRepository, self).__init__(library)
-        
-        
-        self.root = self.config['path']
-    
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        import hashlib
-        m = hashlib.md5()
-        m.update(self.root)
-
-        return m.hexdigest()
-    
-    def get(self, rel_path):
-        '''Get a file by rel_path name. Will copy the file to 
-        the library cache. 
-        
-        Returns: a rel_path name to a local file. 
-        '''
-        
-        repo_path = os.path.join(self.root, rel_path)
-        cache_path = self.library.cache_path(rel_path)
-        
-        # The target file always has to exist in the repo
-        if not os.path.exists(repo_path):
-            # error even if the file exists in the cache. 
-            False
-            
-        if not os.path.isfile(repo_path):
-            raise ValueError("Path does not point to a file")
-         
-        # Copy the file to the cache if the file does not exist in the cache, 
-        # or the repo file is newer than the cache.     
-        if ( not os.path.exists(cache_path) or
-             os.path.getmtime(repo_path) > os.path.getmtime(cache_path) ):
-                        
-            shutil.copyfile(repo_path,cache_path)
-            
-        if not os.path.exists(cache_path):
-            raise RuntimeError("Failed to copy the file {} to {} ".format(repo_path, cache_path))
-        
-        return repo_path
-    
-    def put(self, abs_path, rel_path):
-        '''Copy a file to the repository
-        
-        Args:
-            abs_path: Absolute path to the source file
-            rel_path: path relative to the root of the repository
-        
-        '''
-    
-        repo_path = os.path.join(self.root, rel_path)
-      
-        if not os.path.isdir(os.path.dirname(repo_path)):
-            os.makedirs(os.path.dirname(repo_path))
-    
-        shutil.copyfile(abs_path, repo_path)
-    
-        return repo_path
-    
-    def delete(self,rel_path):
-        
-        repo_path = os.path.join(self.root, rel_path)
-        
-        if os.path.exists(repo_path):
-            os.remove(repo_path)
-        
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        
-        path = path.strip('/')
-        
-        raise NotImplementedError() 
-    
-    
+ 

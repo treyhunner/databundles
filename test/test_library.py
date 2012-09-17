@@ -9,6 +9,7 @@ from  testbundle.bundle import Bundle
 import databundles.library
 from sqlalchemy import *
 from databundles.run import  RunConfig
+from databundles.library import QueryCommand
 
 class Test(unittest.TestCase):
 
@@ -27,6 +28,14 @@ class Test(unittest.TestCase):
         self.bundle.prepare()
         self.bundle.build()
         
+    @staticmethod
+    def rm_rf(d):
+        for path in (os.path.join(d,f) for f in os.listdir(d)):
+            if os.path.isdir(path):
+                Test.rm_rf(path)
+            else:
+                os.unlink(path)
+        os.rmdir(d)
         
     def get_library(self):
         
@@ -109,20 +118,20 @@ class Test(unittest.TestCase):
             
         # Find the bundle and partitions in the library. 
     
-        r = l.find(l.query().table(name='tone'))
+        r = l.find(QueryCommand().table(name='tone'))
         self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
     
-        r = l.find(l.query().table(name='tone').partition(any=True)).all()
+        r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tone-r1',r[0].Partition.identity.name)
         
-        r = l.find(l.query().table(name='tthree').partition(any=True)).all()
+        r = l.find(QueryCommand().table(name='tthree').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
         
         #
         #  Try getting the files 
         # 
         
-        b_id,p_id = l.find(l.query().table(name='tthree').partition(any=True)).one() #@UnusedVariable
+        b_id,p_id = l.find(QueryCommand().table(name='tthree').partition(any=True)).one() #@UnusedVariable
         
         b = l.get(b_id)
         
@@ -132,17 +141,90 @@ class Test(unittest.TestCase):
         
         l.put(self.bundle, remove=True)
     
-        r = l.find(l.query().table(name='tone').partition(any=True)).all()
+        r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
         self.assertEquals(0, len(r))
-        
-        for id_ in l.dataset_ids:
-            self.assertIn(id_.name, ['source-dataset-subset-variation-ca0d-r1'])
        
         for ds in l.datasets:
             self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
-        
 
+    def test_cache(self):
+        from databundles.library import  FsCache, LibraryDbCache, NullCache
+        import tempfile
+        import uuid
+        
+        root = os.path.join(tempfile.gettempdir(),'testing',str(uuid.uuid4()))
+        print "ROOT",root
+        l1_repo_dir = os.path.join(root,'repo-l1')
+        os.makedirs(l1_repo_dir)
+        l2_repo_dir = os.path.join(root,'repo-l2')
+        os.makedirs(l2_repo_dir)
+        
+        testfile = os.path.join(root,'testfile')
+        
+        with open(testfile,'w+') as f:
+            f.write('data')
+        
+        #
+        # Basic operations on a cache with no upstream
+        #
+        l2 =  FsCache(l2_repo_dir)
+
+        p = l2.put(testfile,'tf1')
+        l2.put(testfile,'tf2')
+        g = l2.get('tf1')
+                
+        self.assertTrue(os.path.exists(p))  
+        self.assertTrue(os.path.exists(g))
+        self.assertEqual(p,g)
+
+        self.assertIsNone(l2.get('foobar'))
+
+        l2.remove('tf1')
+        
+        self.assertIsNone(l2.get('tf1'))
+       
+        #
+        # Now create the cache with an upstream, the first
+        # cache we created
+       
+        l1 =  FsCache(l1_repo_dir, upstream=l2)
+       
+        g = l1.get('tf2')
+        self.assertTrue(g is not None)
+     
+        # Put to one and check in the other. 
+        
+        l1.put(testfile,'write-through')
+        self.assertIsNotNone(l2.get('write-through'))
+             
+        l1.remove('write-through', propagate=True)
+        self.assertIsNone(l2.get('write-through'))
+
+        
+        #
+        # Test the LibraryDb Cache on  its own. 
+        l = self.get_library()
+        db = l.database
+        
+        ldc = LibraryDbCache(db, NullCache())
+        db.install_bundle(self.bundle)
+        
+        r = ldc.find(QueryCommand().table(name='tone'))
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
     
+        # Now, passthrough
+        ldc = LibraryDbCache(db, l2)
+        l1 =  FsCache(l1_repo_dir, upstream=ldc)
+        
+        g = l1.get('tf2')
+        self.assertTrue(g is not None)
+     
+        r = l1.find(QueryCommand().table(name='tone'))
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
+        
+        Test.rm_rf(l1_repo_dir)
+        Test.rm_rf(l2_repo_dir)
+        
     def x_text_rebuild(self):
         #
         # Rebuild from installed bundles. 

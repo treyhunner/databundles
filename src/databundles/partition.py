@@ -161,7 +161,7 @@ class Partition(object):
         # library, not to the dataset
         if self.library is not None:
            
-            return PartitionDb(self.bundle, self, file_path=self.library.cache_path(self.path)+".db")
+            return PartitionDb(self.bundle, self, file_path=self.library._cache_path(self.path)+".db")
         else:
             db =  PartitionDb(self.bundle, self)
             db.file_path = None

@@ -92,7 +92,7 @@ def post_dataset():
     import uuid # For a random filename. 
     import os
     
-    cf = library.cache_path('downloads',str(uuid.uuid4()))
+    cf = library._cache_path('downloads',str(uuid.uuid4()))
     
     # Read the file directly from the network, writing it to the temp file
     with open(cf,'w') as f:
@@ -239,4 +239,4 @@ def get_test_exception():
 
 
 
-run(host='localhost', port=8080, reloader=True)
+run(host='0.0.0.0', port=8080, reloader=True)

@@ -10,6 +10,9 @@ from databundles.run import  RunConfig
 
 from  databundles.client.rest import Rest #@UnresolvedImport
 
+server_url = 'http://localhost:8080'
+server_url = 'http://lorne:8080'
+
 class Test(unittest.TestCase):
 
 
@@ -33,7 +36,7 @@ class Test(unittest.TestCase):
 
     def test_test(self):
         from databundles.client.siesta import  API
-        a = API('http://localhost:8080')
+        a = API(server_url)
         
         # Test echo for get. 
         r = a.test.echo('foobar').get(bar='baz')
@@ -59,7 +62,7 @@ class Test(unittest.TestCase):
                   
 
     def test_put_bundle(self):
-        r = Rest('http://localhost:8080')
+        r = Rest(server_url)
         
         bf = self.bundle.database.path
         response =  r.put(open(bf))

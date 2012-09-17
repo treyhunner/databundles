@@ -6,7 +6,6 @@ import sys
 if sys.version < '2.7':
     sys.exit('ERROR: Sorry, python 2.7 is required for this application.')
 
-
 # zip_save=False  : database.Database.create uses __file__
 setup(name='databundles',
       version='0.0.9',
@@ -17,12 +16,9 @@ setup(name='databundles',
       author_email='eric@clarinova.com',
       url='',
       keywords='',
-      packages = ['databundles','sourcesupport'],
-      package_dir = {'databundles':'src/databundles',
-                     'sourcesupport':'src/sourcesupport'
-                     },
-      include_package_data = True,
-      package_data = { 'databundles' : ['support/*']},
+      packages=['databundles', 'databundles.client', 'databundles.server', 'databundles.sourcesupport'],
+      package_dir={'databundles': 'src/databundles'},
+      package_data={'databundles': ['support/*.*']},
       zip_safe=False,
       install_requires=[
         'sqlalchemy>=0.7',
