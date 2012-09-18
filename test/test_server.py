@@ -65,7 +65,13 @@ class Test(unittest.TestCase):
         r = Rest(server_url)
         
         bf = self.bundle.database.path
+        
+        # With an FLO
         response =  r.put(open(bf))
+        self.assertEquals(self.bundle.identity.id_, response.object.get('dataset').get('id'))
+      
+        # with a path
+        response =  r.put(bf)
         self.assertEquals(self.bundle.identity.id_, response.object.get('dataset').get('id'))
       
         # The bundle should have already installed the partitions, if they existsed, 
@@ -90,6 +96,22 @@ class Test(unittest.TestCase):
         self.assertTrue( 'b1qSlv001' in [i.Partition.id_ for i in o])
         self.assertTrue( 'a1qSlv' in [i.Dataset.id_ for i in o])
       
+
+    def test_cache(self):
+        from databundles.library import RestCache, FsCache
+        import tempfile
+        import uuid
+        
+        bf = self.bundle.database.path
+        root = os.path.join(tempfile.gettempdir(),'testing',str(uuid.uuid4()))
+        print "ROOT",root
+        repo_dir = os.path.join(root,'repo-l1')
+        
+        rc = RestCache(server_url)
+        
+        rc.put(bf,'foobar')
+        
+        
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

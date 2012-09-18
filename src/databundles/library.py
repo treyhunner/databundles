@@ -10,15 +10,64 @@ import shutil
 import databundles #@UnresolvedImport
 
 from databundles.dbexceptions import ResultCountError, ConfigurationError
+import databundles.client.rest 
 
 library = None
 
+
+def get_cache(config=None):
+    if config is None:
+        config = RunConfig()    
+
+    if not config.library:
+        raise ConfigurationError("Didn't get library configuration value")
+
+    cache_dir = config.library.cache
+    
+    if not cache_dir:
+        raise ConfigurationError("Didn't get library.cache configuration value")
+    
+    repo_dir = config.library.repository
+    
+    if repo_dir:
+        repo = FsCache(repo_dir)
+        cache_size = config.library.cache_size
+        if not cache_size:
+            cache_size = 10000 # 10 GB
+        cache = FsCache(cache_dir, maxsize = cache_size, upstream = repo)
+    else:
+        cache =  FsCache(cache_dir)  
+    
+    return cache
+    
+def get_database(config=None):
+    if config is None:
+        config = RunConfig()    
+
+    if not config.library:
+        raise ConfigurationError("Didn't get library configuration value")
+    
+    db_config = config.library.database
+    
+    if not db_config:
+        raise ConfigurationError("Didn't get library.cache configuration value")
+    
+    database = LibraryDb(**db_config)      
+    database.create() # creates if does not exist. 
+    
+    return database
+
 def get_library(config=None):
-    ''' Returns LocalLIbrary singleton'''
+    ''' Returns LocalLibrary singleton'''
     global library
     if library is None:
-        library =  Library(config=config)
         
+        if config is None:
+            config = RunConfig()
+        
+        library =  Library(cache = get_cache(config), 
+                           database = get_database(config))
+    
     return library
 
 def copy_stream_to_file(stream, file_path):
@@ -41,21 +90,15 @@ class LibraryDb(object):
             'sqlite':Dbci(dsn='sqlite:///{name}',sql='support/configuration.sql')
             }
     
-    def __init__(self, library,  driver=None, server=None, dbname = None, username=None, password=None):
+    def __init__(self,  driver=None, server=None, dbname = None, username=None, password=None):
         self.driver = driver
         self.server = server
         self.dbname = dbname
         self.username = username
         self.password = password
-        self.library = library
-        
+   
         self.dsn = self.DBCI[self.driver].dsn
         self.sql = self.DBCI[self.driver].sql
-        
-        if driver == 'sqlite':
-            # If dbname is an absolute path, the os.path.join in _cache_path
-            # will have no effect
-            self.dbname = self.library._cache_path(dbname)
         
         self._session = None
         self._engine = None
@@ -211,8 +254,12 @@ class LibraryDb(object):
         else:
             raise RuntimeError("Unknown database driver: {} ".format(self.driver))
         
-    def install_bundle(self, bundle, force_partition=False):
-        '''Copy the schema and partitions lists into the library database'''
+    def install_bundle(self, bundle):
+        '''Copy the schema and partitions lists into the library database
+        
+        The 'bundle' may be either a bundle or a partition. If it is a bundle, 
+        any previous bundle, all of its partitions, are deleted from the database.
+        '''
         from databundles import resolve_id
         from databundles.orm import Dataset
         from databundles.orm import Partition as OrmPartition
@@ -230,7 +277,7 @@ class LibraryDb(object):
         if not isinstance(bundle, (Partition, Bundle)):
             raise ValueError("Can only install a Partition or Bindle object")
 
-        if force_partition:
+        if bundle.db_config.info.type == 'partition':
             # This looks like a bundle, but is actually a partition, so
             # we can't get the actual partition
             partition =  bdbs.query(OrmPartition).first()
@@ -254,9 +301,9 @@ class LibraryDb(object):
             except Exception as e:
                 print "ERROR: Failed to merge partition "+str(bundle.identity)+":"+ str(e)
         else:
-            pass
             # The Tables only get installed when the dataset is installed, 
             # not for the partition
+ 
             for table in dataset.tables:
                 try:
                     s.merge(table)
@@ -283,8 +330,12 @@ class LibraryDb(object):
         
         s = self.session
         
-        dataset, partition = self.get(bundle.identity) #@UnusedVariable
-        
+        try:
+            dataset, partition = self.get(bundle.identity) #@UnusedVariable
+        except AttributeError:
+            dataset, partition = self.get(bundle) #@UnusedVariable
+            
+            
         if not dataset:
             return False
 
@@ -359,6 +410,13 @@ class LibraryDb(object):
         return dataset, partition
         
     def find(self, query_command):
+        '''Find a bundle or partition record by a QueryCommand or Identity
+        
+        Args:
+            query_command. QueryCommand or Identity
+            
+        '''
+        
         from databundles.orm import Dataset
         from databundles.orm import Partition
         from databundles.identity import Identity
@@ -366,7 +424,14 @@ class LibraryDb(object):
         s = self.session
         
         if isinstance(query_command, Identity):
-            return self.findByIdentity(query_command)
+            raise NotImplementedError()
+            out = []
+            for d in self.queryByIdentity(query_command).all():
+                id_ = d.identity
+                d.path = os.path.join(self.cache,id_.path+'.db')
+                out.append(d)
+            
+            return out
         
         if len(query_command.partition) == 0:
             query = s.query(Dataset, Dataset.id_) # Dataset.id_ is included to ensure result is always a tuple
@@ -457,28 +522,6 @@ class LibraryDb(object):
         query.order_by(desc(Dataset.revision))
      
         return query
-    
-    def findByIdentity(self,identity):
-        
-        out = []
-        for d in self.queryByIdentity(identity).all():
-            id_ = d.identity
-            d.path = os.path.join(self.cache,id_.path+'.db')
-            out.append(d)
-            
-        return out
-        
-    def findByKey(self,key):
-        '''Find a bundle in the library by the shorthand name given in the
-        'requires' section of the configuration '''    
-        
-        if  self._named_bundles is None:
-            raise ValueError("Didn't get 'named_bundles' configuration from the constructor")
-         
-        if key not in self._named_bundles:
-            raise ValueError("named_bundles key {} not specified in configuration".format(key))
-
-        return self.findByIdentity(self._named_bundles[key])
 
         
     def add_file(self,path, group, ref):
@@ -635,7 +678,7 @@ class Library(object):
     
     '''
 
-    def __init__(self, cache=None,config=None):
+    def __init__(self, cache,database, remote=None):
         '''
         Libraries are constructed on the root cache name for the library. 
         If the cache does not exist, it will be created. 
@@ -646,73 +689,60 @@ class Library(object):
             config: A RunConfig object. If not given, use the default RunConfig
         
         '''
-        if cache is not None:
-            self.cache = cache
-            
-        else:
-            # Try to get the library cache name from the 
-            
-            self.config = config if config is not None else RunConfig()
-     
-            self.cache_dir = self.config.group('library').get('cache',False)
-            self.cache = FsCache(self.cache_dir)
-            
+    
+        self.cache = cache
+        self._database = database
+        self.remote = None
+        
         if not self.cache:
             raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
-        
-        if not os.path.exists(self.cache_dir):
-            os.makedirs(self.cache_dir)
-        
 
-        self._database = None
-
-        repo_path = self.config.library.repository.get('path',False)
-        
-        if not repo_path:
-            raise ConfigurationError("Configuration key library.repository.path must have path to repo")
-
-        self.repository = FsRepository(repo_path, self._cache_path)
-
-        
-    def _cache_path(self, *args):
-        '''Resolve a path that is relative to the bundle root into an 
-        absoulte path'''
-     
-        args = (self.cache_dir,) + args
-
-        p = os.path.normpath(os.path.join(*args))    
-        dir_ = os.path.dirname(p)
-        if not os.path.exists(dir_):
-            os.makedirs(dir_)
-
-        return p
-        
-            
     @property
     def database(self):
         '''Return databundles.database.Database object'''
-        if self._database is None:
-            config = self.config.library.database
-
-          
-            self._database = LibraryDb(self,**config)
-            
-            self._database.create() # creates if does not exist. 
-            
         return self._database
+  
+        
+    def _get_bundle_path_from_id(self, bp_id):
+        
+        try:
+            # Assume it is an Identity, or Identity-like
+            dataset, partition = self.database.get(bp_id.id_)
+            
+            return bp_id.path+".db", dataset, partition
+        except AttributeError:
+            dataset, partition = self.database.get(bp_id)
+    
+            if not dataset:
+                return None, None, None
+                
+            if partition:
+                rel_path = partition.identity.path+".db"
+            else:
+                rel_path = dataset.identity.path+".db"
+                
+            return rel_path, dataset, partition
         
     def get(self,bp_id):
+        '''Get a bundle, given an identity or an id string '''
         from databundles.bundle import DbBundle
-        
-        dataset, partition = self.database.get(bp_id)
-        
-        path = self.repository.get(dataset.identity.path+".db")
-       
-        if not os.path.exists(path):
+
+        # If dataset is not None, it means the file already is in the cache.
+        rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id)
+
+        if rel_path:
+            abs_path = self.cache.get(rel_path)
+        else:
+            abs_path = None
+     
+        if not abs_path and self.remote:
+            abs_path = self.remote.get(bp_id)
+     
+        if not abs_path or not os.path.exists(abs_path):
             return False
        
-        bundle = DbBundle(path)
-        
+        bundle = DbBundle(abs_path)
+     
         if partition is not None:
             p =  bundle.partitions.partition(partition)
             
@@ -728,33 +758,22 @@ class Library(object):
     def find(self, query_command):
         return self.database.find(query_command)
            
-    def put(self, bundle,  remove=True, force_partition=False):
-        '''Install a bundle file, and all of its partitions, into the library.
+    def put(self, bundle):
+        '''Install a bundle file,  into the library.
         Copies in the files that don't exist, and loads data into the library
         database'''
         
         bundle.identity.name # throw exception if not right type. 
-        
-        # First, check if the bundle is already installed. If so, remove it. 
-        if remove:
-            self.database.remove_bundle(bundle)
 
         src = bundle.database.path
         rel_path = bundle.identity.path+".db"
      
-        cache_path = self._cache_path(rel_path)
-        
-        # Remove any old cached database file
-        if os.path.exists(cache_path):
-            os.remove(cache_path)
-     
-        dst = self.repository.put(src,rel_path)
-        self.database.add_file(dst, self.repository.repo_id, bundle.identity.id_)
+        dst = self.cache.put(src,rel_path)
+        self.database.add_file(dst, self.cache.repo_id, bundle.identity.id_)
           
-        dataset, partition = self.database.install_bundle(bundle,force_partition=force_partition)
+        dataset, partition = self.database.install_bundle(bundle)
         
         return dataset, partition, dst
-
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -762,10 +781,7 @@ class Library(object):
         
         self.database.remove_bundle(bundle)
         
-        path = os.path.join(self.cache, bundle.identity.path+".db")
-        
-        if os.path.exists(path):
-            os.remove(path)
+        self.cache.remove(bundle.identity.path+".db")
   
     @property
     def datasets(self):
@@ -805,105 +821,58 @@ class Library(object):
         self.database.commit()
         return bundles
     
-    
-class FsRepository(object):
-    '''A repository that transfers files to and from a remote filesystem
-    
-    A Repository is the place that files are stored, usually Amazon S3, or
-    a file system. A library can copy files from the repository to its local
-    filesystem for use. This can be valuable, even when the repository is a
-    filesystem, because Sqlite files don't work well over NFS. '''
+ 
 
 
-    def __init__(self, repo_path,  cache_path_f):
-        '''Init a new FileSystem Repository
-        
-        Args:
-            cache_path_f. A callback function that resolves a relative path into
-            a path in the library's cache
-        ''' 
-  
-        self.cache_path_f = cache_path_f
-        self.repo_path = repo_path
-   
-        
-        if not self.repo_path:
-            raise ConfigurationError("Must specify a root_path for the repo") 
+class RemoteLibrary(object):
+    '''A library that uses a REST Interface to a remote library. 
+    
+    '''
+
+    def __init__(self, url, cache):
+        '''
        
-        if not os.path.isdir(self.repo_path):
-            raise ConfigurationError("Repo path '{}' is not valid".format(self.repo_path)) 
-        
+        '''
+ 
     
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        import hashlib
-        m = hashlib.md5()
-        m.update(self.repo_path)
+    def get_stream(self, rel_path):
+        return self.upstream.get_stream(rel_path)
+        
+    def get(self,rel_path):
+        '''
+        '''
 
-        return m.hexdigest()
-    
-    def get(self, rel_path):
-        '''Get a file by rel_path name. Will copy the file to 
-        the library cache. 
         
-        Returns: a rel_path name to a local file. 
+        return self.upstream.get(rel_path)
+    
+    def put(self, source, rel_path):
+        '''Put the bundle to the remote server. 
+        Does not return the path to teh local file like other caches. 
         '''
         
-        repo_path = os.path.join(self.repo_path, rel_path)
-        cache_path = self.cache_path_f(rel_path)
+        # @attention: We're not using rel_path, since the upstream
+        # library will make its own decisions about how to set the name
+        # for a bundle. 
         
-        # The target file always has to exist in the repo
-        if not os.path.exists(repo_path):
-            # error even if the file exists in the cache. 
-            False
+        r =  self.api.put(source)
+     
+        return r.object
+        
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        return self.database.find(query)
+    
+    def remove(self,rel_path, propagate = False):
+        ''''''
+        return self.upstream.remove(rel_path, propagate)
             
-        if not os.path.isfile(repo_path):
-            raise ValueError("Path does not point to a file")
-         
-        # Copy the file to the cache if the file does not exist in the cache, 
-        # or the repo file is newer than the cache.     
-        if ( not os.path.exists(cache_path) or
-             os.path.getmtime(repo_path) > os.path.getmtime(cache_path) ):
-                        
-            shutil.copyfile(repo_path,cache_path)
-            
-        if not os.path.exists(cache_path):
-            raise RuntimeError("Failed to copy the file {} to {} ".format(repo_path, cache_path))
-        
-        return cache_path
-    
-    def put(self, abs_path, rel_path):
-        '''Copy a file to the repository
-        
-        Args:
-            abs_path: Absolute path to the source file
-            rel_path: path relative to the root of the repository
-        
-        '''
-    
-        repo_path = os.path.join(self.repo_path, rel_path)
-      
-        if not os.path.isdir(os.path.dirname(repo_path)):
-            os.makedirs(os.path.dirname(repo_path))
-    
-        shutil.copyfile(abs_path, repo_path)
-    
-        return repo_path
-    
-    def delete(self,rel_path):
-        
-        repo_path = os.path.join(self.repo_path, rel_path)
-        
-        if os.path.exists(repo_path):
-            os.remove(repo_path)
         
     def list(self, path=None):
         '''get a list of all of the files in the repository'''
-        
-        path = path.strip('/')
-        
-        raise NotImplementedError() 
+        return self.upstream.list(path)
+  
+
 
 class NullCache(object):
     '''A cache that implements on the find() method. All others pass through to 
@@ -974,14 +943,122 @@ class FsCache(object):
     filesystem, because Sqlite files don't work well over NFS. '''
 
 
-    def __init__(self, cache_dir, upstream=None):
-        '''Init a new FileSystem Cache'''
+    def __init__(self, cache_dir, maxsize=10000, upstream=None):
+        '''Init a new FileSystem Cache
+        
+        Args:
+            cache_dir
+            maxsize. Maximum size of the cache, in GB
+        
+        '''
 
         self.cache_dir = cache_dir
+        self.maxsize = int(maxsize * 1048578)  # size in MB
         self.upstream = upstream
+        self._database = None
    
         if not os.path.isdir(self.cache_dir):
+            os.makedirs(self.cache_dir)
+        
+        if not os.path.isdir(self.cache_dir):
             raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
+        
+    @property
+    def database(self):
+        import sqlite3
+        
+        if not self._database:
+            db_path = os.path.join(self.cache_dir, 'file_database.db')
+            
+            if not os.path.exists(db_path):
+                create_sql = """
+                CREATE TABLE files(
+                path TEXT UNIQUE ON CONFLICT REPLACE, 
+                size INTEGER, 
+                time REAL)
+                """
+                conn = sqlite3.connect(db_path)
+                conn.execute(create_sql)
+                conn.close()
+                
+            self._database = sqlite3.connect(db_path)
+            
+        return self._database
+            
+    @property
+    def size(self):
+        '''Return the size of all of the files referenced in the database'''
+        c = self.database.cursor()
+        r = c.execute("SELECT sum(size) FROM files")
+     
+        try:
+            size = int(r.fetchone()[0])
+        except TypeError:
+            size = 0
+    
+        return size
+        
+    def delete_to_size(self, size):
+        '''Delete records, from oldest to newest, to free up space ''' 
+      
+        if size <= 0:
+            return
+      
+        for row in self.database.execute("SELECT path, size, time FROM files ORDER BY time ASC"):
+            if size < 0: 
+                break
+        
+            #print "DELETE ", row[0], row[1], row[2],size
+            self.remove(row[0])
+            
+            size -= row[1]
+  
+  
+    def free_up_space(self, size):
+        '''If there are not size bytes of space left, delete files
+        until there is ''' 
+        
+        space = self.size + size - self.maxsize # Amount of space we are over ( bytes ) for next put
+        
+        self.delete_to_size(space)
+
+    def add_record(self, rel_path, size):
+        import time
+        c = self.database.cursor()
+        c.execute("insert into files(path, size, time) values (?, ?, ?)", 
+                    (rel_path, size, time.time()))
+        self.database.commit()
+
+    def verify(self):
+        '''Check that the database accurately describes the state of the repository'''
+        
+        c = self.database.cursor()
+        non_exist = set()
+        
+        no_db_entry = set(os.listdir(self.cache_dir))
+        try:
+            no_db_entry.remove('file_database.db')
+            no_db_entry.remove('file_database.db-journal')
+        except: 
+            pass
+        
+        for row in c.execute("SELECT path FROM files"):
+            path = row[0]
+            
+            repo_path = os.path.join(self.cache_dir, path)
+        
+            if os.path.exists(repo_path):
+                no_db_entry.remove(path)
+            else:
+                non_exist.add(path)
+            
+        if len(non_exist) > 0:
+            raise Exception("Found {} records in db for files that don't exist: {}"
+                            .format(len(non_exist), ','.join(non_exist)))
+            
+        if len(no_db_entry) > 0:
+            raise Exception("Found {} files that don't have db entries: {}"
+                            .format(len(no_db_entry), ','.join(no_db_entry)))
         
     @property
     def repo_id(self):
@@ -1029,6 +1106,11 @@ class FsCache(object):
         with open(path,'w') as f:
             shutil.copyfileobj(stream, f)
         
+        # Since we've added a file, must keep track of the sizes. 
+        size = os.path.getsize(path)
+        self.free_up_space(size)
+        self.add_record(rel_path, size)
+        
         stream.close()
         
         if not os.path.exists(path):
@@ -1040,7 +1122,7 @@ class FsCache(object):
         '''Copy a file to the repository
         
         Args:
-            soruce: Absolute path to the source file, or a file-like object
+            source: Absolute path to the source file, or a file-like object
             rel_path: path relative to the root of the repository
         
         '''
@@ -1056,9 +1138,16 @@ class FsCache(object):
         except AttributeError: 
             shutil.copyfile(source, repo_path)
             
-    
+        size = os.path.getsize(repo_path)
+        
+        self.add_record(rel_path, size)
+        
         if self.upstream:
             self.upstream.put(source, rel_path)
+    
+            # Only delete if there is an upstream
+            self.free_up_space(size)
+
     
         return repo_path
     
@@ -1076,6 +1165,10 @@ class FsCache(object):
         if os.path.exists(repo_path):
             os.remove(repo_path)
             
+        c = self.database.cursor()
+        c.execute("DELETE FROM  files WHERE path = ?", (rel_path,) )
+        self.database.commit()
+            
         if self.upstream and propagate :
             self.upstream.remove(rel_path)    
             
@@ -1086,7 +1179,6 @@ class FsCache(object):
         path = path.strip('/')
         
         raise NotImplementedError() 
-
 
 class LibraryDbCache(object):
     '''A cache that implements on the find() method. All others pass through to 
@@ -1108,82 +1200,35 @@ class LibraryDbCache(object):
         m.update(self.library_db.path)
 
         return m.hexdigest()
-    
-    def get_stream(self, rel_path):
-        return self.upstream.get_stream(rel_path)
-        
-    
-    def get(self, rel_path):
+      
+           
+    def get(self,rel_path):
+        '''Get a dataset or partition by id or name
         '''
-        '''
-        
+     
         return self.upstream.get(rel_path)
     
     def put(self, source, rel_path):
         ''''''
-    
-        return self.upstream.put(source, rel_path)
-    
-    def find(self,query):
-        '''Passes the query to the upstream, if it exists'''
-        return self.database.find(query)
-    
-    def remove(self,rel_path, propagate = False):
-        ''''''
-        return self.upstream.remove(rel_path, propagate)
-            
-        
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        return self.upstream.list(path)
 
-
-class RestCache(object):
-    '''Cache that use the REST interface'''
-    from  databundles.client.rest import Rest #@UnresolvedImport
-
-
-    def __init__(self, url):
-        '''Init a new FileSystem Cache'''
-
-        self.url = url
+        dst =  self.upstream.put(source, rel_path)
    
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        import hashlib
-        m = hashlib.md5()
-        m.update(self.url)
+        
+        return dst
 
-        return m.hexdigest()
-    
-    def get_stream(self, rel_path):
-        return self.upstream.get_stream(rel_path)
-        
-    
-    def get(self, rel_path):
-        '''
-        '''
-        
-        return self.upstream.get(rel_path)
-    
-    def put(self, source, rel_path):
-        ''''''
-    
-        return self.upstream.put(source, rel_path)
-    
     def find(self,query):
-        '''Passes the query to the upstream, if it exists'''
+        '''Find records using a query'''
         return self.database.find(query)
     
     def remove(self,rel_path, propagate = False):
-        ''''''
-        return self.upstream.remove(rel_path, propagate)
-            
+        ''''''  
         
+        return self.upstream.remove(rel_path, propagate)
+             
     def list(self, path=None):
         '''get a list of all of the files in the repository'''
         return self.upstream.list(path)
+
 
 
 def _pragma_on_connect(dbapi_con, con_record):

@@ -6,7 +6,6 @@ Created on Aug 31, 2012
 @author: eric
 '''
 from siesta  import API #@UnresolvedImport
-from databundles.library import BundleQueryCommand
 from databundles.bundle import DbBundle
 
 class NotFound(Exception):
@@ -27,12 +26,15 @@ class Rest(object):
         self.url = url
         self.api = API(self.url)
         
-    def get(self, id_or_name, file_path):
+    def get(self, id_or_name, file_path=None):
         '''Get a bundle by name or id and either return a file object, or
         store it in the given file object
         
         Args:
-            file_ A string or file object where the bundle data should be stored
+            id_or_name 
+            file_path A string or file object where the bundle data should be stored
+        
+        return
         
         '''
         response  = self.api.dataset(id_or_name).bundle.get()
@@ -42,25 +44,36 @@ class Rest(object):
         elif response.status != 200:
             raise RestError("Error from server: {} {}".format(response.status, response.reason))
   
-        with open(file_path,'w') as file_:
-            chunksize = 8192
-            chunk =  response.read(chunksize) #@UndefinedVariable
-            while chunk:
-                file_.write(chunk)
+        if file_path:
+            with open(file_path,'w') as file_:
+                chunksize = 8192
                 chunk =  response.read(chunksize) #@UndefinedVariable
-
-        return DbBundle(file_path)
+                while chunk:
+                    file_.write(chunk)
+                    chunk =  response.read(chunksize) #@UndefinedVariable
+    
+            return file_path
             
-    def put(self,o):
-        response = self.api.datasets.post(o)
+    def put(self,source):
+        '''Put the bundle in soruce to the remote library 
+        Args:
+            source. Either the name of the bundle file, or a file-like opbject
+        '''
+        
+        try:
+            # a Filename
+            with open(source) as flo:
+                response = self.api.datasets.post(flo)
+        except:
+            # an already open file
+            response = self.api.datasets.post(source)
         
         return  response
     
-    def query(self):
-        '''Return a query object to use in find()'''
-        return  BundleQueryCommand()
+
     
     def find(self, query):
+        '''Find datasets, given a QueryCommand object'''
         
         from collections import namedtuple
         Ref = namedtuple('Ref','Dataset Partition')

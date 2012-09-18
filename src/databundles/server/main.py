@@ -110,11 +110,10 @@ def post_dataset():
     
     # Is this a partition or a bundle?
     tb = DbBundle(cf)
-    
-    force_partition = (tb.db_config.info.type == 'partition')
+ 
     remove = (tb.db_config.info.type != 'partition')
         
-    dataset, partition, library_path = library.put(tb, remove=remove, force_partition=force_partition)
+    dataset, partition, library_path = library.put(tb, remove=remove)
     
     # if that worked, OK to remove the temporary file. 
     os.remove(cf)

@@ -6,19 +6,20 @@ Created on Jun 30, 2012
 import unittest
 import os.path
 from  testbundle.bundle import Bundle
-import databundles.library
 from sqlalchemy import *
 from databundles.run import  RunConfig
-from databundles.library import QueryCommand
+from databundles.library import QueryCommand, get_library
 
 class Test(unittest.TestCase):
-
 
     def setUp(self):
 
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-        
+ 
         self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
+            
+        try: self.rm_rf(self.rc.library.root)
+        except: pass
         
         self.bundle = Bundle(self.bundle_dir)
         
@@ -47,14 +48,13 @@ class Test(unittest.TestCase):
         cfg = self.bundle.config
         rc = RunConfig()
         rc.overlay(cfg.dict)
-        return  databundles.library.get_library(rc)
+        return  get_library(rc)
         
     def tearDown(self):
         pass
 
     def delete(self):
         pass
-
 
     def testName(self):
         pass
@@ -83,8 +83,9 @@ class Test(unittest.TestCase):
         l.put(self.bundle)
         
         bundle = l.get(self.bundle.identity)
-        
+      
         self.assertIsNotNone(bundle)
+        self.assertTrue(bundle is not False)
         self.assertEquals(self.bundle.identity.id_, bundle.identity.id_)
         
         print bundle.identity.name
@@ -96,15 +97,15 @@ class Test(unittest.TestCase):
             
             p2 = l.get(partition.identity)
             self.assertIsNotNone(p2)
-            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            self.assertEquals( partition.identity.id_, p2.identity.id_)
             
             p2 = l.get(partition.identity.id_)
             self.assertIsNotNone(p2)
-            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            self.assertEquals(partition.identity.id_, p2.identity.id_)
             
         # Re-install the bundle, then check that the partitions are still properly installed
 
-        l.put(self.bundle, remove=False)
+        l.put(self.bundle)
         
         for partition in self.bundle.partitions.all:
        
@@ -119,7 +120,7 @@ class Test(unittest.TestCase):
         # Find the bundle and partitions in the library. 
     
         r = l.find(QueryCommand().table(name='tone'))
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)  
     
         r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
         self.assertEquals('source-dataset-subset-variation-ca0d-tone-r1',r[0].Partition.identity.name)
@@ -131,15 +132,16 @@ class Test(unittest.TestCase):
         #  Try getting the files 
         # 
         
-        b_id,p_id = l.find(QueryCommand().table(name='tthree').partition(any=True)).one() #@UnusedVariable
-        
-        b = l.get(b_id)
+        r = l.find(QueryCommand().table(name='tthree').partition(any=True)).one() #@UnusedVariable
+       
+        b = l.get(r.Dataset.identity.id_)
         
         self.assertTrue(os.path.exists(b.database.path))
         
         # Put the bundle with remove to check that the partitions are reset
         
-        l.put(self.bundle, remove=True)
+        l.remove(self.bundle)
+        l.put(self.bundle)
     
         r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
         self.assertEquals(0, len(r))
@@ -152,8 +154,10 @@ class Test(unittest.TestCase):
         import tempfile
         import uuid
         
-        root = os.path.join(tempfile.gettempdir(),'testing',str(uuid.uuid4()))
-        print "ROOT",root
+        root = '/tmp/test_library'
+        try: Test.rm_rf(root)
+        except: pass
+      
         l1_repo_dir = os.path.join(root,'repo-l1')
         os.makedirs(l1_repo_dir)
         l2_repo_dir = os.path.join(root,'repo-l2')
@@ -162,7 +166,9 @@ class Test(unittest.TestCase):
         testfile = os.path.join(root,'testfile')
         
         with open(testfile,'w+') as f:
-            f.write('data')
+            for i in range(1024):
+                f.write('.'*1023)
+                f.write('\n')
         
         #
         # Basic operations on a cache with no upstream
@@ -187,7 +193,7 @@ class Test(unittest.TestCase):
         # Now create the cache with an upstream, the first
         # cache we created
        
-        l1 =  FsCache(l1_repo_dir, upstream=l2)
+        l1 =  FsCache(l1_repo_dir, upstream=l2, maxsize=5)
        
         g = l1.get('tf2')
         self.assertTrue(g is not None)
@@ -200,30 +206,76 @@ class Test(unittest.TestCase):
         l1.remove('write-through', propagate=True)
         self.assertIsNone(l2.get('write-through'))
 
+        # Put a bunch of files in, and check that
+        # l2 gets all of the files, but the size of l1 says constrained
+        for i in range(0,10):
+            l1.put(testfile,'many'+str(i))
+            
+        self.assertEquals(4194304, l1.size)
+        self.assertEquals(11534336, l2.size)
+
+        # Check that the right files got deleted
+        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many1')))   
+        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many6')))
+        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many7')))
+        
+        # Fetch a file that was displaced, to check that it gets loaded back 
+        # into the cache. 
+        p = l1.get('many1')
+        p = l1.get('many2')
+        self.assertTrue(p is not None)
+        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many1')))  
+        # Should have deleted many7
+        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many7')))
+        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many8')))
         
         #
+        # Check that verification works
+        # 
+        l1.verify()
+
+        os.remove(os.path.join(l1.cache_dir, 'many8'))
+            
+        with self.assertRaises(Exception):                
+            l1.verify()
+
+        l1.remove('many8')
+      
+        l1.verify()
+        
+        c = l1.database.cursor()
+        c.execute("DELETE FROM  files WHERE path = ?", ('many9',) )
+        l1.database.commit()
+        
+        with self.assertRaises(Exception):        
+            l1.verify()
+        
+        l1.remove('many9')
+      
+        l1.verify()
+        
         # Test the LibraryDb Cache on  its own. 
-        l = self.get_library()
-        db = l.database
+#        l = self.get_library()
+#        db = l.database
+#        
+#        ldc = LibraryDbCache(db, NullCache())
+#        db.install_bundle(self.bundle)
+#        
+#        r = ldc.find(QueryCommand().table(name='tone'))
+#        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
+#    
+#        # Now, passthrough
+#        ldc = LibraryDbCache(db, l2)
+#        l1 =  FsCache(l1_repo_dir, upstream=ldc)
+#        
+#        g = l1.get('tf2')
+#        self.assertTrue(g is not None)
+#     
+#        r = l1.find(QueryCommand().table(name='tone'))
+#        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
         
-        ldc = LibraryDbCache(db, NullCache())
-        db.install_bundle(self.bundle)
-        
-        r = ldc.find(QueryCommand().table(name='tone'))
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
-    
-        # Now, passthrough
-        ldc = LibraryDbCache(db, l2)
-        l1 =  FsCache(l1_repo_dir, upstream=ldc)
-        
-        g = l1.get('tf2')
-        self.assertTrue(g is not None)
+
      
-        r = l1.find(QueryCommand().table(name='tone'))
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
-        
-        Test.rm_rf(l1_repo_dir)
-        Test.rm_rf(l2_repo_dir)
         
     def x_text_rebuild(self):
         #
@@ -302,7 +354,7 @@ class Test(unittest.TestCase):
 
         import sqlite3
         
-        l =  databundles.library.get_library()
+        l =  get_library()
           
         q = (l.query()
                  .identity(creator='clarinova.com', subset = 'sf1geo')
@@ -339,7 +391,7 @@ class Test(unittest.TestCase):
         import sqlite3
         import petl
          
-        l =  databundles.library.get_library()
+        l = get_library()
         
         rows = l.query().identity(creator='clarinova.com', subset = 'sf1').partition(any=True).all
         for r in rows:

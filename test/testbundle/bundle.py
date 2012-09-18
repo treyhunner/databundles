@@ -44,9 +44,9 @@ class Bundle(BuildBundle):
                   ('integer', partial(random.randint, 0, 500)),
                   ('float', random.random)
                   ]
-        petl.dummytable(2000,fields).tosqlite3(sink, 'tone', create=False) #@UndefinedVariable
-        petl.dummytable(2000,fields).tosqlite3(sink, 'ttwo', create=False) #@UndefinedVariable
-        petl.dummytable(2000,fields).tosqlite3(sink, 'tthree', create=False) #@UndefinedVariable
+        petl.dummytable(10000,fields).tosqlite3(sink, 'tone', create=False) #@UndefinedVariable
+        petl.dummytable(10000,fields).tosqlite3(sink, 'ttwo', create=False) #@UndefinedVariable
+        petl.dummytable(10000,fields).tosqlite3(sink, 'tthree', create=False) #@UndefinedVariable
       
         # Now write random data to each of the pable partitions. 
         
@@ -54,7 +54,7 @@ class Bundle(BuildBundle):
             #self.log("Loading "+partition.name)
             db = partition.database.path
             table_name = partition.table.name
-            petl.dummytable(2000,fields).tosqlite3(db, table_name, create=False) #@UndefinedVariable
+            petl.dummytable(30000,fields).tosqlite3(db, table_name, create=False) #@UndefinedVariable
              
             
         

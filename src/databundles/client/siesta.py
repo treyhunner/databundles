@@ -40,6 +40,9 @@ USER_AGENT = "Python-siesta/%s" % __version__
 
 logging.basicConfig(level=0)
 
+class ServerError(Exception):
+    pass
+
 class Response(object):
     object = None
     is_error = False
@@ -77,13 +80,17 @@ class Response(object):
         self.message = resp.reason
         self.headers = resp.getheaders()
         
-        if self.status >= 400:
-            self.is_error = True
-            
+ 
         if isinstance(self.object, dict) and self.object.get('exception', False):
             self.exception = self.handle_exception()
         else:
             self.exception = None
+            
+        if self.status >= 400:
+            self.is_error = True
+            
+        if self.status >= 500:
+            self.exception = ServerError('Server error. See server log for details')    
        
     def handle_exception(self): 
         '''If self.object has an exception, re-construct the exception and 
