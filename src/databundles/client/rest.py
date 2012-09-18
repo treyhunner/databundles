@@ -53,6 +53,9 @@ class Rest(object):
                     chunk =  response.read(chunksize) #@UndefinedVariable
     
             return file_path
+        else:
+            # Read the damn thing yourself ... 
+            return response
             
     def put(self,source):
         '''Put the bundle in soruce to the remote library 
@@ -91,7 +94,11 @@ class Rest(object):
         '''Return a list of all of the datasets in the library'''
         response =   self.api.datasets.get()
         return response.object
-        
+            
+    def close(self):
+        '''Close the server. Only used in testing. '''
+        response =   self.api.test.closeget()
+        return response.object
 
     
     

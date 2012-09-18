@@ -10,8 +10,7 @@ from databundles.run import  RunConfig
 
 from  databundles.client.rest import Rest #@UnresolvedImport
 
-server_url = 'http://localhost:8080'
-server_url = 'http://lorne:8080'
+server_url = 'http://localhost:7979'
 
 class Test(unittest.TestCase):
 
@@ -29,10 +28,67 @@ class Test(unittest.TestCase):
         self.bundle.prepare()
         self.bundle.build()
 
+        self.start_server()
 
     def tearDown(self):
-        pass
+        from databundles.client.siesta import  API
+        import time
+        
+        # Wait for the server to shutdown
+        a = API(server_url)
+        for i in range(1,10):
+            try:
+                a.test.close.get()
+                print 'Teardown: server still running, waiting'
+                time.sleep(1)
+            except:
+                break
 
+
+    def start_server(self):
+        '''Run the Bottle server as a thread'''
+        from databundles.client.siesta import  API
+        import databundles.server.main
+        from threading import Thread
+        import time
+        
+        server = Thread(target = databundles.server.main.test_run)
+        
+        server.setDaemon(True)
+        server.start()
+        
+        databundles.server.bottle.debug()
+
+        a = API(server_url)
+        for i in range(1,10):
+            try:
+                r = a.test.echo('foobar').get(bar='baz')
+                break
+            except:
+                print 'Server not started yet, waiting'
+                time.sleep(1)
+                
+      
+    def test_threaded_server(self):
+        from databundles.client.siesta import  API
+
+        a = API(server_url)
+        
+        # Test echo for get. 
+        r = a.test.echo('foobar').get(bar='baz')
+        
+        self.assertEquals(200,r.status)
+        self.assertIsNone(r.exception)
+            
+        # Check that the server is stoppable. This only works 
+        # when bottle.py is modified to include a new server type, StoppableWSGIRefServer   
+        a.test.close.get()
+        
+        r = a.test.echo('foobar').get(bar='baz')
+        
+        self.assertEquals(200,r.status)
+        self.assertIsNone(r.exception)
+               
 
     def test_test(self):
         from databundles.client.siesta import  API
@@ -62,6 +118,9 @@ class Test(unittest.TestCase):
                   
 
     def test_put_bundle(self):
+        from databundles.bundle import DbBundle
+        from databundles.library import QueryCommand
+        
         r = Rest(server_url)
         
         bf = self.bundle.database.path
@@ -81,7 +140,9 @@ class Test(unittest.TestCase):
             self.assertEquals(p.identity.id_, response.object.get('partition').get('id'))
 
         # Now get the bundles
-        bundle = r.get(self.bundle.identity.id_,'/tmp/foo')
+        bundle_file = r.get(self.bundle.identity.id_,'/tmp/foo')
+
+        bundle = DbBundle(bundle_file)
 
         self.assertIsNot(bundle, None)
         self.assertEquals('a1qSlv',bundle.identity.id_)
@@ -91,14 +152,14 @@ class Test(unittest.TestCase):
         
         self.assertTrue('a1qSlv' in o.keys() )
     
-        o = r.find(r.query().table(name='tone').partition(any=True))
+        o = r.find(QueryCommand().table(name='tone').partition(any=True))
       
         self.assertTrue( 'b1qSlv001' in [i.Partition.id_ for i in o])
         self.assertTrue( 'a1qSlv' in [i.Dataset.id_ for i in o])
       
 
     def test_cache(self):
-        from databundles.library import RestCache, FsCache
+        from databundles.library import  FsCache
         import tempfile
         import uuid
         
@@ -106,12 +167,7 @@ class Test(unittest.TestCase):
         root = os.path.join(tempfile.gettempdir(),'testing',str(uuid.uuid4()))
         print "ROOT",root
         repo_dir = os.path.join(root,'repo-l1')
-        
-        rc = RestCache(server_url)
-        
-        rc.put(bf,'foobar')
-        
-        
+
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

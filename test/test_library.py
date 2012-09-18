@@ -150,7 +150,7 @@ class Test(unittest.TestCase):
             self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
 
     def test_cache(self):
-        from databundles.library import  FsCache, LibraryDbCache, NullCache
+        from databundles.library import  FsCache, LibraryDbCache
         import tempfile
         import uuid
         
@@ -254,27 +254,11 @@ class Test(unittest.TestCase):
       
         l1.verify()
         
-        # Test the LibraryDb Cache on  its own. 
-#        l = self.get_library()
-#        db = l.database
-#        
-#        ldc = LibraryDbCache(db, NullCache())
-#        db.install_bundle(self.bundle)
-#        
-#        r = ldc.find(QueryCommand().table(name='tone'))
-#        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
-#    
-#        # Now, passthrough
-#        ldc = LibraryDbCache(db, l2)
-#        l1 =  FsCache(l1_repo_dir, upstream=ldc)
-#        
-#        g = l1.get('tf2')
-#        self.assertTrue(g is not None)
-#     
-#        r = l1.find(QueryCommand().table(name='tone'))
-#        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)
-        
 
+    def test_remote(self):
+        
+        
+        
      
         
     def x_text_rebuild(self):

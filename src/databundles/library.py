@@ -730,14 +730,24 @@ class Library(object):
         # If dataset is not None, it means the file already is in the cache.
         rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id)
 
+        # Try to get the file from the cache. 
         if rel_path:
             abs_path = self.cache.get(rel_path)
         else:
             abs_path = None
      
+        # Not in the cache, try to get it from the remote library, 
+        # if a remote was set. 
         if not abs_path and self.remote:
             abs_path = self.remote.get(bp_id)
-     
+            
+            if abs_path:
+                # The remote has put the file into our library, 
+                # (If the remote is configured with the same cache as the main library)
+                # so we need to install the bundle. 
+                d2, p2 = self.database.install_bundle(abs_path)
+                
+            
         if not abs_path or not os.path.exists(abs_path):
             return False
        
@@ -820,23 +830,23 @@ class Library(object):
             
         self.database.commit()
         return bundles
-    
- 
-
+  
 
 class RemoteLibrary(object):
     '''A library that uses a REST Interface to a remote library. 
     
     '''
 
+
     def __init__(self, url, cache):
         '''
-       
+        Args:
+            url. URL of the REST service
+            cache. An FsCache for storing files that are retrieved. 
         '''
- 
+        from  databundles.client.rest import Rest
     
-    def get_stream(self, rel_path):
-        return self.upstream.get_stream(rel_path)
+        r = Rest(url)
         
     def get(self,rel_path):
         '''
@@ -874,66 +884,6 @@ class RemoteLibrary(object):
   
 
 
-class NullCache(object):
-    '''A cache that implements on the find() method. All others pass through to 
-    the mandatory upstream. '''
-
-
-    def __init__(self,upstream=None):
-        '''Init a new FileSystem Cache'''
-
-        self.upstream = upstream
-   
-        
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        return 'null'
-    
-    def get_stream(self, rel_path):
-        if self.upstream:
-            return self.upstream.get_stream(rel_path)
-        
-    
-    def get(self, rel_path):
-        '''
-        '''
-        if self.upstream:
-            return self.upstream.get(rel_path)
-        else:
-            return None
-        
-    
-    def put(self, source, rel_path):
-        ''''''
-        if self.upstream:
-            return self.upstream.put(source, rel_path)
-        else:
-            return None
-        
-    
-    def find(self,query):
-        '''Passes the query to the upstream, if it exists'''
-        if self.upstream:
-            return self.upstream.find(query)
-        else:
-            return None
-        
-    
-    def remove(self,rel_path, propagate = False):
-        ''''''
-        if self.upstream:
-            return self.upstream.remove(rel_path, propagate)
-        else:
-            return None     
-        
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        if self.upstream:
-            return self.upstream.list(path)
-        else:
-            return None   
-    
 class FsCache(object):
     '''A repository that transfers files to and from a remote filesystem
     
@@ -1241,7 +1191,3 @@ def _pragma_on_connect(dbapi_con, con_record):
     dbapi_con.execute('PRAGMA temp_store = MEMORY')
     dbapi_con.execute('PRAGMA cache_size = 500000')
     dbapi_con.execute('pragma foreign_keys=ON')
-
- 
-
- 

@@ -55,8 +55,5 @@ class Bundle(BuildBundle):
             db = partition.database.path
             table_name = partition.table.name
             petl.dummytable(30000,fields).tosqlite3(db, table_name, create=False) #@UndefinedVariable
-             
-            
-        
-        
+
         

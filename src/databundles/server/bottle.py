@@ -2424,7 +2424,7 @@ def run(app=None, server='wsgiref', host='127.0.0.1', port=8080,
             if bgcheck.status == 'reload':
                 sys.exit(3)
         else:
-            server.run(app)
+            return server.run(app)
     except KeyboardInterrupt:
         pass
     except (SyntaxError, ImportError):

@@ -2,8 +2,9 @@
 REST Server For DataBundle Libraries. 
 '''
 
-from bottle import  run, get, put, post, request, response #@UnresolvedImport
+from bottle import  get, put, post, request, response #@UnresolvedImport
 from bottle import HTTPResponse, static_file, install #@UnresolvedImport
+from bottle import ServerAdapter, server_names #@UnresolvedImport
 
 import databundles.library 
 import databundles.run
@@ -84,15 +85,17 @@ install(AllJSONPlugin())
 def get_datasets():
     '''Return all of the dataset identities, as a dict, 
     indexed by id'''
-    return { i.id_ : i.to_dict() for i in library.dataset_ids}
+    return { i.id_ : i.to_dict() for i in library.datasets}
     
 @post('/datasets')
 def post_dataset(): 
     '''Store a bundle, calling put() on the bundle file in the Library'''
     import uuid # For a random filename. 
-    import os
-    
-    cf = library._cache_path('downloads',str(uuid.uuid4()))
+    import os, tempfile
+   
+    cf = os.path.join(tempfile.gettempdir(),'rest-downloads',str(uuid.uuid4()))
+    if not os.path.exists(os.path.dirname(cf)):
+        os.makedirs(os.path.dirname(cf))
     
     # Read the file directly from the network, writing it to the temp file
     with open(cf,'w') as f:
@@ -111,9 +114,7 @@ def post_dataset():
     # Is this a partition or a bundle?
     tb = DbBundle(cf)
  
-    remove = (tb.db_config.info.type != 'partition')
-        
-    dataset, partition, library_path = library.put(tb, remove=remove)
+    dataset, partition, library_path = library.put(tb)
     
     # if that worked, OK to remove the temporary file. 
     os.remove(cf)
@@ -135,10 +136,11 @@ def post_dataset():
 @post('/datasets/find')
 def post_datasets_find():
     '''This is the doc'''
+    from databundles.library import QueryCommand
    
     q = request.json
    
-    bq = library.query(q)
+    bq = QueryCommand(q)
     db_query = library.find(bq)
     results = db_query.all() #@UnusedVariable
   
@@ -236,6 +238,52 @@ def get_test_exception():
     '''Throw an exception'''
     raise Exception("throws exception")
 
+@get('/test/close')
+def get_test_close():
+    '''Close the server'''
+    global stoppable_wsgi_server_run
+    if stoppable_wsgi_server_run is not None:
+        print "SERVER CLOSING"
+        stoppable_wsgi_server_run = False
+        return 'should be closed'
+    
+    else:
+        return "not in debug mode. won't close"
 
 
-run(host='0.0.0.0', port=8080, reloader=True)
+class StoppableWSGIRefServer(ServerAdapter):
+    def run(self, handler): # pragma: no cover
+        global stoppable_wsgi_server_run
+        stoppable_wsgi_server_run = True
+   
+        from wsgiref.simple_server import make_server, WSGIRequestHandler
+        if self.quiet:
+            class QuietHandler(WSGIRequestHandler):
+                def log_request(*args, **kw): pass #@NoSelf
+            self.options['handler_class'] = QuietHandler
+        srv = make_server(self.host, self.port, handler, **self.options)
+        while stoppable_wsgi_server_run:
+            srv.handle_request()
+
+server_names['stoppable'] = StoppableWSGIRefServer
+
+def test_run():
+    from bottle import run, debug
+  
+    debug()
+    return run(host='localhost', port=7979, reloader=False, server='stoppable')
+
+def local_run():
+    from bottle import run
+    return run(host='0.0.0.0', port=8080, reloader=True)
+    
+def local_debug_run():
+    from bottle import run, debug
+
+    debug()
+    return run(host='0.0.0.0', port=8080, reloader=True)
+    
+if __name__ == '__main__':
+    local_debug_run()
+    
+
