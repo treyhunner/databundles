@@ -67,28 +67,7 @@ class Test(unittest.TestCase):
             except:
                 print 'Server not started yet, waiting'
                 time.sleep(1)
-                
-      
-    def test_threaded_server(self):
-        from databundles.client.siesta import  API
-
-        a = API(server_url)
-        
-        # Test echo for get. 
-        r = a.test.echo('foobar').get(bar='baz')
-        
-        self.assertEquals(200,r.status)
-        self.assertIsNone(r.exception)
-            
-        # Check that the server is stoppable. This only works 
-        # when bottle.py is modified to include a new server type, StoppableWSGIRefServer   
-        a.test.close.get()
-        
-        r = a.test.echo('foobar').get(bar='baz')
-        
-        self.assertEquals(200,r.status)
-        self.assertIsNone(r.exception)
-               
+                               
 
     def test_test(self):
         from databundles.client.siesta import  API
