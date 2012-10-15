@@ -6,9 +6,11 @@ Created on Jun 30, 2012
 import unittest
 import os.path
 from  testbundle.bundle import Bundle
-from sqlalchemy import *
+from sqlalchemy import * #@UnusedWildImport
 from databundles.run import  RunConfig
 from databundles.library import QueryCommand, get_library
+import logging
+import inspect #@Reimport
 
 class Test(unittest.TestCase):
 
@@ -23,11 +25,17 @@ class Test(unittest.TestCase):
         
         self.bundle = Bundle(self.bundle_dir)
         
+        logger = logging.getLogger(inspect.stack()[0][3])
+        logger.info('clean')
         self.bundle.clean()
         self.bundle = Bundle(self.bundle_dir)
         
+        logger.info('prepare')
         self.bundle.prepare()
+        
+        logger.info('build')
         self.bundle.build()
+        logger.info('Setup finished')
         
     @staticmethod
     def rm_rf(d):
@@ -150,9 +158,8 @@ class Test(unittest.TestCase):
             self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
 
     def test_cache(self):
-        from databundles.library import  FsCache, LibraryDbCache
-        import tempfile
-        import uuid
+        from databundles.library import  FsCache
+
         
         root = '/tmp/test_library'
         try: Test.rm_rf(root)
@@ -256,7 +263,7 @@ class Test(unittest.TestCase):
         
 
     def test_remote(self):
-        
+        pass
         
         
      
@@ -281,7 +288,7 @@ class Test(unittest.TestCase):
 
     def x_test_server(self):
         import uuid
-        from  boto.s3.connection import S3Connection, Key
+        from  boto.s3.connection import S3Connection
         
         access = self.rc.library.repository['access']
         secret = self.rc.library.repository['secret']
@@ -302,7 +309,6 @@ class Test(unittest.TestCase):
         
         
     def x_test_basic(self):
-        import sqlite3
 
         path = '/tmp/geo.db'
    
@@ -328,13 +334,12 @@ class Test(unittest.TestCase):
                     
                     try:
                         int(v)
-                    except Exception as e:
+                    except Exception:
                         print "{}\tTEXT".format(c.name)
                         break
  
 
     def x_test_BuildCombinedFile(self):
-
 
         import sqlite3
         
@@ -396,8 +401,8 @@ class Test(unittest.TestCase):
             
             for table in part.schema.tables:
                 print part.identity.id_, part.name, table.name
-                f = l.stream(part.identity.id_, table)
-                g = l.stream(geo.identity.id_, 'select * from sf1geo') 
+                l.stream(part.identity.id_, table)
+                l.stream(geo.identity.id_, 'select * from sf1geo') 
                 
                 con = sqlite3.connect(':memory:')
                 c = con.cursor()
@@ -415,10 +420,11 @@ class Test(unittest.TestCase):
                 print petl.look(t)
                 
                 con.close()
-                
-                
-                
-
+     
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(unittest.makeSuite(Test))
+    return suite
+      
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
-    unittest.main()
+    unittest.TextTestRunner().run(suite())

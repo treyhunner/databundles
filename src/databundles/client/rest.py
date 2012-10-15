@@ -5,7 +5,7 @@ Created on Aug 31, 2012
 
 @author: eric
 '''
-from siesta  import API #@UnresolvedImport
+from databundles.client.siesta  import API 
 from databundles.bundle import DbBundle
 
 class NotFound(Exception):

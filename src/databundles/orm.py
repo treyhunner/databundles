@@ -12,8 +12,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.mutable import Mutable
 
 from sqlalchemy.sql import text
-from identity import  DatasetNumber, ColumnNumber
-from identity import TableNumber, PartitionNumber, ObjectNumber
+from databundles.identity import  DatasetNumber, ColumnNumber
+from databundles.identity import TableNumber, PartitionNumber, ObjectNumber
 
 import json
 
@@ -323,10 +323,11 @@ class Table(Base):
         name = Column.mangle_name(name)
 
         if kwargs.get('sequence_id', False):
-            del kwargs['sequence_id']
-    
-        row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_), 
-                                         kwargs.get('sequence_id'))),
+            sequence = kwargs['sequence_id']
+        else:
+            sequence = None
+
+        row = Column(id=str(ColumnNumber(ObjectNumber.parse(self.id_),sequence)),
                      name=name, 
                      t_id=self.id_,
                      **kwargs              
@@ -343,7 +344,8 @@ class Table(Base):
       
         s.add(row)
      
-        s.commit()
+        if kwargs.get('commit', True):
+            s.commit()
     
         return row
    
@@ -454,7 +456,6 @@ class File(Base, SavableMixin):
         self.ref = kwargs.get("ref",None)
         self.content_hash = kwargs.get("content_hash",None) 
       
-     
     def __repr__(self):
         return "<files: {}>".format(self.path)
 
@@ -486,7 +487,6 @@ class Partition(Base):
         self.grain = kwargs.get('grain',None)
         self.data = kwargs.get('data',None)
         
-
     @property
     def identity(self):
         '''Return this partition information as a PartitionId'''
@@ -539,8 +539,5 @@ class Partition(Base):
         dataset = ObjectNumber.parse(target.d_id)
         target.id_ = str(PartitionNumber(dataset, target.sequence_id))
         
-
 event.listen(Partition, 'before_insert', Partition.before_insert)
 event.listen(Partition, 'before_update', Partition.before_update)
- 
-

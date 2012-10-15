@@ -15,35 +15,6 @@ server_url = 'http://localhost:7979'
 class Test(unittest.TestCase):
 
 
-    def setUp(self):
-        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-        
-        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
-         
-        self.bundle = Bundle(self.bundle_dir)
-        
-        self.bundle.clean()
-        self.bundle = Bundle(self.bundle_dir)
-        
-        self.bundle.prepare()
-        self.bundle.build()
-
-        self.start_server()
-
-    def tearDown(self):
-        from databundles.client.siesta import  API
-        import time
-        
-        # Wait for the server to shutdown
-        a = API(server_url)
-        for i in range(1,10):
-            try:
-                a.test.close.get()
-                print 'Teardown: server still running, waiting'
-                time.sleep(1)
-            except:
-                break
-
 
     def start_server(self):
         '''Run the Bottle server as a thread'''
@@ -60,14 +31,46 @@ class Test(unittest.TestCase):
         databundles.server.bottle.debug()
 
         a = API(server_url)
-        for i in range(1,10):
+        for i in range(1,10): #@UnusedVariable
             try:
-                r = a.test.echo('foobar').get(bar='baz')
+                a.test.echo('foobar').get(bar='baz')
                 break
             except:
                 print 'Server not started yet, waiting'
                 time.sleep(1)
                                
+
+
+    def setUp(self):
+        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
+        
+        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
+         
+        bundle = Bundle()     
+        bundle.clean()
+        
+        self.bundle = Bundle()
+        
+        self.bundle.prepare()
+        self.bundle.build()
+        self.bundle_dir = self.bundle.bundle_dir
+
+        self.start_server()
+
+    def tearDown(self):
+        from databundles.client.siesta import  API
+        import time
+        
+        # Wait for the server to shutdown
+        a = API(server_url)
+        for i in range(1,10): #@UnusedVariable
+            try:
+                a.test.close.get()
+                #print 'Teardown: server still running, waiting'
+                time.sleep(1)
+            except:
+                break
+
 
     def test_test(self):
         from databundles.client.siesta import  API
@@ -124,30 +127,32 @@ class Test(unittest.TestCase):
         bundle = DbBundle(bundle_file)
 
         self.assertIsNot(bundle, None)
-        self.assertEquals('a1qSlv',bundle.identity.id_)
+        self.assertEquals('a1DxuZ',bundle.identity.id_)
 
         # Should show up in datasets list. 
         o = r.datasets()
+      
         
-        self.assertTrue('a1qSlv' in o.keys() )
+        self.assertTrue('a1DxuZ' in o.keys() )
     
         o = r.find(QueryCommand().table(name='tone').partition(any=True))
       
-        self.assertTrue( 'b1qSlv001' in [i.Partition.id_ for i in o])
-        self.assertTrue( 'a1qSlv' in [i.Dataset.id_ for i in o])
+        self.assertTrue( 'b1DxuZ001' in [i.Partition.id_ for i in o])
+        self.assertTrue( 'a1DxuZ' in [i.Dataset.id_ for i in o])
       
 
     def test_cache(self):
-        from databundles.library import  FsCache
+    
         import tempfile
         import uuid
-        
-        bf = self.bundle.database.path
+
         root = os.path.join(tempfile.gettempdir(),'testing',str(uuid.uuid4()))
         print "ROOT",root
-        repo_dir = os.path.join(root,'repo-l1')
 
-
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(unittest.makeSuite(Test))
+    return suite
+      
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
-    unittest.main()
+    unittest.TextTestRunner().run(suite())

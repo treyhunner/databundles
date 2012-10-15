@@ -1,0 +1,9 @@
+databundles
+sqlalchemy>=0.7
+psycopg2
+pyyaml
+petl
+beautifulsoup4
+boto
+decorator
+simplejson

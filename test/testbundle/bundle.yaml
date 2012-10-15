@@ -1,30 +1,27 @@
 build:
     geoheaderFile: meta/geoschema.csv
-    headers: null
-    rootUrl: null
 identity:
     creator: creator
     dataset: dataset
-    id: a1qSlv
+    id: a1DxuZ
     revision: 1
     source: source
     subset: subset
     variation: variation
 library:
-    root: /Volumes/DataLibrary/test
-    cache: /Volumes/DataLibrary/test/cache
-    cache_size: 6
-    repository: /Volumes/DataLibrary/test/repository
+    cache: /Volumes/DataLibrary/cache
+    cache_size: 10000
     database:
-        dbname: /Volumes/DataLibrary/test/library.db
+        dbname: /Volumes/DataLibrary/library.db
         driver: sqlite
     downloads: /net/nas2/c/proj/data-library-downloads/
-    extracts: /Volumes/DataLibrary/test/extracts
+    extracts: /Volumes/DataLibrary/extracts
     pq-database:
         dbname: databundles-dev
         driver: postgres
         password: databundles
         server: lorne
         username: databundles
+    repository: /net/nas2/c/proj/data-library-test/
 loaded:
 - /etc/databundles.yaml

@@ -4,22 +4,89 @@ Created on Jun 22, 2012
 @author: eric
 '''
 import unittest
-import os.path
 from  testbundle.bundle import Bundle
+from databundles.identity import * #@UnusedWildImport
 
 class Test(unittest.TestCase):
 
     def setUp(self):
 
-        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
-    
-        self.bundle = Bundle(self.bundle_dir)
+        bundle = Bundle()      
+        bundle.clean()
         
-        self.bundle.clean()
-        self.bundle = Bundle(self.bundle_dir)
+        self.bundle = Bundle()
+        
+        self.bundle_dir = bundle.bundle_dir
         
         self.bundle.prepare()
         self.bundle.build()
+      
+    def test_objectnumber(self):
+          
+        values = ['a17PY5','c17PY50a','d17PY50a0a','b17PY500a']
+        
+        for v in values:
+            x = ObjectNumber.parse(v)   
+            self.assertEquals(v, str(x))
+        
+        dn = DatasetNumber()
+        
+        base = str(dn)[1:]
+      
+        tn = TableNumber(dn, 10)
+        self.assertEquals('c'+base+'0a',str(tn))
+        
+        cn = ColumnNumber(tn, 20)
+        self.assertEquals('d'+base+'0a0k',str(cn))
+        
+        pn = PartitionNumber(dn, 30)
+        self.assertEquals('b'+base+'00u',str(pn))
+        
+        return True
+      
+        self.assertEquals('a1',str(ObjectNumber(1)))
+        self.assertEquals('b101',str(ObjectNumber(1,1)))
+        self.assertEquals('c10101',str(ObjectNumber(1,1,1)))
+
+        with self.assertRaises(ValueError):
+            self.assertEquals('aFooBar',str(ObjectNumber('FooBar')))
+      
+        
+        self.assertEquals('aFooBar',str(ObjectNumber('aFooBar')))
+        self.assertEquals('aFooBar',str(ObjectNumber(ObjectNumber('aFooBar'))))
+ 
+        on = ObjectNumber('aFooBar')
+
+        self.assertEquals('bFooBar00',str(ObjectNumber(on,0)))
+        self.assertEquals('cFooBar0000',str(ObjectNumber(on,0,0)))
+        self.assertEquals('bFooBarZZ',str(ObjectNumber(on,3843)))
+        self.assertEquals('cFooBarZZZZ',str(ObjectNumber(on,3843,3843)))
+        
+        with self.assertRaises(ValueError):
+            on = ObjectNumber(on,3844)
+            print str(on)
+     
+        with self.assertRaises(ValueError):
+            on = ObjectNumber(on,3844,3844)
+            print str(on)
+     
+        o = ObjectNumber('aFooBar')
+        self.assertIsNone(o.table);
+        self.assertIsNone(o.column);
+        
+        o = ObjectNumber('bFooBar03')
+        self.assertEquals(3,o.table);
+        self.assertIsNone(o.column);
+        
+        o = ObjectNumber('cFooBar0302')
+        self.assertEquals(3,o.table);
+        self.assertEquals(2,o.column);
+        
+        o = ObjectNumber('cFooBar0302',20)
+        o.type = ObjectNumber.TYPE.TABLE
+        self.assertEquals(20,o.table);
+        self.assertEquals('bFooBar0k',str(o))
+        
       
     def test_identity(self):
         self.assertEqual('source', self.bundle.identity.source)
@@ -63,8 +130,8 @@ class Test(unittest.TestCase):
         
         self.assertRaises(Exception,  s.add_table, ('table 1', ))
       
-        self.assertIn('c1qSlv01', [t.id_ for t in self.bundle.schema.tables])
-        self.assertIn('c1qSlv02', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('c1DxuZ01', [t.id_ for t in self.bundle.schema.tables])
+        self.assertIn('c1DxuZ02', [t.id_ for t in self.bundle.schema.tables])
         self.assertNotIn('cTest03', [t.id_ for t in self.bundle.schema.tables])
         
         t = s.add_table('table 3', altname='alt name')
@@ -75,9 +142,9 @@ class Test(unittest.TestCase):
       
         self.bundle.database.session.commit()
         
-        self.assertIn('d1qSlv0601', [c.id_ for c in t.columns])
-        self.assertIn('d1qSlv0602', [c.id_ for c in t.columns])
-        self.assertIn('d1qSlv0603', [c.id_ for c in t.columns])
+        self.assertIn('d1DxuZ0601', [c.id_ for c in t.columns])
+        self.assertIn('d1DxuZ0602', [c.id_ for c in t.columns])
+        self.assertIn('d1DxuZ0603', [c.id_ for c in t.columns])
         
     def test_generate_schema(self):
         '''Uses the generateSchema method in the bundle'''
@@ -191,9 +258,7 @@ class Test(unittest.TestCase):
         p.database.create()
         
     def test_config(self):
-        
-        c = self.bundle.config
-        
+
         db_config = self.bundle.db_config
        
         db_config.foo.bar = 'bingo'
@@ -215,12 +280,10 @@ class Test(unittest.TestCase):
         for i in range(10):
             w.writerow([i,i,i])
         
-        
-        
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(unittest.makeSuite(Test))
+    return suite
+      
 if __name__ == "__main__":
-    if True:
-        unittest.main()
-    else:
-        suite = unittest.TestSuite()
-        suite.addTest(Test('test_bundle_init'))
-        #unittest.TextTestRunner().run(suite)
+    unittest.TextTestRunner().run(suite())

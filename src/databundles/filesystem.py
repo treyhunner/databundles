@@ -94,8 +94,10 @@ class Filesystem(object):
         absoulte path'''
      
         args = (self.root_directory,) +args
-
-        p = os.path.normpath(os.path.join(*args))    
+        try:
+            p = os.path.normpath(os.path.join(*args))    
+        except AttributeError as e:
+            raise ValueError("Path arguments aren't valid when generating path:"+ e.message)
         dir_ = os.path.dirname(p)
         if not os.path.exists(dir_):
             try:

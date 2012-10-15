@@ -7,15 +7,44 @@ from databundles.run import  RunConfig
 
 import os.path
 import shutil
-import databundles #@UnresolvedImport
 
-from databundles.dbexceptions import ResultCountError, ConfigurationError
-import databundles.client.rest 
+
+from databundles.dbexceptions import ConfigurationError
+import databundles
+
+from collections import namedtuple
+from sqlalchemy.exc import IntegrityError
 
 library = None
 
+# Setup a default logger. The logger is re-assigned by the
+# bundle when the bundle instantiates the logger. 
+import logging #@UnusedImport
+import logging.handlers #@UnusedImport
+
+class NullHandler(logging.Handler):
+    def emit(self, record):
+        pass
+
+logger = logging.getLogger(__name__)
+logger.addHandler(NullHandler())
 
 def get_cache(config=None):
+    """Return a new :class:`FsCache` built on the configured cache directory
+    
+    :param config: a `RunConfig` object
+    :rtype: a `FsCache` object
+    
+    If config is None, the function will constuct a new RunConfig() with a default
+    constructor. 
+    
+    The `FsCache` will be constructed with the cache_dir values from the
+    library.cache config key, and if the library.repository value exists, it will 
+    be use for the upstream parameter.
+ 
+
+    """
+    
     if config is None:
         config = RunConfig()    
 
@@ -41,6 +70,16 @@ def get_cache(config=None):
     return cache
     
 def get_database(config=None):
+    """Return a new `LibraryDb`, constructed from a configuration
+    
+    :param config: a `RunConfig` object
+    :rtype: a `LibraryDb` object
+    
+    If config is None, the function will constuct a new RunConfig() with a default
+    constructor. 
+    
+    """
+    
     if config is None:
         config = RunConfig()    
 
@@ -58,12 +97,22 @@ def get_database(config=None):
     return database
 
 def get_library(config=None):
-    ''' Returns LocalLibrary singleton'''
+    """Return a new `Library`, constructed from a configuration
+    
+    :param config: a `RunConfig` object
+    :rtype: a `Library` object
+    
+    If config is None, the function will constuct a new RunConfig() with a default
+    constructor. 
+    
+    """    
+
     global library
     if library is None:
         
         if config is None:
             config = RunConfig()
+        
         
         library =  Library(cache = get_cache(config), 
                            database = get_database(config))
@@ -71,7 +120,12 @@ def get_library(config=None):
     return library
 
 def copy_stream_to_file(stream, file_path):
-    '''Copy an open file-list object to a file'''
+    '''Copy an open file-list object to a file
+    
+    :param stream: stream to copy from 
+    :param file_path: file to write to. Will be opened mode 'w'
+    
+    '''
 
     with open(file_path,'w') as f:
         chunksize = 8192
@@ -82,7 +136,7 @@ def copy_stream_to_file(stream, file_path):
 
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
-    from collections import namedtuple
+
     Dbci = namedtuple('Dbc', 'dsn sql') #Database connection information 
    
     DBCI = {
@@ -102,6 +156,8 @@ class LibraryDb(object):
         
         self._session = None
         self._engine = None
+        
+        self.logger = logging.getLogger(__name__)
         
         
     @property
@@ -215,6 +271,7 @@ class LibraryDb(object):
         
         if self.driver == 'postgres':
             import psycopg2
+            
             dsn = ("host={} dbname={} user={} password={} "
                     .format(self.server, self.dbname, self.username, self.password))
            
@@ -254,17 +311,60 @@ class LibraryDb(object):
         else:
             raise RuntimeError("Unknown database driver: {} ".format(self.driver))
         
+    def _install_partition(self, s,bdbs, bundle):
+        # This looks like a bundle, but is actually a partition, so
+        # we can't get the actual partition.
+        from databundles import resolve_id
+        from databundles.orm import Partition as OrmPartition
+        from databundles.partition import Partition
+            
+        if isinstance(bundle, Partition):
+            q = (bdbs
+              .query(OrmPartition)
+              .filter(OrmPartition.id_ == str(resolve_id(bundle))))
+            
+            partition =  q.one()
+            
+        else: # It looks like a bundle, but is actually a partition
+        
+            # This query is getting the partition name from the partition database. There
+            # should be only one of them. 
+            partitions =  bdbs.query(OrmPartition).all()
+        
+            if len(partitions) > 1:
+                raise IntegrityError('Got more than one partition')
+        
+            partition = partitions.pop()
+        
+        # Merge will combine records using the id, but the name can be
+        # different. If we don't delete any existing with the same name, 
+        # there will be an error. 
+        
+        s.query(OrmPartition).filter(
+            OrmPartition.id_ != str(partition.identity.id_) and 
+            OrmPartition.name == str(partition.identity.name)  
+            ).delete()
+        
+        
+        s.merge(partition)
+        
+        try:
+            s.commit()
+        except IntegrityError as e:
+            self.logger.error("Failed to merge partition for name={}, id={}: {} "
+                              .format(str(bundle.identity.name), str(bundle.identity.id_), str(e)))
+            s.rollback()
+            raise e
+
+        
+        
     def install_bundle(self, bundle):
         '''Copy the schema and partitions lists into the library database
         
         The 'bundle' may be either a bundle or a partition. If it is a bundle, 
         any previous bundle, all of its partitions, are deleted from the database.
         '''
-        from databundles import resolve_id
         from databundles.orm import Dataset
-        from databundles.orm import Partition as OrmPartition
-
-        from databundles.partition import Partition
         from databundles.bundle import Bundle
                 
         bdbs = bundle.database.session 
@@ -274,50 +374,30 @@ class LibraryDb(object):
         s.merge(dataset)
         s.commit()
 
-        if not isinstance(bundle, (Partition, Bundle)):
-            raise ValueError("Can only install a Partition or Bindle object")
+        if not isinstance(bundle, Bundle):
+            raise ValueError("Can only install a Partition or Bundle object")
 
-        if bundle.db_config.info.type == 'partition':
-            # This looks like a bundle, but is actually a partition, so
-            # we can't get the actual partition
-            partition =  bdbs.query(OrmPartition).first()
-        
-            s.merge(partition)
-            s.commit()
-           
-        elif isinstance(bundle, Partition):
-
-            try: 
-                # Find the partition record from the bundle
-                
-                q = (bdbs
-                      .query(OrmPartition)
-                      .filter(OrmPartition.id_ == str(resolve_id(bundle))))
-      
-                partition =  q.one()
- 
-                s.merge(partition)
-                s.commit()
-            except Exception as e:
-                print "ERROR: Failed to merge partition "+str(bundle.identity)+":"+ str(e)
-        else:
             # The Tables only get installed when the dataset is installed, 
             # not for the partition
  
-            for table in dataset.tables:
+        for table in dataset.tables:
+            try:
+                s.merge(table)
+                s.commit()
+            except IntegrityError as e:
+                self.logger.error("Failed to merge table "+str(table.id_)+":"+ str(e))
+                s.rollback()
+                raise e
+         
+            for column in table.columns:
                 try:
-                    s.merge(table)
+                    s.merge(column)
                     s.commit()
-                except Exception as e:
-                    print "ERROR: Failed to merge table"+str(table.id_)+":"+ str(e)
-             
-                for column in table.columns:
-                    try:
-                        s.merge(column)
-                        s.commit()
-                    except Exception as e:
-                        print "ERROR: Failed to merge column"+str(column.id_)+":"+ str(e)
-    
+                except IntegrityError as e:
+                    self.logger.error("Failed to merge column "+str(column.id_)+":"+ str(e) )
+                    s.rollback()
+                    raise e
+
         s.commit()
         
         return dataset, partition
@@ -697,6 +777,10 @@ class Library(object):
         if not self.cache:
             raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
 
+        self.logger = logging.getLogger(__name__)
+        
+
+
     @property
     def database(self):
         '''Return databundles.database.Database object'''
@@ -728,7 +812,7 @@ class Library(object):
         from databundles.bundle import DbBundle
 
         # If dataset is not None, it means the file already is in the cache.
-        rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id)
+        rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id) #@UnusedVariable
 
         # Try to get the file from the cache. 
         if rel_path:
@@ -745,7 +829,7 @@ class Library(object):
                 # The remote has put the file into our library, 
                 # (If the remote is configured with the same cache as the main library)
                 # so we need to install the bundle. 
-                d2, p2 = self.database.install_bundle(abs_path)
+                d2, p2 = self.database.install_bundle(abs_path) #@UnusedVariable
                 
             
         if not abs_path or not os.path.exists(abs_path):
@@ -769,9 +853,21 @@ class Library(object):
         return self.database.find(query_command)
            
     def put(self, bundle):
-        '''Install a bundle file,  into the library.
-        Copies in the files that don't exist, and loads data into the library
-        database'''
+        '''Install a bundle or partition file into the library.
+        
+        :param bundle: the file object to install
+        :rtype: a `Partition`  or `Bundle` object
+        
+        '''
+        from bundle import Bundle
+        from partition import Partition
+        
+        if not isinstance(bundle, (Partition, Bundle)):
+            raise ValueError("Can only install a Partition or Bundle object")
+        
+        # In the past, Partitions could be cloaked as Bundles. Disallow this 
+        if isinstance(bundle, Bundle) and bundle.db_config.info.type == 'partition':
+            raise RuntimeError("Don't allow partitions cloaked as bundles anymore ")
         
         bundle.identity.name # throw exception if not right type. 
 
@@ -781,9 +877,15 @@ class Library(object):
         dst = self.cache.put(src,rel_path)
         self.database.add_file(dst, self.cache.repo_id, bundle.identity.id_)
           
-        dataset, partition = self.database.install_bundle(bundle)
+        # Only installbundles in the database. 
+        if  isinstance(bundle, Bundle):
+            dataset, partition = self.database.install_bundle(bundle)
         
-        return dataset, partition, dst
+            return dataset, partition, dst
+        else:
+            # TODO, get the partition and dataset values from 
+            # somewhere. 
+            return None, None, dst
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -846,7 +948,7 @@ class RemoteLibrary(object):
         '''
         from  databundles.client.rest import Rest
     
-        r = Rest(url)
+        r = Rest(url) #@UnusedVariable
         
     def get(self,rel_path):
         '''

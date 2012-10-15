@@ -108,7 +108,8 @@ class Schema(object):
         self.table_sequence += 1
         self.col_sequence = 1
         
-        self.bundle.database.session.commit()
+        if kwargs.get('commit', True):
+            self.bundle.database.session.commit()
      
         return row
         

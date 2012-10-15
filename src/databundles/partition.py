@@ -6,7 +6,8 @@ Created on Jun 23, 2012
 
 import os
 
-from identity import Identity
+from databundles.identity import Identity
+
 
 class PartitionIdentity(Identity):
     '''Subclass of Identity for partitions'''
@@ -196,7 +197,6 @@ class Partition(object):
         
         return self.bundle.schema.table(table_spec)
         
-        
     def create_with_tables(self, tables=None, clean=True):
         '''Create, or re-create,  the partition, possibly copying tables
         from the main bundle
@@ -228,7 +228,10 @@ class Partition(object):
         self.schema.create_tables()
         
 class Partitions(object):
-    '''Continer and manager for the set of partitions. '''
+    '''Continer and manager for the set of partitions. 
+    
+    This object is always accessed from Bundle.partitions""
+    '''
     
     def __init__(self, bundle):
         self.bundle = bundle
@@ -276,7 +279,10 @@ class Partitions(object):
         from databundles.orm import Partition as OrmPartition
         s = self.bundle.database.session      
         return [self.partition(op) for op in s.query(OrmPartition).all()]
-    
+
+    def __iter__(self):
+        return self.all
+
     @property
     def query(self):
         from databundles.orm import Partition as OrmPartition

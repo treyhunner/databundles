@@ -3,7 +3,7 @@ Created on Aug 19, 2012
 
 @author: eric
 '''
-from  sourcesupport.uscensus import UsCensusBundle
+from  databundles.sourcesupport.uscensus import UsCensusBundle
 import yaml 
 
 class Us2000CensusBundle(UsCensusBundle):
@@ -12,13 +12,14 @@ class Us2000CensusBundle(UsCensusBundle):
     '''
 
     def __init__(self,directory=None):
+        
+        
         self.super_ = super(Us2000CensusBundle, self)
         self.super_.__init__(directory)
         
         bg = self.config.build
         self.segmap_file =  self.filesystem.path(bg.segMapFile)
         self.headers_file =  self.filesystem.path(bg.headersFile)
-        self.geoheaders_file = self.filesystem.path(bg.geoheaderFile)
         self.geoschema_file = self.filesystem.path(bg.geoschemaFile)
         self.rangemap_file =  self.filesystem.path(bg.rangeMapFile)
         self.urls_file =  self.filesystem.path(bg.urlsFile)
@@ -27,7 +28,6 @@ class Us2000CensusBundle(UsCensusBundle):
         self._table_id_cache = {}
         self._table_iori_cache = {}
         
-
     def _scrape_urls(self, rootUrl, states_file, suffix='_uf1'):
         '''Extract all of the URLS from the Census website and store them'''
         import urllib
@@ -41,7 +41,6 @@ class Us2000CensusBundle(UsCensusBundle):
         # Load in a list of states, so we know which links to follow
         with open(states_file) as f:
             states = map(lambda s: s.strip(),f.readlines())
-        
         
         # Root URL for downloading files. 
        
@@ -242,4 +241,3 @@ class Us2000CensusBundle(UsCensusBundle):
                  ]
                 )
   
- 

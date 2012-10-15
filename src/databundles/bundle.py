@@ -19,12 +19,28 @@ class Bundle(object):
     '''Represents a bundle, including all configuration 
     and top level operations. '''
  
+    logger = None
+ 
     def __init__(self):
         '''
         '''
-    
+
         self._schema = None
         self._partitions = None
+
+        self.logger = logging.getLogger(__name__)
+        
+        if not hasattr(self.logger, '_bundle_initialized'): # this avoids adding multiple handlers to the loger. 
+        
+            self.logger.setLevel(logging.DEBUG)
+            
+            formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
+            ch = logging.StreamHandler()
+            ch.setFormatter(formatter)
+            ch.setLevel(logging.DEBUG)
+            self.logger.addHandler(ch)
+            
+            self.logger._bundle_initialized = True
 
     @property
     def schema(self):
@@ -33,7 +49,6 @@ class Bundle(object):
             
         return self._schema
     
-
     @property
     def partitions(self):     
         if self._partitions is None:
@@ -52,7 +67,11 @@ class Bundle(object):
     def library(self):    
         import library
         
-        return library.get_library()
+        l =  library.get_library()
+        l.logger = self.logger
+        l.database.logger = self.logger
+        
+        return l
 
     
 class DbBundle(Bundle):
@@ -87,9 +106,8 @@ class DbBundle(Bundle):
         
         return petl.fromsqlite3(self.database.path, query)
         
-
 class BuildBundle(Bundle):
-    '''A bundle class for building bund files. Uses the bundle.yaml file for
+    '''A bundle class for building bundle files. Uses the bundle.yaml file for
     identity configuration '''
 
     def __init__(self, bundle_dir=None):
@@ -98,15 +116,21 @@ class BuildBundle(Bundle):
         
         super(BuildBundle, self).__init__()
         
+
         if bundle_dir is None:
-            bundle_dir = Filesystem.find_root_dir()
+            import inspect
+            bundle_dir = os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+    
+            # bundle_dir = Filesystem.find_root_dir()
+        
         
         if bundle_dir is None or not os.path.isdir(bundle_dir):
             from databundles.dbexceptions import BundleError
-            raise BundleError("BuildBundle must be constructed on a cache")
+            raise BundleError("BuildBundle must be constructed on a cache. "+
+                              str(bundle_dir) + " is not a directory")
   
         self.bundle_dir = bundle_dir
-        
+    
         self._database  = None
        
         self.filesystem = Filesystem(self, self.bundle_dir)
@@ -159,11 +183,13 @@ class BuildBundle(Bundle):
         if args.test is None: # If not specified, is False. If specified with not value, is None
             args.test = 1
             
-         
+
         if args.multi is None: # If not specified, is False. If specified with not value, is None
             import multiprocessing
             args.multi = multiprocessing.cpu_count()
-     
+
+
+       
             
         return args
 
@@ -210,11 +236,12 @@ class BuildBundle(Bundle):
     
     def log(self, message, **kwargs):
         '''Log the messsage'''
-        print "LOG: ",message
+        self.logger.info(message)
+
 
     def error(self, message, **kwargs):
         '''Log an error messsage'''
-        print "ERR: ",message
+        self.logger.error(message)
 
     def progress(self,message):
         '''print message to terminal, in place'''
@@ -316,7 +343,7 @@ class BundleFileConfig(BundleConfig):
         # write the configuration baci out. 
    
         if not self.identity.id_:
-            from identity import DatasetNumber
+            from databundles.identity import DatasetNumber
             self.identity.id_ = str(DatasetNumber())
             self.rewrite()
    
@@ -401,7 +428,7 @@ class BundleFileConfig(BundleConfig):
    
 
 class BundleDbConfig(BundleConfig):
-    '''Binds configuration items to the database, and processes the bundle.yaml file'''
+    ''' Retrieves configuration from the database, rather than the .yaml file. '''
 
     database = None
     dataset = None
@@ -423,8 +450,6 @@ class BundleDbConfig(BundleConfig):
       
         return {'identity':self.dataset.to_dict()}
 
-
-
     def __getattr__(self, group):
         '''Fetch a confiration group and return the contents as an 
         attribute-accessible dict'''
@@ -436,6 +461,9 @@ class BundleDbConfig(BundleConfig):
             def __setattr__(self, key, value):
                 key = key.strip('_')
              
+                if group == 'identity':
+                    raise ValueError("Can't set identity group from this interface. Use the dataset")
+                
                 s.query(SAConfig).filter(SAConfig.group == group,
                                          SAConfig.key == key,
                                          SAConfig.d_id == dataset.id_).delete()
@@ -447,6 +475,8 @@ class BundleDbConfig(BundleConfig):
             def __getattr__(self, key):
                 key = key.strip('_')
 
+                if group == 'identity':
+                    return dataset.to_dict().get(key, None)
 
                 try:
                     r = s.query(SAConfig).filter(SAConfig.group == group,
@@ -456,8 +486,8 @@ class BundleDbConfig(BundleConfig):
                 except:
                     return None
 
-        
-        return attrdict()
+        attrdict = attrdict()
+        return attrdict
 
     def get_dataset(self):
         '''Initialize the identity, creating a dataset record, 

@@ -346,7 +346,7 @@ class Database(object):
                 
         except Exception as e:
             self.bundle.error("Failed to store tempfile "+tempfile.path)
-            self.bundle.error("Insert code "+ins)
+            self.bundle.error("Insert code: "+ins)
             self.dbapi_connection.rollback()
 
             raise e
@@ -378,6 +378,7 @@ class Database(object):
            
             s.add(ds)
             s.commit()
+ 
             
             # call the post create function
             if self._post_create:

@@ -6,11 +6,14 @@ Created on Jun 10, 2012
 
 from  databundles.bundle import BuildBundle
 import petl.fluent as petl
+import os.path
 
 class Bundle(BuildBundle):
     
-    def __init__(self, directory):
+    def __init__(self, directory=None):
+
         self.super_ = super(Bundle, self)
+        
         self.super_.__init__(directory)
         
         bg = self.config.build
@@ -44,9 +47,10 @@ class Bundle(BuildBundle):
                   ('integer', partial(random.randint, 0, 500)),
                   ('float', random.random)
                   ]
-        petl.dummytable(10000,fields).tosqlite3(sink, 'tone', create=False) #@UndefinedVariable
-        petl.dummytable(10000,fields).tosqlite3(sink, 'ttwo', create=False) #@UndefinedVariable
-        petl.dummytable(10000,fields).tosqlite3(sink, 'tthree', create=False) #@UndefinedVariable
+        f = petl.dummytable(10000,fields) #@UndefinedVariable
+        f.tosqlite3(sink, 'tone', create=False) 
+        f.tosqlite3(sink, 'ttwo', create=False) 
+        f.tosqlite3(sink, 'tthree', create=False)
       
         # Now write random data to each of the pable partitions. 
         

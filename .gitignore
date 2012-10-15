@@ -4,3 +4,6 @@
 databundles.egg-info
 dist
 org.eclipse.core.resources.prefs
+test/html
+*.
+*.

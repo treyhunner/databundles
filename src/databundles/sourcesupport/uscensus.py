@@ -56,7 +56,7 @@ class UsCensusBundle(BuildBundle):
         self.create_split_table_schema()
     
         self.generate_partitions()
-        
+
         return True
     
     def scrape_urls(self, suffix='_uf1'):
@@ -128,8 +128,6 @@ class UsCensusBundle(BuildBundle):
             if not partition:
                 self.log("Create partition for "+table.name)
                 partition = self.partitions.new_partition(pid)
-            else:
-                self.log("Already created partition, skipping "+table.name)
 
         # The Fact partitions
         for table in self.fact_tables():
@@ -139,8 +137,7 @@ class UsCensusBundle(BuildBundle):
             if not partition:
                 self.log("Create partition for "+table.name)
                 partition = self.partitions.new_partition(pid)
-            else:
-                self.log("Already created partition, skipping "+table.name)
+
         
         # First install the bundle main database into the library
         # so all of the tables will be there for installing the
@@ -156,11 +153,12 @@ class UsCensusBundle(BuildBundle):
     def create_table_schema(self):
         '''Uses the generate_schema_rows() generator to creeate rows for the fact table
         The geo split table is created in '''
-        import csv
         from databundles.orm import Column
         
         log = self.log
         tick = self.ptick
+        
+        commit = False
         
         if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
             log("Reusing schema")
@@ -169,16 +167,17 @@ class UsCensusBundle(BuildBundle):
         else:
             log("Regenerating schema. This could be slow ... ")
         
-        
         log("Generating main table schemas")
       
         for row in self.generate_schema_rows():
-           
+
             if row['type'] == 'table':
                 
                 tick(".")
                 name = row['name']
                 row['data'] = {'segment':row['segment'], 'fact': True}
+                row['commit'] = commit
+
                 del row['segment']
                 del row['name']
                 t = self.schema.add_table(name, **row )
@@ -195,7 +194,8 @@ class UsCensusBundle(BuildBundle):
                 for fk in self.geo_keys():
                     self.schema.add_column(t, fk,
                                            datatype=Column.DATATYPE_INTEGER, 
-                                           is_foreign_key =True,)
+                                           is_foreign_key =True,
+                                           commit = commit)
               
             else:
 
@@ -207,12 +207,20 @@ class UsCensusBundle(BuildBundle):
                 self.schema.add_column(t, row['name'],
                             description=row['description'],
                             datatype=dt,
-                            data={'segment':row['segment'],'source_col':row['col_pos']})
-                
+                            data={'segment':row['segment'],'source_col':row['col_pos']},
+                            commit=commit)
+
         tick("\n")
+        
+        if not commit: # If we don't commit in the library, must do it here. 
+            self.database.session.commit()
 
     def create_split_table_schema(self):
-        '''Create the split table schema from  the geoschema_filefile. '''
+        '''Create the split table schema from  the geoschema_filef. 
+        
+        The "split" tables are the individual tables, which are split out from 
+        the segment files. 
+        '''
 
         from databundles.orm import Column
         self.schema.schema_from_file(open(self.geoschema_file, 'rbU'))
@@ -227,7 +235,7 @@ class UsCensusBundle(BuildBundle):
                                   uindexes = 'uihash')
 
     #############################################
-    # Build
+    # Build 
     #############################################
     
     def build(self, run_state_tables_f=None,run_fact_db_f=None):
@@ -250,6 +258,7 @@ class UsCensusBundle(BuildBundle):
         # Combine the geodim tables with the  state population tables, and
         # produce .csv files for each of the tables. 
         if self.run_args.multi and run_state_tables_f:
+            
             pool = Pool(processes=int(self.run_args.multi))
       
             result = pool.map_async(run_state_tables_f, enumerate(self.urls['geos'].keys()))
@@ -270,10 +279,16 @@ class UsCensusBundle(BuildBundle):
             for table in self.fact_tables():
                 self.run_fact_db(table.id_)
           
-          
         return True
     
     def run_geo_dim(self):
+        """Run the geo_dim process, via `_run_geo_dim` for each of the states 
+        
+        The geo_dim process generates a set of tables that cut across all
+        states, and there must be uniqie ids for rows that have unique content.
+        This makes it hard to run this as a parallel job. 
+        
+        """
         
         geo_processors = self.geo_processors()
         geo_partitions = self.geo_partition_map()
@@ -455,16 +470,24 @@ class UsCensusBundle(BuildBundle):
             tf = partition.database.tempfile(table, suffix=state)
         
             if not tf.exists:
-                raise Exception("Fact table tempfile does not exist table={} state={} path={}"
-                                .format(table.name, state, tf.path) )
+                if self.run_args.test:
+                    self.log("Missing tempfile, ignoring b/c in test: {}".format(tf.path))
+                    return
+                else:
+                    raise Exception("Fact table tempfile does not exist table={} state={} path={}"
+                                    .format(table.name, state, tf.path) )
             else:
                 self.log("Loading fact table for {}, {} from  {} ".format(state, table.name, tf.path))
      
-            db.load_tempfile(tf)
-            tf.close()
+            try:
+                db.load_tempfile(tf)
+                tf.close()
+            except Exception as e:
+                self.error("Loading fact table failed: {} ".format(e))
+                return 
 
         dest = self.library.put(partition)
-        self.log("Install Fact table in library: "+dest)
+        self.log("Install Fact table in library: "+str(dest))
 
         partition.database.delete()
         
@@ -746,19 +769,16 @@ class UsCensusBundle(BuildBundle):
                 db.load_tempfile(tf)
             
             else:
-                self.log("Geosplit tempfile doe not exist "+table.name)
+                self.log("Geosplit tempfile does not exist "+table.name)
 
             if db.exists:
                 self.log("Delete tempfile: "+tf.path)
                 #tf.delete() 
              
                 dest = self.library.put(partition)
-                self.log("Install in library: "+dest)
+                self.log("Install in library: "+str(dest))
                     
                 partition.database.delete()
             else:
                 self.log("Database doesn not exist: "+db.path)
-                
-
-                
-
+            
