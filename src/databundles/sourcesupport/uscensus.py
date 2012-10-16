@@ -331,6 +331,8 @@ class UsCensusBundle(BuildBundle):
         
         self.log("Initializing state: "+state+' ')
 
+        # This file holds the logrecno mapped to the integer ids for
+        # each of the dimension table rows 
         gd_file, geo_dim_writer = self.geo_key_writer(state)
         
         for state, logrecno, geo, segments, geodim in self.generate_rows(state): #@UnusedVariable
@@ -357,11 +359,12 @@ class UsCensusBundle(BuildBundle):
                       
                 partition = geo_partitions[table_id]
            
+                # Write a record to the dimension table. 
                 r = self.write_geo_row(row_hash, partition, table, columns, values)
  
                 geo_keys.append(r)    
                 
-            # Write a row in the ge_dim file for the state that maps the 
+            # Write a row in the geo_dim file for the state that maps the 
             # logrecno to the key values we discovered for each of the geo dim tables
             geo_dim_writer.writerow([logrecno] + geo_keys)
             gd_file.flush()     

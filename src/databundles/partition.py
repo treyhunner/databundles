@@ -98,31 +98,21 @@ class Partition(object):
     '''Represents a bundle partition, part of the bundle data broken out in 
     time, space, or by table. '''
     
-    def __init__(self, bundle, partition_id, **kwargs):
+    def __init__(self, bundle, record):
         self.bundle = bundle
-        self.pid= partition_id
-        self.data = kwargs.get('data',{})
-        self.state = kwargs.get('state', None)
-        
-        self.pid.id_ = kwargs.get('id',kwargs.get('id_',None))
-      
-        self.pid.partition = self
-        
-        self._schema = None
-        self._database = None
+        self.record = record
 
-        # The value for the library is injected in LocalLibrary.get() so the
-        # partition can figure out what the pat to its database is. 
-        self.library = None
       
     def init(self):
         '''Initialize the partition, loading in any SQL, etc. '''
-        if not self.database.exists():
-            self.database.create()
     
     @property
     def name(self):
-        return self.pid.name
+        return self.identity.name
+    
+    @property
+    def identity(self):
+        return self.identity
     
     @property
     def path(self):
@@ -137,11 +127,6 @@ class Partition(object):
         pparts = [ str(i) for i in [p.time,p.space,p.table] if i is not None]
        
         return  os.path.join(source, '-'.join(parts), *pparts )
-    
-    @property
-    def db_config(self):
-        from databundles.bundle import BundleDbConfig
-        return BundleDbConfig(self.database)
     
     @property
     def database(self):
@@ -168,21 +153,6 @@ class Partition(object):
             db.file_path = None
             return db
     
- 
-    def __repr__(self):
-        return "<partition: {}>".format(self.name)
- 
-    @property
-    def identity(self):
-        return self.pid
-    
-    @property
-    def schema(self):
-        from databundles.schema import Schema
-        if self._schema is None:
-            self._schema = Schema(self)
-            
-        return self._schema
     
     @property
     def table(self):
@@ -226,6 +196,10 @@ class Partition(object):
             self.database.copy_table_from(self.bundle.database,self.table.name)
         
         self.schema.create_tables()
+    
+
+    def __repr__(self):
+        return "<partition: {}>".format(self.name)
         
 class Partitions(object):
     '''Continer and manager for the set of partitions. 
@@ -259,12 +233,8 @@ class Partitions(object):
         
         partition_id = orm_partition.identity
      
-        return Partition(self.bundle, 
-                         partition_id, 
-                         id=orm_partition.id_,
-                         data=orm_partition.data, 
-                         state = orm_partition.state)
-    
+        return Partition(self.bundle, orm_partition)
+
     
     @property
     def count(self):
