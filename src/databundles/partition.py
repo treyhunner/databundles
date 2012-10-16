@@ -253,7 +253,7 @@ class Partitions(object):
         return [self.partition(op) for op in s.query(OrmPartition).all()]
 
     def __iter__(self):
-        return self.all
+        return iter(self.all)
 
     @property
     def query(self):

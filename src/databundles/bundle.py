@@ -27,6 +27,7 @@ class Bundle(object):
 
         self._schema = None
         self._partitions = None
+        self._libary = None
 
         self.logger = logging.getLogger(__name__)
         
@@ -64,14 +65,25 @@ class Bundle(object):
     
 
     @property
-    def library(self):    
+    def library(self):
+        '''Return the library set for the bundle, or 
+        local library from get_library() if one was not set. '''
+          
         import library
         
-        l =  library.get_library()
+        if self._library:
+            l = self._libarary
+        else:
+            l =  library.get_library()
+            
         l.logger = self.logger
         l.database.logger = self.logger
         
         return l
+
+    @library.setter
+    def library(self, value):
+        self._library = value
 
     
 class DbBundle(Bundle):

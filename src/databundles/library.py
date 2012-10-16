@@ -836,6 +836,7 @@ class Library(object):
             return False
        
         bundle = DbBundle(abs_path)
+        bundle.library = self
      
         if partition is not None:
             p =  bundle.partitions.partition(partition)

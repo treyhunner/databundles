@@ -4,10 +4,6 @@ Created on Jun 10, 2012
 @author: eric
 '''
 
-
-
-    
-
 import yaml
 import os.path
 
@@ -192,17 +188,23 @@ def run(argv, bundle_class):
         b.log("---- Skipping Submit ---- ")            
                 
     if 'test' in args.phases:
-        import nose
+        ''' Run the unit tests'''
+        import nose, unittest, sys
 
         dir = b.filesystem.path('test') #@ReservedAssignment
+                         
                    
         loader = nose.loader.TestLoader()
+        tests =loader.loadTestsFromDir(dir)
         
-        tests = loader.loadTestsFromDir(dir)
+        result = unittest.TextTestResult(sys.stdout, True, 1)
         
-        print tests
-        
-        
+        print "Loading tests from ",dir
+        for test in tests:
+            print "Running ", test
+            test.context.bundle = b
+            unittest.TextTestRunner().run(test)
+
                 
     
     

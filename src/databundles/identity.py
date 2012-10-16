@@ -154,6 +154,7 @@ class ObjectNumber(object):
     def parse(cls, input): #@ReservedAssignment
         '''Parse a string into one of the object number classes. '''
         
+
         if input is None:
             return None
         

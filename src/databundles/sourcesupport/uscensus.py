@@ -44,6 +44,7 @@ class UsCensusBundle(BuildBundle):
     def prepare(self):
         '''Create the prototype database'''
 
+
         if not self.database.exists():
             self.database.create()
 
@@ -243,6 +244,7 @@ class UsCensusBundle(BuildBundle):
         First, creates all of the state segments, one partition per segment per 
         state. Then creates a partition for each of the geo files. '''
     
+    
         from multiprocessing import Pool
 
         # Split up the state geo files into .csv files, and 
@@ -262,6 +264,7 @@ class UsCensusBundle(BuildBundle):
             for state in self.urls['geos'].keys():
                 self.log("Building fact tables for {}".format(state))
                 self.run_state_tables(state)
+      
       
         # Load all of the fact table tempfiles into the fact table databases
         # and store the databases in the library. 
@@ -323,13 +326,9 @@ class UsCensusBundle(BuildBundle):
         
         self.log("Initializing state: "+state+' ')
         
-
         table_meta = None  
-        for table_id, cp in geo_processors.items():
-            table,  columns, processors = cp
-            partition = geo_partitions[table_id]
-            if partition.table.name == 'record_code':
-                record_code_partition = partition
+
+        record_code_partition = self.get_record_code_partition(geo_processors, geo_partitions)
                     
         for state, logrecno, geo, segments, geodim in self.generate_rows(state): #@UnusedVariable
            
@@ -390,6 +389,8 @@ class UsCensusBundle(BuildBundle):
         geo splits table for foreign keys to the geo splits. '''
         import time
         
+
+        
         fact_partitions = self.fact_partition_map()
        
         range_map = yaml.load(file(self.rangemap_file, 'r')) 
@@ -407,7 +408,7 @@ class UsCensusBundle(BuildBundle):
                 if tf.exists:
                     self.log("Cleaning up old Tempfile: {}".format(tf.path))
                     tf.delete()
-        
+  
         row_i = 0
         
         for state, logrecno, geo, segments, geo_keys in self.generate_rows(state, geodim=True ): #@UnusedVariable
@@ -438,16 +439,16 @@ class UsCensusBundle(BuildBundle):
                     if seg and len(seg) > 0:    
                         # The values can be null for the PCT tables, which don't 
                         # exist for some summary levels.       
-                        values =  geo_keys[1:] + seg # Remove the logrec from the geo_key                                   
+                        values =  (geo_keys[0],) + geo_keys[3:-1] + tuple(seg) # Remove the state, logrec  and hash from the geo_key                                   
                         partition = fact_partitions[table_id]
                         
                         if not self.write_fact_table(state, partition, table, values):
                             tf = partition.database.tempfile(table, suffix=state)
                             self.error("Fact Table write error. Value not same length as header")
-                            print segment, state, logrecno
-                            print len(tf.header), table.name, tf.header
-                            print len(values), values
-                            print seg_number, range
+                            print "Segment: ", segment, state, logrecno
+                            print "Header : ",len(tf.header), table.name, tf.header
+                            print "Values : ",len(values), values
+                            print "Range  : ",seg_number, range
 
                     else:
                         self.log("{} {} Seg {}, table {}  is empty".format(state, logrecno,  seg_number, table_id))
@@ -458,6 +459,8 @@ class UsCensusBundle(BuildBundle):
                 if tf.suffix == state:
                     #self.log("CLOSING! "+tf.path)
                     tf.close()
+
+
 
         with open(marker_f, 'w') as f:
             f.write(str(time.time()))
@@ -479,10 +482,16 @@ class UsCensusBundle(BuildBundle):
             self.log("Found in fact table bundle library, skipping.: "+table.name)
             return
         
+        partition = self.fact_partition(table, True)
+        
         db = partition.database
         
-        db.clean_table(table) # In case we are restarting this run
-        
+        try:
+            db.clean_table(table) # In case we are restarting this run
+        except Exception as e:
+            self.error("Failed for "+partition.database.path)
+            raise e
+            
         for state in self.urls['geos'].keys():
             tf = partition.database.tempfile(table, suffix=state)
         
@@ -512,7 +521,37 @@ class UsCensusBundle(BuildBundle):
             tf = partition.database.tempfile(table, suffix=state)
             tf.delete()
 
+    #############################################
+    # Generate rows from multiple files?
 
+    def get_record_code_partition(self, geo_processors=None, geo_partitions=None):
+         
+        if geo_partitions is None:
+            geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
+        
+        if  geo_processors is None:
+            geo_processors = self.geo_processors()
+        
+        for table_id, cp in geo_processors.items(): #@UnusedVariable
+            partition = geo_partitions[table_id]
+            if partition.table.name == 'record_code':
+                record_code_partition = partition
+                
+        return record_code_partition;
+
+    def generate_geodim_rows(self, state):
+        '''Generate the rows that were created to link the geo split files with the
+        segment tables'''
+        
+        rcp = self.get_record_code_partition()
+      
+        sql = "SELECT * FROM record_code WHERE state = :state"
+        r = rcp.database.connection.execute(sql, state=state)
+        for row in r:
+            yield row
+     
+        return 
+      
     #############
     # Fact Table and Partition Acessors. 
     
@@ -759,3 +798,32 @@ class UsCensusBundle(BuildBundle):
         tf = tf.writer.writerow(values)
             
         return ok
+    
+def make_geoid(state, county, tract, block=None, blockgroup=None):
+    '''Create a geoid for common blocks. This is not appropriate for
+    all summary levels, but it is what is used by census.ire.org
+    
+    See: 
+        http://www.census.gov/rdo/pdf/0GEOID_Construction_for_Matching.pdf
+        https://github.com/clarinova/census/blob/master/dataprocessing/load_crosswalk_blocks.py
+        
+    '''
+    
+    x = ''.join([
+            state.rjust(2, '0'),
+            county.rjust(3, '0'),
+            tract.rjust(6, '0')
+            ])
+    
+    if block is not None:
+        x = x + block.rjust(4, '0')
+        
+    if blockgroup is not None:
+        x = x + blockgroup.rjust(4, '0')
+    
+    
+    
+
+        
+    
+    
