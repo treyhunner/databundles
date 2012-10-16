@@ -101,6 +101,9 @@ class Partition(object):
     def __init__(self, bundle, record):
         self.bundle = bundle
         self.record = record
+        
+        self._database =  None
+        self.library = None
 
       
     def init(self):
@@ -112,18 +115,18 @@ class Partition(object):
     
     @property
     def identity(self):
-        return self.identity
+        return self.record.identity
     
     @property
     def path(self):
         '''Return a pathname for the partition, relative to the containing 
         directory of the bundle. '''
         import os.path
-        
+     
         parts = self.bundle.identity.name_parts(self.bundle.identity)
        
         source = parts.pop(0)
-        p = self.pid
+        p = self.identity
         pparts = [ str(i) for i in [p.time,p.space,p.table] if i is not None]
        
         return  os.path.join(source, '-'.join(parts), *pparts )
@@ -132,11 +135,7 @@ class Partition(object):
     def database(self):
         if self._database is None:
             self._database = self._get_database()
-            
-            def add_type(database):
-                self.db_config.info.type = 'partition'
-                
-            self._database._post_create = add_type 
+
             
         return self._database
     
@@ -184,7 +183,6 @@ class Partition(object):
         
         self.database.create(copy_tables = False)
        
-        
         if tables is not None:
         
             if not isinstance(tables, list):
@@ -194,8 +192,12 @@ class Partition(object):
                 self.database.copy_table_from(self.bundle.database,table)
         elif self.table:
             self.database.copy_table_from(self.bundle.database,self.table.name)
+            tables = [self.table.name]
         
-        self.schema.create_tables()
+        for t in tables:
+            if not t in self.database.inspector.get_table_names():
+                t_meta, table = self.bundle.schema.get_table_meta(t) #@UnusedVariable
+                t_meta.create_all(bind=self.database.engine)
     
 
     def __repr__(self):

@@ -295,7 +295,8 @@ class Us2010CensusBundle(UsCensusBundle):
 
 
     def geo_table_names(self):
-        return (['recno',
+        return (['record_code',
+                 'recno',
                  'area',
                  'block',
                  'cons_city',

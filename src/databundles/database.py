@@ -13,18 +13,19 @@ class ValueInserter(object):
         self.table = table
         self.db = db
         self.session = self.db.session
+        self.ins = self.table.insert()
       
-        
-    def insert(self, values):    
-
-        ins = self.table.insert().values(values).execution_options(autocommit=True)
+    def insert(self, values):
+        ins = self.ins.values(values)
         self.session.execute(ins) 
 
     def __enter__(self): 
+        self.session.begin(subtransactions=True)
         return self
         
     def __exit__(self, type_, value, traceback):
         self.session.commit()
+        pass
         
 class TempFile(object): 
            
@@ -91,9 +92,7 @@ class TempFile(object):
     @property 
     def path(self):
         return self._path
-    
-    
-    
+
     @property
     def exists(self):
         return os.path.exists(self.path)
@@ -112,9 +111,7 @@ class TempFile(object):
             hk = self.table.name+'-'+str(self.suffix)
             if hk in self.db.tempfiles:
                 del self.db.tempfiles[hk]
-            
-       
-           
+  
 class Database(object):
     '''Represents a Sqlite database'''
 
@@ -160,6 +157,8 @@ class Database(object):
                                 self.bundle.identity.path+".db")
        
         self._last_attach_name = None
+        
+        self._table_meta_cache = {}
         
         self.tempfiles = {}
        
@@ -254,7 +253,7 @@ class Database(object):
         from sqlalchemy.orm import sessionmaker
         
         if not self._session:    
-            Session = sessionmaker(bind=self.engine)
+            Session = sessionmaker(bind=self.engine,autocommit=False)
             self._session = Session()
             
         return self._session
@@ -409,10 +408,17 @@ class Database(object):
     def table(self, table_name): 
         '''Get table metadata from the database''' 
         from sqlalchemy import Table
-        metadata = self.metadata
-        table = Table(table_name, metadata, autoload=True)
         
-        return table
+        table = self._table_meta_cache.get(table_name, False)
+        
+        if table is not False:
+            return table
+        else:
+            metadata = self.metadata
+            table = Table(table_name, metadata, autoload=True)
+            self._table_meta_cache[table_name] = table
+            return table
+
        
     def copy_table_from(self, source_db, table_name):
         '''Copy the definition of a table from a soruce database to this one
@@ -626,12 +632,14 @@ class BundleDb(Database):
 
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''
-    return # Not clear that there is a performance improvement. 
-    dbapi_con.execute('PRAGMA journal_mode = MEMORY')
+    # Not clear that there is a performance improvement. 
+    return 
+    dbapi_con.execute('PRAGMA journal_mode = OFF')
     dbapi_con.execute('PRAGMA synchronous = OFF')
     dbapi_con.execute('PRAGMA temp_store = MEMORY')
     dbapi_con.execute('PRAGMA cache_size = 500000')
     dbapi_con.execute('PRAGMA foreign_keys=ON')
+
     
 def insert_or_ignore(table, columns):
     return  ("""INSERT OR IGNORE INTO {table} ({columns}) VALUES ({values})"""

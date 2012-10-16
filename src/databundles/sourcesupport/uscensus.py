@@ -245,16 +245,11 @@ class UsCensusBundle(BuildBundle):
     
         from multiprocessing import Pool
 
-
         # Split up the state geo files into .csv files, and 
         # create the build/geodim files that will link logrecnos to
         # geo split table records. 
         self.run_geo_dim()
-       
-        # Load the .csv fiels for the geo split tables into database partitions, 
-        # and load the partitions into the library. 
-        self.store_geo_splits()
-      
+
         # Combine the geodim tables with the  state population tables, and
         # produce .csv files for each of the tables. 
         if self.run_args.multi and run_state_tables_f:
@@ -287,11 +282,11 @@ class UsCensusBundle(BuildBundle):
         The geo_dim process generates a set of tables that cut across all
         states, and there must be uniqie ids for rows that have unique content.
         This makes it hard to run this as a parallel job. 
-        
         """
         
+        geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
         geo_processors = self.geo_processors()
-        geo_partitions = self.geo_partition_map()
+        
     
         for t in self.geo_tables():
             self._geo_dim_locks[t.id_] = threading.RLock()
@@ -308,12 +303,7 @@ class UsCensusBundle(BuildBundle):
         for state in self.urls['geos'].keys():
             self.log("Building Geo state for {}, {} of {}".format(state, i, n))
             self._run_geo_dim(state, row_hash, geo_processors, geo_partitions)
-            i = i + 1
-
-    def _run_geo_dim_chunk(self, states, row_hash, geo_processors, geo_partitions):
-        '''Thread process for running a set of states for geo dim splits ''' 
-        for state in states:
-            self._run_geo_dim(state, row_hash, geo_processors, geo_partitions)    
+            i = i + 1  
             
     def _run_geo_dim(self, state, row_hash, geo_processors, geo_partitions):
         '''Break up the geo files into seperate files, combine them 
@@ -325,16 +315,22 @@ class UsCensusBundle(BuildBundle):
      
         row_i = 0
       
-        if os.path.exists(self.geo_dim_file(state)):
+        marker_f = self.filesystem.build_path('markers',state+"_geo_dim")
+        
+        if os.path.exists(marker_f):
             self.log("Geo dim exists for {}, skipping".format(state))
             return
         
         self.log("Initializing state: "+state+' ')
-
-        # This file holds the logrecno mapped to the integer ids for
-        # each of the dimension table rows 
-        gd_file, geo_dim_writer = self.geo_key_writer(state)
         
+
+        table_meta = None  
+        for table_id, cp in geo_processors.items():
+            table,  columns, processors = cp
+            partition = geo_partitions[table_id]
+            if partition.table.name == 'record_code':
+                record_code_partition = partition
+                    
         for state, logrecno, geo, segments, geodim in self.generate_rows(state): #@UnusedVariable
            
             if row_i == 0:
@@ -343,33 +339,51 @@ class UsCensusBundle(BuildBundle):
       
             row_i += 1
             
-            if row_i % 10000 == 0:
+            if row_i % 1000 == 0:
                 # Prints the processing rate in 1,000 records per sec.
                 self.log(state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
              
             geo_keys = []
-            
+       
+             
             # Iterate over all of the geo dimentino tables, taking part of this
             # geo rwo and putting it into the temp file for that geo dim table. 
-            for table_id, cp in geo_processors.items():
-                table, columns, processors = cp
-            
-                values=[ f(geo) for f in processors ]
-                values[-1] = self.row_hash(values)
-                      
-                partition = geo_partitions[table_id]
-           
-                # Write a record to the dimension table. 
-                r = self.write_geo_row(row_hash, partition, table, columns, values)
- 
-                geo_keys.append(r)    
-                
-            # Write a row in the geo_dim file for the state that maps the 
-            # logrecno to the key values we discovered for each of the geo dim tables
-            geo_dim_writer.writerow([logrecno] + geo_keys)
-            gd_file.flush()     
         
-        gd_file.close()
+            for table_id, cp in geo_processors.items():
+                table,  columns, processors = cp
+            
+                partition = geo_partitions[table_id]
+
+                if partition != record_code_partition:
+                    values=[ f(geo) for f in processors ]
+                    values[-1] = self.row_hash(values)
+    
+                    # Write a record to the dimension table. 
+                    r = self.write_geo_row(row_hash, partition, table,  columns, values)
+     
+                    geo_keys.append(r) 
+                  
+            if  table_meta is None:  
+                table_meta = record_code_partition.database.table('record_code')
+                
+            # The first None is for the primary id, the last is for the 
+            # hash, which was added automatically to geo_dim tables. 
+            values = [None, state, logrecno] + geo_keys + [None]
+            ins = table_meta.insert(values=values)
+            record_code_partition.database.session.execute(ins) 
+            
+        
+        record_code_partition.database.session.commit()
+        
+        for table_id, cp in geo_processors.items():
+            partition = geo_partitions[table_id]
+            partition.database.session.commit()
+            dest = self.library.put(partition)
+            self.log("Install in library: "+str(dest))
+            
+        with open(marker_f, 'w') as f:
+            f.write(str(time.time()))
+        
    
     def run_state_tables(self, state):
         '''Split up the segment files into seperate tables, and link in the
@@ -459,7 +473,7 @@ class UsCensusBundle(BuildBundle):
             self.error("Could not get table for id: "+table_id)
             return
         
-        partition = self.fact_partition(table, True)
+        partition = self.fact_partition(table, False)
         
         if self.library.get(partition) and not self.run_args.test:
             self.log("Found in fact table bundle library, skipping.: "+table.name)
@@ -498,23 +512,6 @@ class UsCensusBundle(BuildBundle):
             tf = partition.database.tempfile(table, suffix=state)
             tf.delete()
 
-    #############################################
-    # Generate rows from multiple files?
-    #############################################
-    
-    def generate_geodim_rows(self, state):
-        '''Generate the rows that were created to link the geo split files with the
-        segment tables'''
-        import csv, cStringIO # cStringIO reads the while file into memory
-        file_name = self.geo_dim_file(state)
-        with open(file_name, 'r') as f:
-            b = cStringIO.StringIO(f.read())
-            r = csv.reader(b)
-            r.next() # Skip the header row
-            for row in r:
-                yield row
-        
-        return
 
     #############
     # Fact Table and Partition Acessors. 
@@ -586,10 +583,9 @@ class UsCensusBundle(BuildBundle):
             columns = [c for c in table.columns if c.name in source_cols  ]  
             processors = [CensusTransform(c) for c in columns]
             processors[0] = lambda row : None # Primary key column
-            
-            if table.name != 'record_code':
-                columns += [ table.column('hash')]
-                processors += [lambda row : None]
+
+            columns += [ table.column('hash')]
+            processors += [lambda row : None]
      
             processor_set[table.id_] = (table, columns, processors )         
              
@@ -657,7 +653,7 @@ class UsCensusBundle(BuildBundle):
         '''Create a map from table id to partition for the geo split table'''
         partitions = {}
         for table in self.geo_tables():
-            partitions[table.id_] = self.geo_partition(table)
+            partitions[table.id_] = self.geo_partition(table, True)
             
         return partitions
      
@@ -702,20 +698,7 @@ class UsCensusBundle(BuildBundle):
      
         return hash
           
-    def geo_dim_file(self,state):
-        return self.filesystem.build_path('geodim',state)
       
-    def geo_key_writer(self, state):
-        import csv
-        f = self.geo_dim_file(state)
-        
-        gk_file = open(f, 'wb')
-        writer = csv.writer(gk_file)
-        
-        # Write the header row
-        writer.writerow(['logrecno'] + self.geo_keys())
-        
-        return gk_file, writer
 
     def write_geo_row(self, hash, partition, table, columns,values): #@ReservedAssignment
         '''Write a geo split table row to the temporary file, but only
@@ -723,6 +706,7 @@ class UsCensusBundle(BuildBundle):
         
         This operation is wrapped in a lock to protect both the hash and file
         '''
+        from sqlalchemy.exc import ProgrammingError
         
         with self._geo_dim_locks[table.id_]:
         
@@ -734,13 +718,37 @@ class UsCensusBundle(BuildBundle):
                 r = len(th)+1
                 th[values[-1]] = r
                 values[0] = r
-                tf = partition.database.tempfile(table)
-                tf.writer.writerow(values)
-                tf.file.flush()
+                
+                table_meta = partition.database.table(table.name)
+                ins = table_meta.insert(values=values)
+                try:
+                    partition.database.session.execute(ins) 
+                except ProgrammingError: 
+                    # This usually happens when we try to insert an 8-bit string
+                    # The Census files are encoded in IBM850, and these error cases
+                    # are converted to unicode. 
+                    
+                    ov = values
+                    values = []
+                    for v in ov:
+                        if isinstance(v, basestring):
+                            values.append(unicode(v.decode("IBM850")))
+                        else:
+                            values.append(v)
+                    ins = table_meta.insert(values=values)
+                    partition.database.session.execute(ins) 
             
             return r
     
     def write_fact_table(self, state, partition, table,  values):
+        '''Write a row to a fact table temp file. 
+        
+        We are writing to csv files, rather than directly to the sqlite file
+        because sqlite file don't handle multiple writers well. We're outputing
+        to tempfiles that are suffixed with the state, so we can write them in 
+        parallel and joing them into the sqlite files later. 
+        '''
+        
         tf = partition.database.tempfile(table, suffix=state)
         ok = True
         
@@ -749,39 +757,5 @@ class UsCensusBundle(BuildBundle):
                 ok = False
                 
         tf = tf.writer.writerow(values)
-        
+            
         return ok
-
-    def store_geo_splits(self):
-        '''Copy all of the geo split CSV files -- the tempfiles -- into
-        database partition and store them in the library '''
-        
-        for table in self.geo_tables():
-            partition = self.geo_partition(table)
-            
-            if self.library.get(partition)  and not self.run_args.test:
-                self.log("Found in bundle library, skipping. "+partition.identity.name)
-                continue
-            
-            partition = self.geo_partition(table, True)
-            
-            db = partition.database
-            tf = db.tempfile(table)
-            if  tf.exists:
-                self.log("Loading geo split into database: "+table.name)
-                db.load_tempfile(tf)
-            
-            else:
-                self.log("Geosplit tempfile does not exist "+table.name)
-
-            if db.exists:
-                self.log("Delete tempfile: "+tf.path)
-                #tf.delete() 
-             
-                dest = self.library.put(partition)
-                self.log("Install in library: "+str(dest))
-                    
-                partition.database.delete()
-            else:
-                self.log("Database doesn not exist: "+db.path)
-            
