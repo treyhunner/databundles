@@ -410,7 +410,7 @@ class UsCensusBundle(BuildBundle):
         
         row_i = 0
         
-        for state, logrecno, geo, segments, geo_keys in self.generate_rows(state, geodim=True ): #@UnusedVariable
+        for state, logrecno, geo, segments, geo_keys in self.gene rate_rows(state, geodim=True ): #@UnusedVariable
  
             if row_i == 0:
                 t_start = time.time()
