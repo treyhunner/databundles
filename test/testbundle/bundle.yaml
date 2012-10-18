@@ -9,19 +9,29 @@ identity:
     subset: subset
     variation: variation
 library:
-    cache: /Volumes/DataLibrary/cache
+    cache: /Volumes/DataLibrary/test/cache
     cache_size: 10000
     database:
-        dbname: /Volumes/DataLibrary/library.db
+        dbname: /Volumes/DataLibrary/test/library.db
         driver: sqlite
-    downloads: /net/nas2/c/proj/data-library-downloads/
-    extracts: /Volumes/DataLibrary/extracts
-    pq-database:
-        dbname: databundles-dev
-        driver: postgres
-        password: databundles
-        server: lorne
-        username: databundles
-    repository: /net/nas2/c/proj/data-library-test/
-loaded:
-- /etc/databundles.yaml
+    downloads: /Volumes/DataLibrary/test/downloads
+    extracts: /Volumes/DataLibrary/test/extracts
+    repository: /Volumes/DataLibrary/test/repository
+    
+filesystem:
+    downloads:
+        dir: /net/nas2/c/proj/data-library-downloads/
+        size: 10000
+        upstream:
+            bucket: devtest.clarinova.net
+            prefix: bingo
+            access_key: AKIAIOKK4KSYYGYXWQJQ
+            secret: 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
+    extracts: 
+        dir: /Volumes/DataLibrary/test/extracts
+        size: 10000
+        upstream: 
+            bucket: devtest.clarinova.net
+            prefix: devtest
+            access_key: AKIAIOKK4KSYYGYXWQJQ
+            secret: 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

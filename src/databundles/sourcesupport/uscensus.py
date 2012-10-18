@@ -377,6 +377,7 @@ class UsCensusBundle(BuildBundle):
         for table_id, cp in geo_processors.items():
             partition = geo_partitions[table_id]
             partition.database.session.commit()
+            partition.database.close()
             dest = self.library.put(partition)
             self.log("Install in library: "+str(dest))
             

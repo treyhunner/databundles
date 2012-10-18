@@ -90,26 +90,27 @@ class Test(unittest.TestCase):
         l.put(self.bundle)
         l.put(self.bundle)
         
-        bundle = l.get(self.bundle.identity)
+        r = l.get(self.bundle.identity)
       
-        self.assertIsNotNone(bundle)
-        self.assertTrue(bundle is not False)
-        self.assertEquals(self.bundle.identity.id_, bundle.identity.id_)
+        self.assertIsNotNone(r.bundle)
+        self.assertTrue(r.bundle is not False)
+        self.assertEquals(self.bundle.identity.id_, r.bundle.identity.id_)
         
-        print bundle.identity.name
+        print r.bundle.identity.name
         
         # Install the partition, then check that we can fetch it
         # a few different ways. 
-        for partition in self.bundle.partitions.all:
+        for partition in self.bundle.partitions:
             l.put(partition)
             
-            p2 = l.get(partition.identity)
-            self.assertIsNotNone(p2)
-            self.assertEquals( partition.identity.id_, p2.identity.id_)
+            r = l.get(partition.identity)
+            print r
+            self.assertIsNotNone(r)
+            self.assertEquals( partition.identity.id_, r.partition.identity.id_)
             
-            p2 = l.get(partition.identity.id_)
-            self.assertIsNotNone(p2)
-            self.assertEquals(partition.identity.id_, p2.identity.id_)
+            r = l.get(partition.identity.id_)
+            self.assertIsNotNone(r)
+            self.assertEquals(partition.identity.id_, r.partition.identity.id_)
             
         # Re-install the bundle, then check that the partitions are still properly installed
 
@@ -117,13 +118,13 @@ class Test(unittest.TestCase):
         
         for partition in self.bundle.partitions.all:
        
-            p2 = l.get(partition.identity)
-            self.assertIsNotNone(p2)
-            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            r = l.get(partition.identity)
+            self.assertIsNotNone(r)
+            self.assertEquals(r.partition.identity.id_, partition.identity.id_)
             
-            p2 = l.get(partition.identity.id_)
-            self.assertIsNotNone(p2)
-            self.assertEquals(p2.identity.id_, partition.identity.id_)
+            r = l.get(partition.identity.id_)
+            self.assertIsNotNone(r)
+            self.assertEquals(r.partition.identity.id_, partition.identity.id_)
             
         # Find the bundle and partitions in the library. 
     
@@ -142,23 +143,27 @@ class Test(unittest.TestCase):
         
         r = l.find(QueryCommand().table(name='tthree').partition(any=True)).one() #@UnusedVariable
        
-        b = l.get(r.Dataset.identity.id_)
+        bp = l.get(r.Dataset.identity.id_)
         
-        self.assertTrue(os.path.exists(b.database.path))
+        self.assertTrue(os.path.exists(bp.bundle.database.path))
         
         # Put the bundle with remove to check that the partitions are reset
         
         l.remove(self.bundle)
+        
+        r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
+        self.assertEquals(0, len(r))      
+        
         l.put(self.bundle)
     
         r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
-        self.assertEquals(0, len(r))
+        self.assertEquals(1, len(r))
        
         for ds in l.datasets:
             self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
 
     def test_cache(self):
-        from databundles.library import  FsCache
+        from databundles.filesystem import  FsCache
 
         
         root = '/tmp/test_library'
@@ -262,120 +267,29 @@ class Test(unittest.TestCase):
         l1.verify()
         
 
-    def test_remote(self):
-        pass
-        
-        
+
+    def test_s3(self):
+        from databundles.filesystem import S3Cache
      
         
-    def x_text_rebuild(self):
-        #
-        # Rebuild from installed bundles. 
+        print self.rc.loaded
+        drc = self.rc.filesystem.downloads
         
-        l = self.get_library()
+        print drc
+        print drc.dir
+        print drc.size
+        print drc.upstream
+         
+        c = S3Cache(bucket=drc.upstream.bucket, 
+                    prefix=drc.upstream.prefix,
+                    access_key=drc.upstream.access_key,
+                    secret=drc.upstream.secret)
+         
         
-        l.rebuild()
-        
-        r = l.find(l.query().table(name='tone'))
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].identity.name)  
-    
-        r = l.find(l.query().table(name='tone').partition(any=True)).all()
-        self.assertEquals('source-dataset-subset-variation-ca0d-tone-r1',r[0].Partition.identity.name)
-        
-        r = l.find(l.query().table(name='tthree').partition(any=True)).all()
-        self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
-        
-
-    def x_test_server(self):
-        import uuid
-        from  boto.s3.connection import S3Connection
-        
-        access = self.rc.library.repository['access']
-        secret = self.rc.library.repository['secret']
-        bucket = self.rc.library.repository['bucket']
-        
-        conn = S3Connection(access, secret)
-
-        for b in conn.get_all_buckets():
-            print 'BUCKET', b.name
-        
-        
-        b = conn.get_bucket(bucket)
-        
-        k = b.new_key('foo/bar')
-        k.set_acl('public-read')
-        
-        k.set_contents_from_string(str(uuid.uuid4()))
-        
-        
-    def x_test_basic(self):
-
-        path = '/tmp/geo.db'
-   
-        t = Table('sf1geo', MetaData('sqlite:///'+path), autoload=True)
-        db = create_engine('sqlite:///'+path)
-        conn = db.connect()
-        
-        for c in t.columns:
-            if str(c.type) == 'TEXT':
-                rows = conn.execute(select([c]))
-                
-                i = 1000
-                for row in rows:
-                    i -= 1
-                    if i == 0:
-                        print "{}\tNUMBER".format(c.name)
-                        break
-                    
-                    v = str(row[0]).strip()
-                   
-                    if len(v) == 0:
-                        continue;
-                    
-                    try:
-                        int(v)
-                    except Exception:
-                        print "{}\tTEXT".format(c.name)
-                        break
+        self.rc.files[-1]
+         
+        c.put(open(self.rc.files[-1]), 'foo/bar')
  
-
-    def x_test_BuildCombinedFile(self):
-
-        import sqlite3
-        
-        l =  get_library()
-          
-        q = (l.query()
-                 .identity(creator='clarinova.com', subset = 'sf1geo')
-                 .partition(any=True)
-            )
-
-        path = '/tmp/geo.db'
-        
-        if os.path.exists(path):
-            os.remove(path)
-        
-        geo = l.get(q.first.Partition)
-      
-        db = create_engine('sqlite:///'+path)
-        Table('sf1geo', MetaData('sqlite:///'+geo.database.path), autoload=True).create(db)
-
-        con = sqlite3.connect(path)
-
-       
-        for result in q.all:
-            geo = l.get(result.Partition)
-            print "GEO",geo.database.path     
-     
-            c = con.cursor()
-            c.execute("""ATTACH DATABASE '{}' AS geo """.format(geo.database.path))
-            c.execute("""INSERT INTO sf1geo SELECT * FROM geo.sf1geo""")
-            c.execute("""DETACH DATABASE  geo """)
-        
-        c.close()
-        
-        return True 
-          
     def xs_test_basic(self):
         import sqlite3
         import petl

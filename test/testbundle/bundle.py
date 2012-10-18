@@ -6,7 +6,6 @@ Created on Jun 10, 2012
 
 from  databundles.bundle import BuildBundle
 import petl.fluent as petl
-import os.path
 
 class Bundle(BuildBundle):
     

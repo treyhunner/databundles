@@ -129,8 +129,7 @@ class Database(object):
             
             post_create. A function called during the create() method. has
             signature post_create(database)
-            
-            
+       
         '''
         self.bundle = bundle 
         
@@ -145,17 +144,16 @@ class Database(object):
         self._post_create = None
         
         if file_path:
+            import re
             self.file_path = file_path
-            
-            if not os.path.exists(self.file_path):
-                from databundles.dbexceptions import BundleError
-                raise BundleError('Database file must exist '+self.file_path)
-            
+            self.root_path = re.sub('\.db$', '', self.file_path)
+    
         else:
-            self.file_path = self.bundle.filesystem.path(
+            self.root_path = self.bundle.filesystem.path(
                                 self.bundle.filesystem.BUILD_DIR,
-                                self.bundle.identity.path+".db")
-       
+                                self.bundle.identity.path)
+            self.file_path = self.root_path+".db"
+            
         self._last_attach_name = None
         
         self._table_meta_cache = {}
@@ -367,6 +365,11 @@ class Database(object):
                 # fail. 
                 from pkg_resources import resource_string #@UnresolvedImport
                 script_str = resource_string(databundles.__name__, Database.PROTO_SQL_FILE)
+         
+            dir = os.path.dirname(self.path);
+            
+            if not os.path.isdir(dir):
+                os.makedirs(dir)
          
             self.load_sql(script_str)
             

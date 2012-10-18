@@ -103,9 +103,7 @@ class Partition(object):
         self.record = record
         
         self._database =  None
-        self.library = None
-
-      
+     
     def init(self):
         '''Initialize the partition, loading in any SQL, etc. '''
     
@@ -117,41 +115,36 @@ class Partition(object):
     def identity(self):
         return self.record.identity
     
+    def _path_parts(self):
+
+        name_parts = self.bundle.identity.name_parts(self.bundle.identity)
+       
+        source =  name_parts.pop(0)
+        p = self.identity
+        partition_path = [ str(i) for i in [p.time,p.space,p.table] if i is not None]
+       
+        return source,  name_parts, partition_path 
+    
     @property
     def path(self):
         '''Return a pathname for the partition, relative to the containing 
         directory of the bundle. '''
-        import os.path
-     
-        parts = self.bundle.identity.name_parts(self.bundle.identity)
-       
-        source = parts.pop(0)
-        p = self.identity
-        pparts = [ str(i) for i in [p.time,p.space,p.table] if i is not None]
-       
-        return  os.path.join(source, '-'.join(parts), *pparts )
-    
+        source,  name_parts, partition_path = self._path_parts()
+        
+        return  os.path.join(source, '-'.join( name_parts), *partition_path )
+        
     @property
     def database(self):
         if self._database is None:
-            self._database = self._get_database()
+            from databundles.database import PartitionDb
+            
+            source,  name_parts, partition_path = self._path_parts() #@UnusedVariable
+            
+            path = os.path.join(self.bundle.database.root_path, *partition_path)+".db"
 
+            self._database = PartitionDb(self.bundle, self, file_path=path)
             
         return self._database
-    
-    def _get_database(self):
-        from databundles.database import PartitionDb
-        
-        # If the library is set, the path to the database is relative to the
-        # library, not to the dataset
-        if self.library is not None:
-           
-            return PartitionDb(self.bundle, self, file_path=self.library._cache_path(self.path)+".db")
-        else:
-            db =  PartitionDb(self.bundle, self)
-            db.file_path = None
-            return db
-    
     
     @property
     def table(self):
@@ -233,11 +226,10 @@ class Partitions(object):
         else:
             raise ValueError("Arg must be a Partition or")
         
-        partition_id = orm_partition.identity
+        partition_id = orm_partition.identity #@UnusedVariable
      
         return Partition(self.bundle, orm_partition)
 
-    
     @property
     def count(self):
         from databundles.orm import Partition as OrmPartition
@@ -261,6 +253,42 @@ class Partitions(object):
         
         s = self.bundle.database.session
         return s.query(OrmPartition)
+
+    def find(self, pid=None, **kwargs):
+        '''Return a Partition object from the database based on a PartitionId.
+        The object returned is immutable; changes are not persisted'''
+        op = self.find_orm(pid, **kwargs)
+        
+        if op is not None:
+            return self.partition(op)
+        else:
+            return None
+    
+    
+    def get(self, id_):
+        '''Get a partition by the id number 
+        
+        Arguments:
+            id_ -- a partition id value
+            
+        Returns:
+            A partitions.Partition object
+            
+        Throws:
+            a Sqlalchemy exception if the partition either does not exist or
+            is not unique
+        ''' 
+        from databundles.orm import Partition as OrmPartition
+        
+        # This is needed to flush newly created partitions, I think ... 
+        self.bundle.database.session.close()
+        
+        q = (self.bundle.database.session
+             .query(OrmPartition)
+             .filter(OrmPartition.id_==id_.encode('ascii')))
+      
+        return self.partition(q.one())
+
     
     def find_orm(self, pid=None, **kwargs):
         '''Return a Partition object from the database based on a PartitionId.
@@ -300,40 +328,6 @@ class Partitions(object):
         except sqlalchemy.orm.exc.NoResultFound: 
             return None
     
-    def find(self, pid=None, **kwargs):
-        '''Return a Partition object from the database based on a PartitionId.
-        The object returned is immutable; changes are not persisted'''
-        op = self.find_orm(pid, **kwargs)
-        
-        if op is not None:
-            return self.partition(op)
-        else:
-            return None
-    
-    
-    def get(self, id_):
-        '''Get a partition by the id number 
-        
-        Arguments:
-            id_ -- a partition id value
-            
-        Returns:
-            A partitions.Partition object
-            
-        Throws:
-            a Sqlalchemy exception if the partition either does not exist or
-            is not unique
-        ''' 
-        from databundles.orm import Partition as OrmPartition
-        
-        # This is needed to flush newly created partitions, I think ... 
-        self.bundle.database.session.close()
-        
-        q = (self.bundle.database.session
-             .query(OrmPartition)
-             .filter(OrmPartition.id_==id_.encode('ascii')))
-      
-        return self.partition(q.one())
    
     def new_orm_partition(self, pid, **kwargs):
         '''Create a new ORM Partrition object, or return one if

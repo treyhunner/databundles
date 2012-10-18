@@ -27,7 +27,7 @@ class Bundle(object):
 
         self._schema = None
         self._partitions = None
-        self._libary = None
+        self._library = None
 
         self.logger = logging.getLogger(__name__)
         

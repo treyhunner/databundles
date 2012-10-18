@@ -349,4 +349,397 @@ class Filesystem(object):
         
         return o
    
+
+    def get_cache(self, config=None):
+        """Return a new :class:`FsCache` built on the configured cache directory
+        
+        :param config: a `RunConfig` object
+        :rtype: a `FsCache` object
+        
+        If config is None, the function will constuct a new RunConfig() with a default
+        constructor. 
+        
+        The `FsCache` will be constructed with the cache_dir values from the
+        library.cache config key, and if the library.repository value exists, it will 
+        be use for the upstream parameter.
+    
+        """
+        
+        from databundles.dbexceptions import ConfigurationError
+        from databundles.run import  RunConfig
+        
+        if config is None:
+            config = RunConfig()    
+    
+        if not config.library:
+            raise ConfigurationError("Didn't get library configuration value")
+    
+        cache_dir = config.library.cache
+        
+        if not cache_dir:
+            raise ConfigurationError("Didn't get library.cache configuration value")
+        
+        repo_dir = config.library.repository
+        
+        if repo_dir:
+            repo = FsCache(repo_dir)
+            cache_size = config.library.cache_size
+            if not cache_size:
+                cache_size = 10000 # 10 GB
+            cache = FsCache(cache_dir, maxsize = cache_size, upstream = repo)
+        else:
+            cache =  FsCache(cache_dir)  
+        
+        return cache
+
+class FsCache(object):
+    '''A cache that transfers files to and from a remote filesystem
+    
+    The `FsCache` stores files in a filesystem, possily retrieving and storing
+    files to an upstream cache. 
+    
+    When files are written , they are written through to the upstream. If a file
+    is requested that does not exist, it is fetched from the upstream. 
+    
+    When a file is added that causes the disk usage to exceed `maxsize`, the oldest
+    files are deleted to free up space. 
+    
+     '''
+
+
+    def __init__(self, cache_dir, maxsize=10000, upstream=None):
+        '''Init a new FileSystem Cache
+        
+        Args:
+            cache_dir
+            maxsize. Maximum size of the cache, in GB
+        
+        '''
+        
+        from databundles.dbexceptions import ConfigurationError
+
+        self.cache_dir = cache_dir
+        self.maxsize = int(maxsize * 1048578)  # size in MB
+        self.upstream = upstream
+        self._database = None
+   
+        if not os.path.isdir(self.cache_dir):
+            os.makedirs(self.cache_dir)
+        
+        if not os.path.isdir(self.cache_dir):
+            raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
+        
+    @property
+    def database(self):
+        import sqlite3
+        
+        if not self._database:
+            db_path = os.path.join(self.cache_dir, 'file_database.db')
+            
+            if not os.path.exists(db_path):
+                create_sql = """
+                CREATE TABLE files(
+                path TEXT UNIQUE ON CONFLICT REPLACE, 
+                size INTEGER, 
+                time REAL)
+                """
+                conn = sqlite3.connect(db_path)
+                conn.execute(create_sql)
+                conn.close()
+                
+            self._database = sqlite3.connect(db_path)
+            
+        return self._database
+            
+    @property
+    def size(self):
+        '''Return the size of all of the files referenced in the database'''
+        c = self.database.cursor()
+        r = c.execute("SELECT sum(size) FROM files")
      
+        try:
+            size = int(r.fetchone()[0])
+        except TypeError:
+            size = 0
+    
+        return size
+        
+    def _delete_to_size(self, size):
+        '''Delete records, from oldest to newest, to free up space ''' 
+      
+        if size <= 0:
+            return
+      
+        for row in self.database.execute("SELECT path, size, time FROM files ORDER BY time ASC"):
+            if size < 0: 
+                break
+        
+            #print "DELETE ", row[0], row[1], row[2],size
+            self.remove(row[0])
+            
+            size -= row[1]
+  
+  
+    def _free_up_space(self, size):
+        '''If there are not size bytes of space left, delete files
+        until there is ''' 
+        
+        space = self.size + size - self.maxsize # Amount of space we are over ( bytes ) for next put
+        
+        self._delete_to_size(space)
+
+    def add_record(self, rel_path, size):
+        import time
+        c = self.database.cursor()
+        c.execute("insert into files(path, size, time) values (?, ?, ?)", 
+                    (rel_path, size, time.time()))
+        self.database.commit()
+
+    def verify(self):
+        '''Check that the database accurately describes the state of the repository'''
+        
+        c = self.database.cursor()
+        non_exist = set()
+        
+        no_db_entry = set(os.listdir(self.cache_dir))
+        try:
+            no_db_entry.remove('file_database.db')
+            no_db_entry.remove('file_database.db-journal')
+        except: 
+            pass
+        
+        for row in c.execute("SELECT path FROM files"):
+            path = row[0]
+            
+            repo_path = os.path.join(self.cache_dir, path)
+        
+            if os.path.exists(repo_path):
+                no_db_entry.remove(path)
+            else:
+                non_exist.add(path)
+            
+        if len(non_exist) > 0:
+            raise Exception("Found {} records in db for files that don't exist: {}"
+                            .format(len(non_exist), ','.join(non_exist)))
+            
+        if len(no_db_entry) > 0:
+            raise Exception("Found {} files that don't have db entries: {}"
+                            .format(len(no_db_entry), ','.join(no_db_entry)))
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.cache_dir)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        p = self.get(rel_path)
+        
+        if not p:
+            return None
+        
+        return open(p)
+        
+    
+    def get(self, rel_path):
+        '''Return the file path referenced but rel_path, or None if
+        it can't be found. If an upstream is declared, it will try to get the file
+        from the upstream before declaring failure. 
+        '''
+        import shutil
+        
+        path = os.path.join(self.cache_dir, rel_path)
+      
+        # The target file always has to exist in the repo
+        if  os.path.exists(path):
+            
+            if not os.path.isfile(path):
+                raise ValueError("Path does not point to a file")
+            
+            return path
+            
+        if not self.upstream:
+            # If we don't have an upstream, then we are done. 
+            return None
+        
+        stream = self.upstream.get_stream(rel_path)
+        
+        if not stream:
+            return None
+        
+        with open(path,'w') as f:
+            shutil.copyfileobj(stream, f)
+        
+        # Since we've added a file, must keep track of the sizes. 
+        size = os.path.getsize(path)
+        self._free_up_space(size)
+        self.add_record(rel_path, size)
+        
+        stream.close()
+        
+        if not os.path.exists(path):
+            raise Exception("Failed to copy upstream data to {} ".format(path))
+        
+        return path
+    
+    def put(self, source, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            source: Absolute path to the source file, or a file-like object
+            rel_path: path relative to the root of the repository
+        
+        '''
+        
+        import shutil
+    
+        repo_path = os.path.join(self.cache_dir, rel_path)
+      
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+    
+        try:
+            shutil.copyfileobj(source, repo_path)
+            source.seek(0)
+        except AttributeError: 
+            shutil.copyfile(source, repo_path)
+            
+        size = os.path.getsize(repo_path)
+        
+        self.add_record(rel_path, size)
+        
+        if self.upstream:
+            self.upstream.put(source, rel_path)
+    
+            # Only delete if there is an upstream
+            self._free_up_space(size)
+
+        return repo_path
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        if self.upstream:
+            return self.upstream.find(query)
+        else:
+            return False
+    
+    def remove(self,rel_path, propagate = False):
+        '''Delete the file from the cache, and from the upstream'''
+        repo_path = os.path.join(self.cache_dir, rel_path)
+        
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+            
+        c = self.database.cursor()
+        c.execute("DELETE FROM  files WHERE path = ?", (rel_path,) )
+        self.database.commit()
+            
+        if self.upstream and propagate :
+            self.upstream.remove(rel_path)    
+            
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
+
+
+class S3Cache(object):
+    '''A cache that transfers files to and from an S3 bucket
+    
+     '''
+
+    def __init__(self, bucket=None, access_key=None, secret=None, prefix=None):
+        '''Init a new S3Cache Cache
+
+        '''
+        
+        from boto.s3.connection import S3Connection
+
+        self.access_key = access_key
+        self.bucket_name = bucket
+        self.conn = S3Connection(self.access_key, secret)
+        self.bucket = self.conn.get_bucket(self.bucket_name)
+  
+    @property
+    def size(self):
+        '''Return the size of all of the files referenced in the database'''
+        raise NotImplementedError() 
+     
+    def add_record(self, rel_path, size):
+        raise NotImplementedError() 
+
+    def verify(self):
+        raise NotImplementedError() 
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.bucket_name)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        """Return the object as a stream"""
+        from boto.s3.key import Key
+        import StringIO
+        
+        k = Key(self.bucket)
+
+        k.key = rel_path
+        b = StringIO.StringIO()
+        k.get_contents_to_file(b)
+    
+        return b;
+    
+    def get(self, rel_path):
+        '''Return the file path referenced but rel_path, or None if
+        it can't be found. If an upstream is declared, it will try to get the file
+        from the upstream before declaring failure. 
+        '''
+        raise NotImplementedError('Should only use the stream interface. ')
+    
+    def put(self, source, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            source: Absolute path to the source file, or a file-like object
+            rel_path: path relative to the root of the repository
+        
+        '''
+        from boto.s3.key import Key
+        
+        k = Key(self.bucket)
+
+        k.key = rel_path
+        k.set_contents_from_file(source)
+        
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+       
+        raise NotImplementedError()
+    
+    def remove(self,rel_path, propagate = False):
+        '''Delete the file from the cache, and from the upstream'''
+        from boto.s3.key import Key
+        
+        k = Key(self.bucket)
+
+        k.key = rel_path
+        k.delete()    
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
+
+       

@@ -162,7 +162,6 @@ if __name__ == '__main__':
         return 3*x+y
 
     domain = range(5)
-    from random import choice
     for i in range(1000):
         r = f(choice(domain), choice(domain))
 

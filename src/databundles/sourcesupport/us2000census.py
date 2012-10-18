@@ -4,7 +4,6 @@ Created on Aug 19, 2012
 @author: eric
 '''
 from  databundles.sourcesupport.uscensus import UsCensusBundle
-import yaml 
 
 class Us2000CensusBundle(UsCensusBundle):
     '''
