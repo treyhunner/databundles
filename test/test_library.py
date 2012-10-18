@@ -37,6 +37,10 @@ class Test(unittest.TestCase):
         self.bundle.build()
         logger.info('Setup finished')
         
+        self.bundle._run_config = self.rc
+        
+        self.root_dir = '/tmp/test_library'
+        
     @staticmethod
     def rm_rf(d):
         for path in (os.path.join(d,f) for f in os.listdir(d)):
@@ -164,9 +168,8 @@ class Test(unittest.TestCase):
 
     def test_cache(self):
         from databundles.filesystem import  FsCache
-
-        
-        root = '/tmp/test_library'
+         
+        root =  self.root_dir 
         try: Test.rm_rf(root)
         except: pass
       
@@ -266,29 +269,58 @@ class Test(unittest.TestCase):
       
         l1.verify()
         
-
-
     def test_s3(self):
-        from databundles.filesystem import S3Cache
+        from databundles.filesystem import S3Cache, FsCache
      
+        fs = self.bundle.filesystem
+  
+        # Set up the test directory and make some test files. 
         
-        print self.rc.loaded
-        drc = self.rc.filesystem.downloads
+         
+        root =  self.root_dir 
+        try: Test.rm_rf(root)
+        except: pass
+        os.makedirs(root)
+                
+        repo_dir = self.rc.filesystem.downloads.dir
+        try: Test.rm_rf(repo_dir)
+        except: pass       
+  
+        testfile = os.path.join(root,'testfile')
         
-        print drc
-        print drc.dir
-        print drc.size
-        print drc.upstream
+        with open(testfile,'w+') as f:
+            for i in range(1024):
+                f.write('.'*1023)
+                f.write('\n')
          
-        c = S3Cache(bucket=drc.upstream.bucket, 
-                    prefix=drc.upstream.prefix,
-                    access_key=drc.upstream.access_key,
-                    secret=drc.upstream.secret)
-         
+        local = fs.get_cache('downloads')
         
-        self.rc.files[-1]
-         
-        c.put(open(self.rc.files[-1]), 'foo/bar')
+        for i in range(0,10):
+            print "Putting "+str(i)
+            local.put(testfile,'many'+str(i))
+        
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many1')))   
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many2')))
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many3')))
+                
+        p = local.get('many1')
+        self.assertTrue(p is not None)
+                
+        self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many1')))   
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many2')))
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many3')))
+        
+        p = local.get('many2')
+        self.assertTrue(p is not None)
+                
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many3')))      
+        self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many7'))) 
+ 
+        p = local.get('many3')
+        self.assertTrue(p is not None)
+                
+        self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many3')))      
+        self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many7'))) 
  
     def xs_test_basic(self):
         import sqlite3

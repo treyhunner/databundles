@@ -61,7 +61,7 @@ class Bundle(object):
     def identity(self):
         '''Return an identity object. '''
         
-        return Identity(**self.config.dict.get('identity'))
+        return Identity(**self.config.identity)
     
 
     @property
@@ -134,8 +134,7 @@ class BuildBundle(Bundle):
             bundle_dir = os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
     
             # bundle_dir = Filesystem.find_root_dir()
-        
-        
+          
         if bundle_dir is None or not os.path.isdir(bundle_dir):
             from databundles.dbexceptions import BundleError
             raise BundleError("BuildBundle must be constructed on a cache. "+
@@ -155,10 +154,6 @@ class BuildBundle(Bundle):
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
         self.ptick_count = 0;
 
-        # If a download cache is defined, cache the download
-        # otherwize, don't
-        self.cache_downloads = self.config.library.downloads is not None
-    
 
     def parse_args(self,argv):
         import argparse
@@ -335,7 +330,7 @@ class BundleFileConfig(BundleConfig):
     
     BUNDLE_CONFIG_FILE = 'bundle.yaml'
 
-    def __init__(self, cache):
+    def __init__(self, root_dir):
         '''Load the bundle.yaml file and create a config object
         
         If the 'id' value is not set in the yaml file, it will be created and the
@@ -344,100 +339,71 @@ class BundleFileConfig(BundleConfig):
 
         super(BundleFileConfig, self).__init__()
         
-        self.cache = cache
-    
-        self._run_config = RunConfig(os.path.join(self.cache,'databundles.yaml'))
+        self.root_dir = root_dir
+        self.local_file = os.path.join(self.root_dir,'bundle.yaml')
+
+        self._run_config = RunConfig(self.local_file)
      
-        self._config_dict = None
-        self.dict # Fetch the dict. 
    
         # If there is no id field, create it immediately and
-        # write the configuration baci out. 
+        # write the configuration back out. 
    
-        if not self.identity.id_:
+        if not self._run_config.identity.get('id',False):
             from databundles.identity import DatasetNumber
-            self.identity.id_ = str(DatasetNumber())
+            self._run_config.id_ = str(DatasetNumber())
             self.rewrite()
    
-        if not os.path.exists(self.path):
-            raise ConfigurationError("Can't find bundle config file: "+self.config_file)
+        if not os.path.exists(self.local_file):
+            raise ConfigurationError("Can't find bundle config file: ")
 
         
     @property
-    def dict(self): #@ReservedAssignment
+    def config(self): #@ReservedAssignment
         '''Return a dict/array object tree for the bundle configuration'''
         
-        if not self._config_dict:  
-            import yaml
-            try:
-             
-                self._config_dict = self.overlay(self._run_config.dict,
-                                                 yaml.load(file(self.path, 'r')))
-
-            except Exception as e:
-                raise e
-                raise NotImplementedError,''' Bundle.yaml missing. 
-                Auto-creation not implemented'''
-            
-        return self._config_dict
-
-    def overlay(self,dict1, dict2):
-        '''Overlay the values from an input dictionary into 
-        the object configuration, overwritting earlier values. '''
-        import copy
-        
-        dict1 = copy.copy(dict1)
-        
-        for name,group in dict2.items():
-            
-            if not name in dict1:
-                dict1[name] = {}
-            
-            try:
-                for key,value in group.items():
-                    dict1[name][key] = value
-            except:
-                # item is not a group
-                dict1[name] = group 
-                
-        return dict1
-
-    def __getattr__(self, group):
-        '''Fetch a configuration group and return the contents as an 
-        attribute-accessible dict'''
-        
-      
-        inner = self.dict[group]
-        
-        class attrdict(object):
-            def __setattr__(self, key, value):
-                key = key.strip('_')
-                inner[key] = value
-
-            def __getattr__(self, key):
-                key = key.strip('_')
-                if key not in inner:
-                    return None
-                
-                return inner[key]
-        
-        return attrdict()
+        return self._run_config
 
     @property
     def path(self):
         return os.path.join(self.cache, BundleFileConfig.BUNDLE_CONFIG_FILE)
 
-    def reload(self): #@ReservedAssignment
-        '''Reload the configuation from the file'''
-        self._config_dict = None
-        
     def rewrite(self):
         '''Re-writes the file from its own data. Reformats it, and updates
-        themodification time'''
+        the modification time'''
         import yaml
         
-        yaml.dump(self.dict, file(self.path, 'w'), indent=4, default_flow_style=False)
+        temp = self.local_file+".temp"
+        old = self.local_file+".old"
+        
+     
+        data = self._run_config.dump()
+        
+        with open(temp, 'w') as f:
+            f.write(data)
+    
+        if os.path.exists(temp):
+            os.rename(self.local_file, old)
+            os.rename(temp,self.local_file )
+            
+        
+ 
+    def dump(self):
+        '''Re-writes the file from its own data. Reformats it, and updates
+        the modification time'''
+        import yaml
+        
+        return yaml.dump(self._run_config, indent=4, default_flow_style=False)
    
+   
+    def __getattr__(self, group):
+        '''Fetch a confiration group and return the contents as an 
+        attribute-accessible dict'''
+        return self._run_config.group(group)
+
+    def group(self, name):
+        '''return a dict for a group of configuration items.'''
+        
+        return self._run_config.group(name)
 
 class BundleDbConfig(BundleConfig):
     ''' Retrieves configuration from the database, rather than the .yaml file. '''

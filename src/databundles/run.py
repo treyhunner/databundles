@@ -98,7 +98,7 @@ class AttrDict(OrderedDict):
     def update_dict(self, data):
         self.update_flat(self.flatten_dict(data))
 
-    def update_yaml(self, path):
+    def update_yaml(self, path): 
         self.update_flat(self.from_yaml(path))
 
     def clone(self):
@@ -122,7 +122,7 @@ class AttrDict(OrderedDict):
         yaml.representer.SafeRepresenter.add_representer(
             set, yaml.representer.SafeRepresenter.represent_list )
         yaml.safe_dump( self, stream,
-            default_flow_style=False, encoding='utf-8' )
+            default_flow_style=False, indent=4, encoding='utf-8' )
 
 
 
@@ -174,7 +174,7 @@ class RunConfig(object):
                  path ]
     
         for f in self.files:
-            if os.path.exists(f):
+            if f is not None and os.path.exists(f):
                 self.config.loaded.append(f)
                 self.config.update_yaml(f)
 
@@ -188,6 +188,23 @@ class RunConfig(object):
         
         return self.config.get(name,{})
 
+    def dump(self, stream=None):
+        
+        to_string = False
+        if stream is None:
+            import StringIO
+            stream = StringIO.StringIO()
+            to_string = True
+            
+        self.config.dump(stream)
+        
+        if to_string:
+            stream.seek(0)
+            return stream.read()
+        else:
+            return stream
+        
+        
 
 
 def run(argv, bundle_class):

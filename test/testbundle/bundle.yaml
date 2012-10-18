@@ -17,11 +17,11 @@ library:
     downloads: /Volumes/DataLibrary/test/downloads
     extracts: /Volumes/DataLibrary/test/extracts
     repository: /Volumes/DataLibrary/test/repository
-    
+
 filesystem:
     downloads:
-        dir: /net/nas2/c/proj/data-library-downloads/
-        size: 10000
+        dir: /Volumes/DataLibrary/test/downloads
+        size: 5
         upstream:
             bucket: devtest.clarinova.net
             prefix: bingo
@@ -29,7 +29,7 @@ filesystem:
             secret: 9btJZdRoBsOV8p4Gtaduy6zCLtcoSr3Z5sgRpbd9
     extracts: 
         dir: /Volumes/DataLibrary/test/extracts
-        size: 10000
+        size: 5
         upstream: 
             bucket: devtest.clarinova.net
             prefix: devtest

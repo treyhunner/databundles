@@ -375,7 +375,7 @@ class Database(object):
             
             # Create the Dataset
             s =  self.session
-            ds = Dataset(**self.bundle.config.dict['identity'])
+            ds = Dataset(**self.bundle.config.identity)
             ds.name = Identity.name_str(ds)
            
             s.add(ds)

@@ -247,10 +247,13 @@ class Filesystem(object):
                 
                 file_name = urllib.quote_plus(url)
                 file_path = self.downloads_path(file_name)
-                download_path = file_path+".download"
                 
                 cache = kwargs.get('cache',self.bundle.cache_downloads)
     
+                # We download to a temp file, then move it into place when 
+                # done. This allows the code to detect and correct partial
+                # downloads. 
+                download_path = file_path+".download"
                 if os.path.exists(download_path):
                     os.remove(download_path)
                 
@@ -285,7 +288,7 @@ class Filesystem(object):
             raise excpt
         
         if yields == 0:
-            raise RuntimeError("Generators must yield atleast once")
+            raise RuntimeError("Generators must yield at least once")
         
 
     def get_url(self,source_url, create=False):
@@ -350,11 +353,18 @@ class Filesystem(object):
         return o
    
 
-    def get_cache(self, config=None):
+    def get_cache(self, cache_name, config=None):
         """Return a new :class:`FsCache` built on the configured cache directory
-        
-        :param config: a `RunConfig` object
+  
+        :type cache_name: string
+        :param cache_name: A key in the 'filesystem' section of the configuration,
+            from which configuration will be retrieved
+     
+        :type config: :class:`RunConfig`
+        :param config: If supplied, wil replace the default RunConfig()
+              
         :rtype: a `FsCache` object
+        :return: a nre first level cache. 
         
         If config is None, the function will constuct a new RunConfig() with a default
         constructor. 
@@ -366,31 +376,45 @@ class Filesystem(object):
         """
         
         from databundles.dbexceptions import ConfigurationError
-        from databundles.run import  RunConfig
-        
+
         if config is None:
-            config = RunConfig()    
+            config = self.bundle._run_config
     
-        if not config.library:
-            raise ConfigurationError("Didn't get library configuration value")
+        if not config.filesystem:
+            raise ConfigurationError("Didn't get filsystem configuration value. "+
+                                     " from config files: "+"; ".join(config.loaded))
     
-        cache_dir = config.library.cache
+        subconfig = config.filesystem.get(cache_name,False)
+  
+        if subconfig is False:
+            raise ConfigurationError("Didn't get filsystem.{} configuration value"
+                                     .format(cache_name))
+               
+        cache = self._get_cache(cache_name, subconfig)
         
-        if not cache_dir:
-            raise ConfigurationError("Didn't get library.cache configuration value")
-        
-        repo_dir = config.library.repository
-        
-        if repo_dir:
-            repo = FsCache(repo_dir)
-            cache_size = config.library.cache_size
-            if not cache_size:
-                cache_size = 10000 # 10 GB
-            cache = FsCache(cache_dir, maxsize = cache_size, upstream = repo)
-        else:
-            cache =  FsCache(cache_dir)  
+        if subconfig.get('upstream',False):
+            cache.upstream = self._get_cache(cache_name+'.upstream', subconfig.get('upstream'))
         
         return cache
+
+    def _get_cache(self,config_name, config):
+        from databundles.dbexceptions import ConfigurationError
+        
+        if config.get('dir',False):
+
+            return FsCache(config.get('dir'), 
+                           maxsize=config.get('size',10000))
+            
+        elif config.get('bucket',False):
+            
+            return S3Cache(bucket=config.get('bucket'), 
+                    prefix=config.get('prefix', None),
+                    access_key=config.get('access_key'),
+                    secret=config.get('secret'))
+            
+        else:
+            raise ConfigurationError("Can't determine type of cache for key: {}".format(config_name))
+        
 
 class FsCache(object):
     '''A cache that transfers files to and from a remote filesystem
@@ -469,17 +493,20 @@ class FsCache(object):
       
         if size <= 0:
             return
-      
+
+        removes = []
+
         for row in self.database.execute("SELECT path, size, time FROM files ORDER BY time ASC"):
-            if size < 0: 
+
+            if size > 0:
+                removes.append(row[0])
+                size -= row[1]
+            else:
                 break
-        
-            #print "DELETE ", row[0], row[1], row[2],size
-            self.remove(row[0])
-            
-            size -= row[1]
   
-  
+        for row in removes:
+            self.remove(row)
+
     def _free_up_space(self, size):
         '''If there are not size bytes of space left, delete files
         until there is ''' 
@@ -602,9 +629,11 @@ class FsCache(object):
             os.makedirs(os.path.dirname(repo_path))
     
         try:
+            # Try it as a file-like object
             shutil.copyfileobj(source, repo_path)
             source.seek(0)
         except AttributeError: 
+            # Nope, try a filename. 
             shutil.copyfile(source, repo_path)
             
         size = os.path.getsize(repo_path)
@@ -630,11 +659,12 @@ class FsCache(object):
         '''Delete the file from the cache, and from the upstream'''
         repo_path = os.path.join(self.cache_dir, rel_path)
         
-        if os.path.exists(repo_path):
-            os.remove(repo_path)
-            
         c = self.database.cursor()
         c.execute("DELETE FROM  files WHERE path = ?", (rel_path,) )
+        
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+
         self.database.commit()
             
         if self.upstream and propagate :
@@ -658,7 +688,6 @@ class S3Cache(object):
         '''Init a new S3Cache Cache
 
         '''
-        
         from boto.s3.connection import S3Connection
 
         self.access_key = access_key
@@ -697,6 +726,7 @@ class S3Cache(object):
         b = StringIO.StringIO()
         k.get_contents_to_file(b)
     
+        b.seek(0)
         return b;
     
     def get(self, rel_path):
@@ -719,8 +749,11 @@ class S3Cache(object):
         k = Key(self.bucket)
 
         k.key = rel_path
-        k.set_contents_from_file(source)
-        
+        try:
+            k.set_contents_from_file(source)
+        except AttributeError:
+            k.set_contents_from_filename(source)
+            
     def find(self,query):
         '''Passes the query to the upstream, if it exists'''
        
