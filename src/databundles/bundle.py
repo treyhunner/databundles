@@ -28,6 +28,7 @@ class Bundle(object):
         self._schema = None
         self._partitions = None
         self._library = None
+        self._identity = None
 
         self.logger = logging.getLogger(__name__)
         
@@ -60,10 +61,15 @@ class Bundle(object):
     @property
     def identity(self):
         '''Return an identity object. '''
+        from databundles.run import AttrDict
         
-        return Identity(**self.config.identity)
-    
-
+        if not self._identity:
+            
+            self._identity =  Identity(**self.config.identity)
+            
+        return self._identity
+            
+        
     @property
     def library(self):
         '''Return the library set for the bundle, or 
@@ -207,7 +213,7 @@ class BuildBundle(Bundle):
             self._database  = Database(self)
             
             def add_type(database):
-                self.db_config.info.type = 'bundle'
+                self.db_config.set_value('info','type','bundle')
                 
             self._database._post_create = add_type 
             
@@ -385,8 +391,6 @@ class BundleFileConfig(BundleConfig):
             os.rename(self.local_file, old)
             os.rename(temp,self.local_file )
             
-        
- 
     def dump(self):
         '''Re-writes the file from its own data. Reformats it, and updates
         the modification time'''
@@ -405,6 +409,36 @@ class BundleFileConfig(BundleConfig):
         
         return self._run_config.group(name)
 
+from databundles.run import AttrDict
+class BundleDbConfigDict(AttrDict):
+    
+    _parent_key = None
+    _bundle = None
+    
+    def __init__(self, bundle):
+
+        super(BundleDbConfigDict, self).__init__()
+    
+        '''load all of the values'''
+        from databundles.orm import Config as SAConfig
+        
+        for k,v in self.items():
+            del self[k]
+        
+        s = bundle.database.session
+        # Load the dataset
+        self['identity'] = {}
+        for k,v in bundle.dataset.to_dict().items():
+            self['identity'][k] = v
+            
+        for row in s.query(SAConfig).all():
+            if row.group not in self:
+                self[row.group] = {}
+                
+            self[row.group][row.key] = row.value
+            
+
+    
 class BundleDbConfig(BundleConfig):
     ''' Retrieves configuration from the database, rather than the .yaml file. '''
 
@@ -432,40 +466,35 @@ class BundleDbConfig(BundleConfig):
         '''Fetch a confiration group and return the contents as an 
         attribute-accessible dict'''
         
+        return self.group(group)
+
+
+    def group(self, group):
+        '''return a dict for a group of configuration items.'''
+        
+        bd = BundleDbConfigDict(self)
+      
+        return bd.get(group)
+    
+
+    def set_value(self, group, key, value):
         from databundles.orm import Config as SAConfig
+        
+        if self.group == 'identity':
+            raise ValueError("Can't set identity group from this interface. Use the dataset")
+        
         s = self.database.session
-        dataset = self.dataset
-        class attrdict(object):
-            def __setattr__(self, key, value):
-                key = key.strip('_')
-             
-                if group == 'identity':
-                    raise ValueError("Can't set identity group from this interface. Use the dataset")
-                
-                s.query(SAConfig).filter(SAConfig.group == group,
-                                         SAConfig.key == key,
-                                         SAConfig.d_id == dataset.id_).delete()
-                
-                o = SAConfig(group=group,key=key,d_id=dataset.id_,value = value)
-                s.add(o)
-                s.commit()
-           
-            def __getattr__(self, key):
-                key = key.strip('_')
-
-                if group == 'identity':
-                    return dataset.to_dict().get(key, None)
-
-                try:
-                    r = s.query(SAConfig).filter(SAConfig.group == group,
-                                             SAConfig.key == key,
-                                             SAConfig.d_id == dataset.id_).one()
-                    return r.value
-                except:
-                    return None
-
-        attrdict = attrdict()
-        return attrdict
+     
+        key = key.strip('_')
+  
+        s.query(SAConfig).filter(SAConfig.group == group,
+                                 SAConfig.key == key,
+                                 SAConfig.d_id == self.dataset.id_).delete()
+        
+        o = SAConfig(group=group,
+                     key=key,d_id=self.dataset.id_,value = value)
+        s.add(o)
+        s.commit()       
 
     def get_dataset(self):
         '''Initialize the identity, creating a dataset record, 

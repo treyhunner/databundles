@@ -10,7 +10,7 @@ class Identity(object):
 
     def __init__(self, *args, **kwargs):
         self.from_dict(kwargs)
-       
+   
         self.name # Will trigger errors if anything is wrong
  
     def from_dict(self,d):

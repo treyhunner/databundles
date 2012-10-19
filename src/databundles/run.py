@@ -59,8 +59,10 @@ class AttrDict(OrderedDict):
         super(AttrDict, self).__setitem__( k,
             AttrDict(v) if isinstance(v, Mapping) else v )
     def __getattr__(self, k):
-        if not (k.startswith('__') or k.startswith('_OrderedDict__')): return self[k]
-        else: return super(AttrDict, self).__getattr__(k)
+        if not (k.startswith('__') or k.startswith('_OrderedDict__')): 
+            return self[k]
+        else: 
+            return super(AttrDict, self).__getattr__(k)
     def __setattr__(self, k, v):
         if k.startswith('_OrderedDict__'):
             return super(AttrDict, self).__setattr__(k, v)

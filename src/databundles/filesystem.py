@@ -118,32 +118,6 @@ class Filesystem(object):
         args = (self.BUILD_DIR,) + args
         return self.path(*args)
 
-    def downloads_path(self, *args):
-        
-        if len(args) > 0 and args[0] == self.DOWNLOAD_DIR:
-            raise ValueError("Adding download to existing download path "+os.path.join(*args))
-        
-        downloads_dir = self.bundle.config.library.downloads
-        
-        if downloads_dir is None:
-            downloads_dir = self.DOWNLOAD_DIR
-        
-        args = (downloads_dir,) + args
-        return self.path(*args)
-
-    def extracts_path(self, *args):
-        '''Construct a path into the extracts directory''' 
-        
-        if len(args) > 0 and args[0] == self.EXTRACT_DIR:
-            raise ValueError("Adding extract to existing extract path "+os.path.join(*args))
-        
-        extract_dir = self.bundle.config.library.extracts
-        
-        if extract_dir is None:
-            extract_dir = self.EXTRACT_DIR
-        
-        args = (extract_dir,) + args
-        return self.path(*args)
 
     def directory(self, rel_path):
         '''Resolve a path that is relative to the bundle root into 
@@ -230,10 +204,10 @@ class Filesystem(object):
         
 
     @contextmanager
-    def download(self,url, **kwargs):
+    def download(self,url):
         '''Context manager to download a file, return it for us, 
         and delete it when done'''
-        import shutil
+        import urlparse
 
         file_path = None
         yields = 0
@@ -244,11 +218,9 @@ class Filesystem(object):
                 self.bundle.error("Retrying download of {}".format(url))
             
             try:    
-                
-                file_name = urllib.quote_plus(url)
-                file_path = self.downloads_path(file_name)
-                
-                cache = kwargs.get('cache',self.bundle.cache_downloads)
+              
+                parsed = urlparse.urlparse(url)
+                file_path = parsed.netloc+'/'+urllib.quote_plus(parsed.path)
     
                 # We download to a temp file, then move it into place when 
                 # done. This allows the code to detect and correct partial
@@ -257,18 +229,26 @@ class Filesystem(object):
                 if os.path.exists(download_path):
                     os.remove(download_path)
                 
-                if not cache or not os.path.exists(file_path):
+                cache = self.get_cache('downloads')
+                
+                cached_file = cache.get(file_path)
+                
+                if cached_file:
+                    out_file = cached_file
+                else:
                     self.bundle.log("Downloading "+url)
                     self.bundle.log("  --> "+file_path)
                     download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
                     
-                    shutil.move(download_path, file_path)
-                    
-                    if not os.path.exists(file_path):
+                    if not os.path.exists(download_path):
                         raise Exception("Failed to download "+url)
-             
+                    
+                    out_file = cache.put(download_path, file_path)
+                    
+                    os.remove(download_path)
+ 
                 yields += 1
-                yield file_path
+                yield out_file
                 
             except IOError as e:
                 self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))

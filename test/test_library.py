@@ -56,11 +56,8 @@ class Test(unittest.TestCase):
         
         if os.path.exists(ldb):
             os.remove(ldb)
-        
-        cfg = self.bundle.config
-        rc = RunConfig()
-        rc.overlay(cfg.dict)
-        return  get_library(rc)
+      
+        return  get_library(self.rc)
         
     def tearDown(self):
         pass
@@ -85,6 +82,9 @@ class Test(unittest.TestCase):
             self.assertEquals(partition.identity.id_, resolve_id(partition.identity.id_))
             self.assertEquals(partition.identity.id_, resolve_id(str(partition.identity.id_)))
 
+    def foo(self, **kwargs):
+        print "FOO", kwargs
+
     def test_library_install(self):
         '''Install the bundle and partitions, and check that they are
         correctly installed. Check that installation is idempotent'''
@@ -96,6 +96,7 @@ class Test(unittest.TestCase):
         
         r = l.get(self.bundle.identity)
       
+
         self.assertIsNotNone(r.bundle)
         self.assertTrue(r.bundle is not False)
         self.assertEquals(self.bundle.identity.id_, r.bundle.identity.id_)
@@ -108,7 +109,6 @@ class Test(unittest.TestCase):
             l.put(partition)
             
             r = l.get(partition.identity)
-            print r
             self.assertIsNotNone(r)
             self.assertEquals( partition.identity.id_, r.partition.identity.id_)
             
@@ -231,8 +231,8 @@ class Test(unittest.TestCase):
 
         # Check that the right files got deleted
         self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many1')))   
-        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many6')))
-        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many7')))
+        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many5')))
+        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many6')))
         
         # Fetch a file that was displaced, to check that it gets loaded back 
         # into the cache. 
@@ -240,9 +240,9 @@ class Test(unittest.TestCase):
         p = l1.get('many2')
         self.assertTrue(p is not None)
         self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many1')))  
-        # Should have deleted many7
-        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many7')))
-        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many8')))
+        # Should have deleted many6
+        self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many6')))
+        self.assertTrue(os.path.exists(os.path.join(l1.cache_dir, 'many7')))
         
         #
         # Check that verification works
@@ -321,6 +321,21 @@ class Test(unittest.TestCase):
                 
         self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many3')))      
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many7'))) 
+ 
+    def test_download(self):
+        
+        urls  = [
+                 'http://www.clarinova.com/',
+                 'http://www.clarinova.com/civic-knowledge',
+                 'http://www.clarinova.com/company',
+                 'http://www.clarinova.com/contact'
+                 ]
+        
+ 
+        for url in urls:           
+            df = self.bundle.filesystem.download(url)
+            print 'url', df
+            
  
     def xs_test_basic(self):
         import sqlite3

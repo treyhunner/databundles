@@ -827,8 +827,6 @@ class Library(object):
         # If dataset is not None, it means the file already is in the cache.
         rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id) #@UnusedVariable
 
-        print "IN GET", bp_id, rel_path, dataset, partition 
-
         # Try to get the file from the cache. 
         if rel_path:
             abs_path = self.cache.get(rel_path)
