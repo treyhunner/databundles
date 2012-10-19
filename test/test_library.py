@@ -275,8 +275,7 @@ class Test(unittest.TestCase):
         fs = self.bundle.filesystem
   
         # Set up the test directory and make some test files. 
-        
-         
+
         root =  self.root_dir 
         try: Test.rm_rf(root)
         except: pass
@@ -332,10 +331,21 @@ class Test(unittest.TestCase):
                  ]
         
  
-        for url in urls:           
-            df = self.bundle.filesystem.download(url)
-            print 'url', df
+        for url in urls:     
+            with self.bundle.filesystem.download(url) as f:
+                print url, f
             
+        urls = [
+                'http://www2.census.gov/census_2000/datasets/Summary_File_1/Alaska/akgeo_uf1.zip'
+                ]
+            
+        download_file = None;
+        with self.bundle.filesystem.download(urls[0]) as f:
+            download_file = f
+            
+        with self.bundle.filesystem.unzip(download_file) as ef:
+            print "Extracted "+ef
+ 
  
     def xs_test_basic(self):
         import sqlite3

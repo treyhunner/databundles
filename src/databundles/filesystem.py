@@ -37,10 +37,7 @@ class FileRef(File):
 class Filesystem(object):
     
     BUILD_DIR = 'build'
-    DOWNLOAD_DIR = 'downloads'
-    EXTRACT_DIR = 'extracts'
-   
-    
+
     def __init__(self, bundle, root_directory = None):
         self.bundle = bundle
         if root_directory:
@@ -138,28 +135,54 @@ class Filesystem(object):
         return md5.hexdigest()
  
 
+    def _get_unzip_file(self, cache, tmpdir, zf, path, name):
+        
+        import urllib
+        
+        name = name.replace('/','').replace('..','')
+        
+        rel_path = (urllib.quote_plus(path.replace('/','_'),'_')+'/'+
+                    urllib.quote_plus(name.replace('/','_'),'_') )
+     
+        # Check if it is already in the cache
+        cached_file = cache.get(rel_path)
+        
+        if cached_file:
+            return cached_file
+     
+        # Not in cache, extract it. 
+        tmp_abs_path = os.path.join(tmpdir, name)
+        
+        if not os.path.exists(tmp_abs_path):
+            zf.extract(name,tmpdir )
+            
+        # Store it in the cache.           
+        abs_path = cache.put(tmp_abs_path, rel_path)
+        
+        return abs_path
+       
  
     @contextmanager
-    def unzip(self,path, cache=True):
+    def unzip(self,path):
         '''Context manager to extract a single file from a zip archive, and delete
         it when finished'''
+        import tempfile, uuid
         
-        extractDir = self.extracts_path(os.path.basename(path))
+        cache = self.get_cache('extracts')
+
+        tmpdir = tempfile.mkdtemp(str(uuid.uuid4()))
       
-        with zipfile.ZipFile(path) as zf:
-            name = iter(zf.namelist()).next() # Assume only one file in zip archive. 
-         
-            name = name.replace('/','').replace('..','')
-         
-            extractFilename = os.path.join(extractDir, name)
-            
-            if not os.path.exists(extractFilename):
-                zf.extract(name,extractDir )
-                    
-            yield extractFilename
-        
-            if not cache:
-                os.unlink(extractFilename)
+        try:
+            with zipfile.ZipFile(path) as zf:
+                name = iter(zf.namelist()).next() # Assume only one file in zip archive.    
+
+                abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)
+                
+                # Only return the first file. 
+                yield abs_path
+          
+        finally:
+            self.rm_rf(tmpdir)
 
     @contextmanager
     def unzip_dir(self,path,  cache=True):
@@ -206,11 +229,17 @@ class Filesystem(object):
     @contextmanager
     def download(self,url):
         '''Context manager to download a file, return it for us, 
-        and delete it when done'''
-        import urlparse
-
-        file_path = None
+        and delete it when done.
+        
+        Will store the downloaded file into the cache defined
+        by filesystem.download
+        '''
+        
+        import tempfile
+        
         yields = 0
+        cache = self.get_cache('downloads')
+        
         for attempts in range(3):
             excpt = None
             
@@ -218,24 +247,26 @@ class Filesystem(object):
                 self.bundle.error("Retrying download of {}".format(url))
             
             try:    
-              
+                import urlparse 
                 parsed = urlparse.urlparse(url)
-                file_path = parsed.netloc+'/'+urllib.quote_plus(parsed.path)
+                file_path = parsed.netloc+'/'+urllib.quote_plus(parsed.path.replace('/','_'),'_')
     
                 # We download to a temp file, then move it into place when 
                 # done. This allows the code to detect and correct partial
                 # downloads. 
-                download_path = file_path+".download"
+                download_path = os.path.join(tempfile.gettempdir(),file_path+".download")
                 if os.path.exists(download_path):
                     os.remove(download_path)
-                
-                cache = self.get_cache('downloads')
-                
+
                 cached_file = cache.get(file_path)
-                
+          
                 if cached_file:
                     out_file = cached_file
                 else:
+                    dirname = os.path.dirname(download_path)
+                    if not os.path.isdir(dirname):
+                        os.makedirs(dirname)
+                    
                     self.bundle.log("Downloading "+url)
                     self.bundle.log("  --> "+file_path)
                     download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
@@ -244,26 +275,23 @@ class Filesystem(object):
                         raise Exception("Failed to download "+url)
                     
                     out_file = cache.put(download_path, file_path)
-                    
-                    os.remove(download_path)
- 
+                   
                 yields += 1
                 yield out_file
+                break
                 
             except IOError as e:
                 self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
-                if os.path.exists(file_path):
-                    os.remove(file_path)
                 excpt = e
             except urllib.ContentTooShortError as e:
                 self.bundle.error("Content too short. ")
                 excpt = e
+            except Exception as e:
+                self.bundle.error('Unexpected error '+str(e))
                 
-            finally:
-                if file_path and os.path.exists(file_path) and not cache:
-                    os.remove(file_path) 
-                break
-        
+        if download_path and os.path.exists(download_path):
+            os.remove(download_path) 
+
         if excpt:
             raise excpt
         
@@ -395,6 +423,18 @@ class Filesystem(object):
         else:
             raise ConfigurationError("Can't determine type of cache for key: {}".format(config_name))
         
+    @classmethod
+    def rm_rf(cls, d):
+        
+        if not os.path.exists(d):
+            return
+        
+        for path in (os.path.join(d,f) for f in os.listdir(d)):
+            if os.path.isdir(path):
+                cls.rm_rf(path)
+            else:
+                os.unlink(path)
+        os.rmdir(d)
 
 class FsCache(object):
     '''A cache that transfers files to and from a remote filesystem
@@ -560,7 +600,7 @@ class FsCache(object):
         
         path = os.path.join(self.cache_dir, rel_path)
       
-        # The target file always has to exist in the repo
+        # If is already exists in the repo, just return it. 
         if  os.path.exists(path):
             
             if not os.path.isfile(path):
@@ -571,11 +611,16 @@ class FsCache(object):
         if not self.upstream:
             # If we don't have an upstream, then we are done. 
             return None
-        
+     
         stream = self.upstream.get_stream(rel_path)
         
         if not stream:
             return None
+        
+        # Got a stream from upstream, so put the file in this cache. 
+        dirname = os.path.dirname(path)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
         
         with open(path,'w') as f:
             shutil.copyfileobj(stream, f)
@@ -698,16 +743,23 @@ class S3Cache(object):
     def get_stream(self, rel_path):
         """Return the object as a stream"""
         from boto.s3.key import Key
+        from boto.exception import S3ResponseError 
+        
         import StringIO
         
         k = Key(self.bucket)
 
         k.key = rel_path
         b = StringIO.StringIO()
-        k.get_contents_to_file(b)
-    
-        b.seek(0)
-        return b;
+        try:
+            k.get_contents_to_file(b)
+            b.seek(0)
+            return b;
+        except S3ResponseError as e:
+            if e.status == 404:
+                return None
+            else:
+                raise e
     
     def get(self, rel_path):
         '''Return the file path referenced but rel_path, or None if
