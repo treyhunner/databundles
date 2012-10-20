@@ -42,31 +42,32 @@ class Us2010CensusBundle(UsCensusBundle):
         log('S = state, T = segment table, g = geo')
         urls = {}
       
-        for link in BeautifulSoup(open(doc[0])).find_all('a'):
-            tick('S')
-            if not link.get('href') or not link.string or not link.contents:
-                continue;# Didn't get a sensible link
-            # Only descend into links that name a state
-            state = link.get('href').strip('/')
-          
-            if link.string and link.contents[0] and state in states :
-                stateUrl = urlparse.urljoin(rootUrl, link.get('href'))
-                stateIndex = urllib.urlretrieve(stateUrl)
-                # Get all of the zip files in the directory
-                
-                for link in  BeautifulSoup(open(stateIndex[0])).find_all('a'):
+        with open(doc[0]) as bsf:
+            for link in BeautifulSoup().find_all('a'):
+                tick('S')
+                if not link.get('href') or not link.string or not link.contents:
+                    continue;# Didn't get a sensible link
+                # Only descend into links that name a state
+                state = link.get('href').strip('/')
+              
+                if link.string and link.contents[0] and state in states :
+                    stateUrl = urlparse.urljoin(rootUrl, link.get('href'))
+                    stateIndex = urllib.urlretrieve(stateUrl)
+                    # Get all of the zip files in the directory
                     
-                    if link.get('href') and  '.zip' in link.get('href'):
-                        final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
-                   
-                        tick('T')
+                    for link in  BeautifulSoup(open(stateIndex[0])).find_all('a'):
                         
-                        m = re.match('.*/(\w{2})2010.sf1.zip', final_url)
-
-                        if  m:
-                            urls[m.group(1)] = str(final_url)
-                        else:
-                            raise Exception("Regex failed for : "+final_url)
+                        if link.get('href') and  '.zip' in link.get('href'):
+                            final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
+                       
+                            tick('T')
+                            
+                            m = re.match('.*/(\w{2})2010.sf1.zip', final_url)
+    
+                            if  m:
+                                urls[m.group(1)] = str(final_url)
+                            else:
+                                raise Exception("Regex failed for : "+final_url)
         
         tick('\n')
    
@@ -107,47 +108,48 @@ class Us2010CensusBundle(UsCensusBundle):
         shell for the 2010 census '''
         import csv
         
-        reader  = csv.DictReader(open(self.headers_file, 'rbU') )
-        last_seg = None
-        table = None
-        for row in reader:
-            if not row['TABLE NUMBER']:
-                continue
-            
-            if row['SEGMENT'] and row['SEGMENT'] != last_seg:
-                last_seg = row['SEGMENT']
-            
-            # The first two rows for the table give information about the title
-            # and population universe, but don't have any column info. 
-            if( not row['FIELD CODE']):
-                if  row['FIELD NAME'].startswith('Universe:'):
-                    table['universe'] = row['FIELD NAME'].replace('Universe:','').strip()  
+        with open(self.headers_file, 'rbU') as rf:
+            reader  = csv.DictReader(rf)
+            last_seg = None
+            table = None
+            for row in reader:
+                if not row['TABLE NUMBER']:
+                    continue
+                
+                if row['SEGMENT'] and row['SEGMENT'] != last_seg:
+                    last_seg = row['SEGMENT']
+                
+                # The first two rows for the table give information about the title
+                # and population universe, but don't have any column info. 
+                if( not row['FIELD CODE']):
+                    if  row['FIELD NAME'].startswith('Universe:'):
+                        table['universe'] = row['FIELD NAME'].replace('Universe:','').strip()  
+                    else:
+                        table = {'type': 'table', 
+                                 'name':row['TABLE NUMBER'],
+                                 'description':row['FIELD NAME'],
+                                 'segment':row['SEGMENT'],
+                                 'data':  {'segment':row['SEGMENT'], 'fact':True}
+                                 }
                 else:
-                    table = {'type': 'table', 
-                             'name':row['TABLE NUMBER'],
-                             'description':row['FIELD NAME'],
-                             'segment':row['SEGMENT'],
-                             'data':  {'segment':row['SEGMENT'], 'fact':True}
-                             }
-            else:
-                
-                # The whole table will exist in one segment ( file number ) 
-                # but the segment id is not included on the same lines ast the
-                # table name. 
-                if table:
-                    yield table
-                    table  = None
                     
-                col_pos = int(row['FIELD CODE'][-3:])
-                
-                yield {
-                       'type':'column','name':row['FIELD CODE'], 
-                       'description':row['FIELD NAME'].strip(),
-                       'segment':int(row['SEGMENT']),
-                       'col_pos':col_pos,
-                       'decimal':int(row['DECIMAL'] if row['DECIMAL'] else 0)
-                       }
- 
+                    # The whole table will exist in one segment ( file number ) 
+                    # but the segment id is not included on the same lines ast the
+                    # table name. 
+                    if table:
+                        yield table
+                        table  = None
+                        
+                    col_pos = int(row['FIELD CODE'][-3:])
+                    
+                    yield {
+                           'type':'column','name':row['FIELD CODE'], 
+                           'description':row['FIELD NAME'].strip(),
+                           'segment':int(row['SEGMENT']),
+                           'col_pos':col_pos,
+                           'decimal':int(row['DECIMAL'] if row['DECIMAL'] else 0)
+                           }
+     
  
     def generate_seg_rows(self, seg_number, source):
         '''Generate rows for a segment file. Call this generator with send(), 

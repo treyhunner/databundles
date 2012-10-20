@@ -6,7 +6,7 @@ Created on Jun 9, 2012
 
 from databundles.database import Database
 from databundles.identity import Identity 
-from databundles.filesystem import  Filesystem
+from databundles.filesystem import  BundleFilesystem
 from databundles.schema import Schema
 from databundles.partition import Partitions
 import os.path
@@ -149,12 +149,13 @@ class BuildBundle(Bundle):
         self.bundle_dir = bundle_dir
     
         self._database  = None
-       
-        self.filesystem = Filesystem(self, self.bundle_dir)
-        
+   
         # For build bundles, always use the FileConfig though self.config
         # to get configuration. 
         self.config = BundleFileConfig(self.bundle_dir)
+     
+        self.filesystem = BundleFilesystem(self, self.bundle_dir)
+        
 
         import base64
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 

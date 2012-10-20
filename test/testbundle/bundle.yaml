@@ -9,7 +9,7 @@ identity:
     subset: subset
     variation: variation
 library:
-    cache: /Volumes/DataLibrary/test/cache
+    dir: /Volumes/DataLibrary/test/cache
     cache_size: 10000
     database:
         dbname: /Volumes/DataLibrary/test/library.db
@@ -19,12 +19,20 @@ library:
     repository: /Volumes/DataLibrary/test/repository
 
 filesystem:
+    library:
+        dir: /Volumes/DataLibrary/test/library
+        size: 5
+        upstream:
+            bucket: devtest.clarinova.net
+            prefix: library
+            access_key: AKIAIOKK4KSYYGYXWQJQ
+            secret: 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
     downloads:
         dir: /Volumes/DataLibrary/test/downloads
         size: 5
         upstream:
             bucket: devtest.clarinova.net
-            prefix: bingo
+            prefix: downloads
             access_key: AKIAIOKK4KSYYGYXWQJQ
             secret: 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
     extracts: 
@@ -32,6 +40,6 @@ filesystem:
         size: 5
         upstream: 
             bucket: devtest.clarinova.net
-            prefix: devtest
+            prefix: extracts
             access_key: AKIAIOKK4KSYYGYXWQJQ
             secret: 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

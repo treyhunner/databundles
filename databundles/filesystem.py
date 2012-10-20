@@ -33,20 +33,105 @@ class FileRef(File):
         self.modified = os.path.getmtime(self.abs_path)
         self.content_hash = Filesystem.file_hash(self.abs_path)
         self.bundle.database.session.commit()
-        
+
 class Filesystem(object):
+    
+    def __init__(self, config):
+        self.config = config
+     
+
+    def get_cache(self, cache_name, config=None):
+        """Return a new :class:`FsCache` built on the configured cache directory
+  
+        :type cache_name: string
+        :param cache_name: A key in the 'filesystem' section of the configuration,
+            from which configuration will be retrieved
+     
+        :type config: :class:`RunConfig`
+        :param config: If supplied, wil replace the default RunConfig()
+              
+        :rtype: a `FsCache` object
+        :return: a nre first level cache. 
+        
+        If config is None, the function will constuct a new RunConfig() with a default
+        constructor. 
+        
+        The `FsCache` will be constructed with the cache_dir values from the
+        library.cache config key, and if the library.repository value exists, it will 
+        be use for the upstream parameter.
+    
+        """
+        
+        from databundles.dbexceptions import ConfigurationError
+
+        if config is None:
+            config = self.config
+    
+        if not config.filesystem:
+            raise ConfigurationError("Didn't get filsystem configuration value. "+
+                                     " from config files: "+"; ".join(config.loaded))
+    
+        subconfig = config.filesystem.get(cache_name,False)
+  
+        if subconfig is False:
+            raise ConfigurationError("Didn't get filsystem.{} configuration value"
+                                     .format(cache_name))
+               
+        cache = self._get_cache(cache_name, subconfig)
+        
+        if subconfig.get('upstream',False):
+            cache.upstream = self._get_cache(cache_name+'.upstream', subconfig.get('upstream'))
+        
+        return cache
+
+    def _get_cache(self,config_name, config):
+        from databundles.dbexceptions import ConfigurationError
+        
+        if config.get('dir',False):
+
+            return FsCache(config.get('dir'), 
+                           maxsize=config.get('size',10000))
+            
+        elif config.get('bucket',False):
+            
+            return S3Cache(bucket=config.get('bucket'), 
+                    prefix=config.get('prefix', None),
+                    access_key=config.get('access_key'),
+                    secret=config.get('secret'))
+            
+        else:
+            raise ConfigurationError("Can't determine type of cache for key: {}".format(config_name))
+        
+    @classmethod
+    def rm_rf(cls, d):
+        
+        if not os.path.exists(d):
+            return
+        
+        for path in (os.path.join(d,f) for f in os.listdir(d)):
+            if os.path.isdir(path):
+                cls.rm_rf(path)
+            else:
+                os.unlink(path)
+        os.rmdir(d)
+
+
+class BundleFilesystem(Filesystem):
     
     BUILD_DIR = 'build'
 
     def __init__(self, bundle, root_directory = None):
+        
+        super(BundleFilesystem, self).__init__(bundle.config._run_config)
+        
         self.bundle = bundle
         if root_directory:
             self.root_directory = root_directory
         else:
             self.root_directory = Filesystem.find_root_dir()
  
-        if not os.path.exists(self.path(Filesystem.BUILD_DIR)):
-            os.makedirs(self.path(Filesystem.BUILD_DIR),0755)
+        if not os.path.exists(self.path(BundleFilesystem.BUILD_DIR)):
+            os.makedirs(self.path(BundleFilesystem.BUILD_DIR),0755)
  
     @staticmethod
     def find_root_dir(testFile='bundle.yaml', start_dir =  None):
@@ -136,12 +221,13 @@ class Filesystem(object):
  
 
     def _get_unzip_file(self, cache, tmpdir, zf, path, name):
-        
-        import urllib
+
         
         name = name.replace('/','').replace('..','')
         
-        rel_path = (urllib.quote_plus(path.replace('/','_'),'_')+'/'+
+        base = os.path.basename(path)
+        
+        rel_path = (urllib.quote_plus(base.replace('/','_'),'_')+'/'+
                     urllib.quote_plus(name.replace('/','_'),'_') )
      
         # Check if it is already in the cache
@@ -160,7 +246,6 @@ class Filesystem(object):
         abs_path = cache.put(tmp_abs_path, rel_path)
         
         return abs_path
-       
  
     @contextmanager
     def unzip(self,path):
@@ -188,6 +273,8 @@ class Filesystem(object):
     def unzip_dir(self,path,  cache=True):
         '''Extract all of the files in a zip file to a directory, and return
         the directory. Delete the directory when done. '''
+       
+        raise Exception("Fixme")
        
         extractDir = self.extracts_path(os.path.basename(path))
 
@@ -288,6 +375,7 @@ class Filesystem(object):
                 excpt = e
             except Exception as e:
                 self.bundle.error('Unexpected error '+str(e))
+                raise e
                 
         if download_path and os.path.exists(download_path):
             os.remove(download_path) 
@@ -360,81 +448,6 @@ class Filesystem(object):
         
         return o
    
-
-    def get_cache(self, cache_name, config=None):
-        """Return a new :class:`FsCache` built on the configured cache directory
-  
-        :type cache_name: string
-        :param cache_name: A key in the 'filesystem' section of the configuration,
-            from which configuration will be retrieved
-     
-        :type config: :class:`RunConfig`
-        :param config: If supplied, wil replace the default RunConfig()
-              
-        :rtype: a `FsCache` object
-        :return: a nre first level cache. 
-        
-        If config is None, the function will constuct a new RunConfig() with a default
-        constructor. 
-        
-        The `FsCache` will be constructed with the cache_dir values from the
-        library.cache config key, and if the library.repository value exists, it will 
-        be use for the upstream parameter.
-    
-        """
-        
-        from databundles.dbexceptions import ConfigurationError
-
-        if config is None:
-            config = self.bundle._run_config
-    
-        if not config.filesystem:
-            raise ConfigurationError("Didn't get filsystem configuration value. "+
-                                     " from config files: "+"; ".join(config.loaded))
-    
-        subconfig = config.filesystem.get(cache_name,False)
-  
-        if subconfig is False:
-            raise ConfigurationError("Didn't get filsystem.{} configuration value"
-                                     .format(cache_name))
-               
-        cache = self._get_cache(cache_name, subconfig)
-        
-        if subconfig.get('upstream',False):
-            cache.upstream = self._get_cache(cache_name+'.upstream', subconfig.get('upstream'))
-        
-        return cache
-
-    def _get_cache(self,config_name, config):
-        from databundles.dbexceptions import ConfigurationError
-        
-        if config.get('dir',False):
-
-            return FsCache(config.get('dir'), 
-                           maxsize=config.get('size',10000))
-            
-        elif config.get('bucket',False):
-            
-            return S3Cache(bucket=config.get('bucket'), 
-                    prefix=config.get('prefix', None),
-                    access_key=config.get('access_key'),
-                    secret=config.get('secret'))
-            
-        else:
-            raise ConfigurationError("Can't determine type of cache for key: {}".format(config_name))
-        
-    @classmethod
-    def rm_rf(cls, d):
-        
-        if not os.path.exists(d):
-            return
-        
-        for path in (os.path.join(d,f) for f in os.listdir(d)):
-            if os.path.isdir(path):
-                cls.rm_rf(path)
-            else:
-                os.unlink(path)
-        os.rmdir(d)
 
 class FsCache(object):
     '''A cache that transfers files to and from a remote filesystem
@@ -717,6 +730,7 @@ class S3Cache(object):
 
         self.access_key = access_key
         self.bucket_name = bucket
+        self.prefix = prefix
         self.conn = S3Connection(self.access_key, secret)
         self.bucket = self.conn.get_bucket(self.bucket_name)
   
@@ -747,9 +761,13 @@ class S3Cache(object):
         
         import StringIO
         
+        if self.prefix is not None:
+            rel_path = self.prefix+"/"+rel_path
+        
         k = Key(self.bucket)
 
         k.key = rel_path
+ 
         b = StringIO.StringIO()
         try:
             k.get_contents_to_file(b)
@@ -777,6 +795,9 @@ class S3Cache(object):
         
         '''
         from boto.s3.key import Key
+        
+        if self.prefix is not None:
+            rel_path = self.prefix+"/"+rel_path
         
         k = Key(self.bucket)
 

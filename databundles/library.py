@@ -8,7 +8,7 @@ from databundles.run import  RunConfig
 import os.path
 
 from databundles.dbexceptions import ConfigurationError
-from databundles.filesystem import FsCache
+from databundles.filesystem import FsCache, Filesystem
 
 import databundles
 
@@ -29,45 +29,6 @@ class NullHandler(logging.Handler):
 logger = logging.getLogger(__name__)
 logger.addHandler(NullHandler())
 
-def get_cache(config=None):
-    """Return a new :class:`FsCache` built on the configured cache directory
-    
-    :param config: a `RunConfig` object
-    :rtype: a `FsCache` object
-    
-    If config is None, the function will constuct a new RunConfig() with a default
-    constructor. 
-    
-    The `FsCache` will be constructed with the cache_dir values from the
-    library.cache config key, and if the library.repository value exists, it will 
-    be use for the upstream parameter.
- 
-
-    """
-    
-    if config is None:
-        config = RunConfig()    
-
-    if not config.library:
-        raise ConfigurationError("Didn't get library configuration value")
-
-    cache_dir = config.library.cache
-    
-    if not cache_dir:
-        raise ConfigurationError("Didn't get library.cache configuration value")
-    
-    repo_dir = config.library.repository
-    
-    if repo_dir:
-        repo = FsCache(repo_dir)
-        cache_size = config.library.cache_size
-        if not cache_size:
-            cache_size = 10000 # 10 GB
-        cache = FsCache(cache_dir, maxsize = cache_size, upstream = repo)
-    else:
-        cache =  FsCache(cache_dir)  
-    
-    return cache
     
 def get_database(config=None):
     """Return a new `LibraryDb`, constructed from a configuration
@@ -113,8 +74,10 @@ def get_library(config=None):
         if config is None:
             config = RunConfig()
         
-        
-        library =  Library(cache = get_cache(config), 
+        filesystem = Filesystem(config)
+        cache = filesystem.get_cache('library', config)
+
+        library =  Library(cache = cache, 
                            database = get_database(config))
     
     return library
@@ -786,12 +749,11 @@ class Library(object):
         self.cache = cache
         self._database = database
         self.remote = None
-        
+ 
         if not self.cache:
             raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
 
         self.logger = logging.getLogger(__name__)
-        
 
 
     @property

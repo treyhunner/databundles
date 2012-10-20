@@ -51,42 +51,45 @@ class Us2000CensusBundle(UsCensusBundle):
         tables = {}
         geos = {}
        
-        for link in BeautifulSoup(open(doc[0])).find_all('a'):
-            tick('S')
-            if not link.get('href') or not link.string or not link.contents:
-                continue;# Didn't get a sensible link
-            # Only descend into links that name a state
-            state = link.get('href').strip('/')
-          
-            if link.string and link.contents[0] and state in states :
-                stateUrl = urlparse.urljoin(rootUrl, link.get('href'))
-                stateIndex = urllib.urlretrieve(stateUrl)
-                # Get all of the zip files in the directory
-                
-                for link in  BeautifulSoup(open(stateIndex[0])).find_all('a'):
+        with open(doc[0]) as df:
+            for link in BeautifulSoup(df).find_all('a'):
+                tick('S')
+                if not link.get('href') or not link.string or not link.contents:
+                    continue;# Didn't get a sensible link
+                # Only descend into links that name a state
+                state = link.get('href').strip('/')
+              
+                if link.string and link.contents[0] and state in states :
+                    stateUrl = urlparse.urljoin(rootUrl, link.get('href'))
+                    stateIndex = urllib.urlretrieve(stateUrl)
+                    # Get all of the zip files in the directory
                     
-                    if link.get('href') and  '.zip' in link.get('href'):
-                        final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
-                       
-                        if 'geo'+suffix in final_url:
-                            tick('g')
-                            state = re.match('.*/(\w{2})geo'+suffix, final_url).group(1)
-                            geos[state] = final_url
-                        else:
-                            tick('T')
-                            res = '.*/(\w{2})(\d{5})'+suffix
-                            m = re.match(res, final_url)
-
-                            if not m:
-                                raise Exception("Failed to match {} to {} ".format(res, final_url))
-
-                            state,segment = m.groups()
-                            segment = int(segment.lstrip('0'))
-                            if not state in tables:
-                                tables[state] = {}
-                                
-                            tables[state][segment] = final_url
+                    with open(stateIndex[0]) as f:
+                    
+                        for link in  BeautifulSoup(f).find_all('a'):
+                            
+                            if link.get('href') and  '.zip' in link.get('href'):
+                                final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
+                               
+                                if 'geo'+suffix in final_url:
+                                    tick('g')
+                                    state = re.match('.*/(\w{2})geo'+suffix, final_url).group(1)
+                                    geos[state] = final_url
+                                else:
+                                    tick('T')
+                                    res = '.*/(\w{2})(\d{5})'+suffix
+                                    m = re.match(res, final_url)
         
+                                    if not m:
+                                        raise Exception("Failed to match {} to {} ".format(res, final_url))
+        
+                                    state,segment = m.groups()
+                                    segment = int(segment.lstrip('0'))
+                                    if not state in tables:
+                                        tables[state] = {}
+                                        
+                                    tables[state][segment] = final_url
+            
         return {'tables':tables,'geos':geos}
 
     def generate_schema_rows(self):
@@ -95,48 +98,49 @@ class Us2000CensusBundle(UsCensusBundle):
         shell for the 2000 census '''
         import csv
         
-        reader  = csv.DictReader(open(self.headers_file, 'rbU') )
-        last_seg = None
-        table = None
-        for row in reader:
-            if not row['TABLE']:
-                continue
-            
-            if row['SEG'] and row['SEG'] != last_seg:
-                last_seg = row['SEG']
-         
-            text = row['TEXT'].decode('utf8','ignore').strip()
-
-            # The first two rows for the table give information about the title
-            # and population universe, but don't have any column info. 
-            if( not row['FIELDNUM'] or row['FIELDNUM'] == 'A' ):
-                if  row['TABNO']:
-                    table = {'type': 'table', 
-                             'name':row['TABLE'],'description':text
-                             }
+        with open(self.headers_file, 'rbU') as f:
+            reader  = csv.DictReader(f )
+            last_seg = None
+            table = None
+            for row in reader:
+                if not row['TABLE']:
+                    continue
+                
+                if row['SEG'] and row['SEG'] != last_seg:
+                    last_seg = row['SEG']
+             
+                text = row['TEXT'].decode('utf8','ignore').strip()
+    
+                # The first two rows for the table give information about the title
+                # and population universe, but don't have any column info. 
+                if( not row['FIELDNUM'] or row['FIELDNUM'] == 'A' ):
+                    if  row['TABNO']:
+                        table = {'type': 'table', 
+                                 'name':row['TABLE'],'description':text
+                                 }
+                    else:
+                        table['universe'] = text.replace('Universe:','').strip()  
                 else:
-                    table['universe'] = text.replace('Universe:','').strip()  
-            else:
-                
-                # The whole table will exist in one segment ( file number ) 
-                # but the segment id is not included on the same lines ast the
-                # table name. 
-                if table:
-                    # This is yielded  here so we can get the segment number. 
-                    table['segment'] = row['SEG'] 
-                    table['data'] = {'segment':row['SEG'], 'fact':True}
-                    yield table
-                    table  = None
                     
-                col_pos = int(row['FIELDNUM'][-3:])
-                
-                yield {
-                       'type':'column','name':row['FIELDNUM'], 
-                       'description':text.strip(),
-                       'segment':int(row['SEG']),
-                       'col_pos':col_pos,
-                       'decimal':int(row['DECIMAL'])
-                       }
+                    # The whole table will exist in one segment ( file number ) 
+                    # but the segment id is not included on the same lines ast the
+                    # table name. 
+                    if table:
+                        # This is yielded  here so we can get the segment number. 
+                        table['segment'] = row['SEG'] 
+                        table['data'] = {'segment':row['SEG'], 'fact':True}
+                        yield table
+                        table  = None
+                        
+                    col_pos = int(row['FIELDNUM'][-3:])
+                    
+                    yield {
+                           'type':'column','name':row['FIELDNUM'], 
+                           'description':text.strip(),
+                           'segment':int(row['SEG']),
+                           'col_pos':col_pos,
+                           'decimal':int(row['DECIMAL'])
+                           }
                 
     def generate_seg_rows(self, seg_number, source):
         '''Generate rows for a segment file. Call this generator with send(), 
@@ -145,17 +149,23 @@ class Us2000CensusBundle(UsCensusBundle):
         import csv
         next_logrecno = None
         l = 0
+        
         with self.filesystem.download(source) as zip_file:
             with self.filesystem.unzip(zip_file) as rf:
-                for row in csv.reader(open(rf, 'rbU') ):
-                    l += 1
-                    # The next_logrec bit takes care of a differece in the
-                    # segment files -- the PCT tables to not have entries for
-                    # tracts, so there are gaps in the logrecno sequence for those files. 
-                    while next_logrecno is not None and next_logrecno != row[4]:
-                        next_logrecno = (yield seg_number,  [])
-             
-                    next_logrecno = (yield seg_number,  row)
+                of = open(rf, 'rbU')
+
+
+        for row in csv.reader(of):
+            l += 1
+            # The next_logrec bit takes care of a differece in the
+            # segment files -- the PCT tables to not have entries for
+            # tracts, so there are gaps in the logrecno sequence for those files. 
+            while next_logrecno is not None and next_logrecno != row[4]:
+                next_logrecno = (yield seg_number,  [])
+     
+            next_logrecno = (yield seg_number,  row)
+            
+        of.close()
                  
         if l == 0:
             raise RuntimeError("Didn't get any lines from {} ".format(zip_file))
@@ -177,12 +187,19 @@ class Us2000CensusBundle(UsCensusBundle):
     
             geodim_gen = self.generate_geodim_rows(state) if geodim else None
          
+            rows = 0;
     
             with self.filesystem.download(geo_source) as geo_zip_file:
                 with self.filesystem.unzip(geo_zip_file) as grf:
                     with open(grf, 'rbU') as geofile:
                         first = True
                         for line in geofile.readlines():
+                            
+                            rows  += 1
+                            
+                            if rows > 20000 and self.run_args.test:
+                                break
+
                             geo = struct.unpack(unpack_str, line[:-1])
                              
                             if not geo:
@@ -220,12 +237,13 @@ class Us2000CensusBundle(UsCensusBundle):
                             yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
     
                         # Check that there are no extra lines. 
-                        for g in gens:
-                            try:
-                                while g.next(): 
-                                    raise Exception("Should not have extra items left")
-                            except StopIteration:
-                                pass
+                        if not self.run_args.testself.run_args.test:
+                            for g in gens:
+                                try:
+                                    while g.next(): 
+                                        raise Exception("Should not have extra items left")
+                                except StopIteration:
+                                    pass
         except Exception as e:
             self.error(str(e))
                 

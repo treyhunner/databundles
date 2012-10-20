@@ -1,10 +1,25 @@
 #!/usr/bin/env python
 
-from setuptools import setup, find_packages
+
+try:
+    from setuptools import setup
+    extra = {}
+except ImportError:
+    from distutils.core import setup
+    extra = {}
+
 import sys, re
 
-if sys.version < '2.7':
-    sys.exit('ERROR: Sorry, python 2.7 is required for this application.')
+from databundles import __version__
+
+if sys.version_info <= (2, 6):
+    error = "ERROR: databundles requires Python Version 2.7 or above...exiting."
+    print >> sys.stderr, error
+    sys.exit(1)
+
+def readme():
+    with open("README") as f:
+        return f.read()
 
 def parse_requirements(file_name):
     requirements = []
@@ -28,23 +43,25 @@ def parse_dependency_links(file_name):
 
     return dependency_links
 
-
-# zip_save=False  : database.Database.create uses __file__
-setup(name='databundles',
-      version='0.0.9',
-      description='Databundles Management Library',
-      long_description=open('README').read(),
-      author='Eric Busboom',
-      license='http://www.opensource.org/licenses/ISC',
-      author_email='eric@clarinova.com',
-      url='',
-      keywords='',
-      packages=['databundles', 'databundles.client', 'databundles.server', 'databundles.sourcesupport'],
-      package_dir={'databundles': 'src/databundles'},
-      package_data={'databundles': ['support/*.*']},
-      zip_safe=False,
-      install_requires = parse_requirements('requirements.txt'),
-      dependency_links = parse_dependency_links('requirements.txt')
-     )
-
-
+setup(name = "databundles",
+      version = __version__,
+      description = "Amazon Web Services Library",
+      long_description = readme(),
+      author = "Eric Busboom",
+      author_email = "eric@clarinova.com",
+      scripts = [],
+      url = "https://github.com/clarinova/databundles",
+      packages = ["databundles", 
+                  "databundles.client",
+                  "databundles.server",
+                  "databundles.sourcesupport",
+                  ],
+      package_data = {"databundles": ["support/*"]},
+      license = "",
+      platforms = "Posix; MacOS X; Windows",
+      classifiers = [],
+      #zip_safe=False,
+      #install_requires = parse_requirements('requirements.txt'),
+      #dependency_links = parse_dependency_links('requirements.txt'),
+      **extra
+      )

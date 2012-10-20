@@ -14,6 +14,31 @@ import os, sys
 try: import yaml, yaml.constructor
 except ImportError: pass
 
+def patch_file_open():
+    import __builtin__
+    openfiles = set()
+    oldfile = __builtin__.file
+    class newfile(oldfile):
+        def __init__(self, *args):
+            self.x = args[0]
+            print "### {} OPENING {} ###".format(len(openfiles), str(self.x))         
+            oldfile.__init__(self, *args)
+            openfiles.add(self)
+    
+        def close(self):
+            print "### {} CLOSING {} ###".format(len(openfiles), str(self.x))
+            oldfile.close(self)
+            openfiles.remove(self)
+            
+    oldopen = __builtin__.open
+    
+    def newopen(*args):
+        return newfile(*args)
+    
+    __builtin__.file = newfile
+    __builtin__.open = newopen
+
+#patch_file_open()
 
 # From http://pypi.python.org/pypi/layered-yaml-attrdict-config/12.07.1
 class OrderedDictYAMLLoader(yaml.Loader):

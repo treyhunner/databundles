@@ -1,4 +1,4 @@
-
+__version__ = '0.09'
 
 def resolve_id(arg, bundle=None, library=None):
     '''resolve any of the many ways of identifying a partition or

@@ -36,6 +36,7 @@ class TempFile(object):
         self.file = None
         self.suffix = suffix
         
+        
         if header is None:
             header = [ c.name for c in table.columns ]
         else:
@@ -98,6 +99,7 @@ class TempFile(object):
         return os.path.exists(self.path)
     
     def delete(self):
+        self.close()
         if self.exists:
             os.remove(self.path)
     
@@ -293,9 +295,12 @@ class Database(object):
     def load_sql(self, sql_file):
         import sqlite3
         conn = sqlite3.connect( self.path)
-        sql = open(sql_file).read().strip()
+        f =  open(sql_file)
+        sql =f.read().strip()
        
         conn.executescript(sql)
+        
+        f.close()
         
         conn.commit()
         
