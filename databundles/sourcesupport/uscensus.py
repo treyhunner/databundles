@@ -243,18 +243,31 @@ class UsCensusBundle(BuildBundle):
     # Build 
     #############################################
     
-    def build(self, run_state_tables_f=None,run_fact_db_f=None):
+    def build(self, run_geo_dim_f=None, run_state_tables_f=None,run_fact_db_f=None):
         '''Create data  partitions. 
         First, creates all of the state segments, one partition per segment per 
         state. Then creates a partition for each of the geo files. '''
-    
     
         from multiprocessing import Pool
 
         # Split up the state geo files into .csv files, and 
         # create the build/geodim files that will link logrecnos to
         # geo split table records. 
-        self.run_geo_dim()
+
+        if self.run_args.multi and run_geo_dim_f:
+            
+            pool = Pool(processes=int(self.run_args.multi))
+      
+            result = pool.map_async(run_geo_dim_f, enumerate(self.urls['geos'].keys()))
+            print result.get()
+        else:
+            for state in self.urls['geos'].keys():
+                self.log("Building geo dim for {}".format(state))
+                self.run_geo_dim(state)
+        
+        self.log("DONE, FOR TESTINING, in build()")
+        return False
+
 
         # Combine the geodim tables with the  state population tables, and
         # produce .csv files for each of the tables. 
@@ -283,41 +296,21 @@ class UsCensusBundle(BuildBundle):
           
         return True
     
-    def run_geo_dim(self):
-        """Run the geo_dim process, via `_run_geo_dim` for each of the states 
-        
-        The geo_dim process generates a set of tables that cut across all
-        states, and there must be uniqie ids for rows that have unique content.
-        This makes it hard to run this as a parallel job. 
-        """
-        
-        geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
-        geo_processors = self.geo_processors()
-        
-        for t in self.geo_tables():
-            self._geo_dim_locks[t.id_] = threading.RLock()
-    
-        row_hash = {} #@RservedAssignment
-        counts = {}
-        for table_id, cp in geo_processors.items(): #@UnusedVariable
-            row_hash[table_id] = {}
-            counts[table_id] = 1
-            
-        n = len(self.urls['geos'].keys())
-        i = 1
-        
-        for state in self.urls['geos'].keys():
-            self.log("Building Geo state for {}, {} of {}".format(state, i, n))
-            self._run_geo_dim(state, row_hash, geo_processors, geo_partitions)
-            i = i + 1  
-            
-    def _run_geo_dim(self, state, row_hash, geo_processors, geo_partitions):
+   
+    def run_geo_dim(self, state):
         '''Break up the geo files into seperate files, combine them 
         nationally, and store them in temporary CSV files. Creates a set of 
         files for each state, the geodim files, that link the state and logrecnos
         to the primary keys for the geodim records. '''
         
         import time
+     
+        geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
+        geo_processors = self.geo_processors()
+     
+        row_hash = {} #@RservedAssignment
+        for table_id, cp in geo_processors.items(): #@UnusedVariable
+            row_hash[table_id] = {}
      
         row_i = 0
       
@@ -328,8 +321,6 @@ class UsCensusBundle(BuildBundle):
             return
 
         self.log("Initializing state: "+state+' ')
-        
-        table_meta = None  
 
         record_code_partition = self.get_record_code_partition(geo_processors, geo_partitions)
            
@@ -353,7 +344,7 @@ class UsCensusBundle(BuildBundle):
       
             row_i += 1
             
-            if row_i % 1000 == 0:
+            if row_i % 5000 == 0:
                 # Prints the processing rate in 1,000 records per sec.
                 self.log("GEO "+state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
             
@@ -372,37 +363,24 @@ class UsCensusBundle(BuildBundle):
                     values[-1] = self.row_hash(values)
     
                     # Write a record to the dimension table. 
-                    #r = self.write_geo_row_db(row_hash, partition, table,  columns, values)
-                    r = self.write_geo_row_tf(row_hash, partition, table,  columns, values, state)
+                    #r = self.write_geo_row_db(row_hash, partition, table, columns, values)
+                    r = self.write_geo_row_tf(row_hash, partition, table, columns, values, state)
                    
                     geo_keys.append(r) 
-                  
-            if  table_meta is None:  
-                table_meta = record_code_partition.database.table('record_code')
-                
+
             # The first None is for the primary id, the last is for the 
             # hash, which was added automatically to geo_dim tables. 
             values = [None, state, logrecno] + geo_keys + [None]
-            
-            #ins = table_meta.insert(values=values)
-            #record_code_partition.database.session.execute(ins) 
-            
+
             tf = record_code_partition.database.tempfile(record_code_partition.table, suffix=state)
             tf.writer.writerow(values)
-            
-        
-        record_code_partition.database.tempfile(record_code_partition.table, suffix=state).close()  
-        #record_code_partition.database.session.commit()
 
+        # Close all of the tempfiles. 
         for table_id, cp in geo_processors.items():
             partition = geo_partitions[table_id]
-            #partition.database.session.commit()
-            #partition.database.close()
-            
             partition.database.tempfile(partition.table, suffix=state).close()
-            
-            dest = self.library.put(partition)
-            self.log("Install in library: "+str(dest))
+ 
+        record_code_partition.database.tempfile(record_code_partition.table, suffix=state).close()  
             
         with open(marker_f, 'w') as f:
             f.write(str(time.time()))
@@ -810,21 +788,19 @@ class UsCensusBundle(BuildBundle):
         This operation is wrapped in a lock to protect both the hash and file
         '''
 
-        with self._geo_dim_locks[table.id_]:
-        
-            th = hash[table.id_]
-                    
-            if values[-1] in th:
-                return th[values[-1]]
-            else:                   
-                r = len(th)+1
-                th[values[-1]] = r
-                values[0] = r
+        th = hash[table.id_]
                 
-                tf = partition.database.tempfile(table, suffix=state)
-                tf.writer.writerow(values)
+        if values[-1] in th:
+            return th[values[-1]]
+        else:                   
+            r = len(th)+1
+            th[values[-1]] = r
+            values[0] = r
             
-                return r
+            tf = partition.database.tempfile(table, suffix=state)
+            tf.writer.writerow(values)
+        
+            return r
 
 def make_geoid(state, county, tract, block=None, blockgroup=None):
     '''Create a geoid for common blocks. This is not appropriate for

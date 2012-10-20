@@ -157,7 +157,7 @@ class Us2010CensusBundle(UsCensusBundle):
         value, return a blank row until the logrecno values match. '''
         import csv #, cStringIO
         next_logrecno = None
-        with open(source, 'rbU') as f:
+        with open(source, 'rbU', buffering=1*1024*1024) as f:
             #b = cStringIO.StringIO(f.read()) # Read whole file into memory
             for row in csv.reader( f ):
                 # The next_logrec bit takes care of a differece in the

@@ -146,15 +146,21 @@ class Us2000CensusBundle(UsCensusBundle):
         '''Generate rows for a segment file. Call this generator with send(), 
         passing in the lexpected logrecno. If the next row does not have that 
         value, return a blank row until the logrecno values match. '''
-        import csv
+        import csv, io, zipfile
         next_logrecno = None
         l = 0
         
-        with self.filesystem.download(source) as zip_file:
-            with self.filesystem.unzip(zip_file) as rf:
-                of = open(rf, 'rbU')
+        def test_zip_file(f):
+            try:
+                with zipfile.ZipFile(f) as zf:
+                    return zf.testzip() is None
+            except zipfile.BadZipfile:
+                return False
 
-
+        zip_file = self.filesystem.download(source, test_zip_file)
+        rf = self.filesystem.unzip(zip_file)
+        of = open(rf, 'rbU', buffering=1*1024*1024)
+        
         for row in csv.reader(of):
             l += 1
             # The next_logrec bit takes care of a differece in the
@@ -164,7 +170,7 @@ class Us2000CensusBundle(UsCensusBundle):
                 next_logrecno = (yield seg_number,  [])
      
             next_logrecno = (yield seg_number,  row)
-            
+   
         of.close()
                  
         if l == 0:
@@ -176,76 +182,85 @@ class Us2000CensusBundle(UsCensusBundle):
         '''A Generator that yelds a tuple that has the logrecno row
         for all of the segment files and the geo file. '''
         import struct
-        
-        try:
-            table = self.schema.table('sf1geo')
-            header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
-             
-            geo_source = self.urls['geos'][state]
-          
-            gens = [self.generate_seg_rows(n,source) for n,source in self.urls['tables'][state].items() ]
-    
-            geodim_gen = self.generate_geodim_rows(state) if geodim else None
-         
-            rows = 0;
-    
-            with self.filesystem.download(geo_source) as geo_zip_file:
-                with self.filesystem.unzip(geo_zip_file) as grf:
-                    with open(grf, 'rbU') as geofile:
-                        first = True
-                        for line in geofile.readlines():
-                            
-                            rows  += 1
-                            
-                            if rows > 20000 and self.run_args.test:
-                                break
 
-                            geo = struct.unpack(unpack_str, line[:-1])
-                             
-                            if not geo:
-                                raise ValueError("Failed to match regex on line: "+line) 
-        
-                            segments = {}
-                    
-                            lrn = geo[6]
-                          
-                            for g in gens:
-                                try:
-                                    seg_number,  row = g.send(None if first else lrn)
-                                    segments[seg_number] = row
-                                    # The logrecno must match up across all files, except
-                                    # when ( in PCT tables ) there is no entry
-                                    if len(row) > 5 and row[4] != lrn:
-                                        raise Exception("Logrecno mismatch for seg {} : {} != {}"
-                                                        .format(seg_number, row[4],lrn))
-                                except StopIteration:
-                                    # Apparently, the StopIteration exception, raised in
-                                    # a generator function, gets propagated all the way up, 
-                                    # ending all higher level generators. thanks for nuthin. 
-                                    break
-                    
-                            geodim = geodim_gen.next() if geodim_gen is not None else None
-    
+        table = self.schema.table('sf1geo')
+        header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
+         
+        geo_source = self.urls['geos'][state]
+      
+        gens = [self.generate_seg_rows(n,source) for n,source in self.urls['tables'][state].items() ]
+
+        geodim_gen = self.generate_geodim_rows(state) if geodim else None
+     
+        rows = 0;
+
+        def test_zip_file(f):
+            import zipfile
+            try:
+                with zipfile.ZipFile(f) as zf:
+                    return zf.testzip() is None
+            except zipfile.BadZipfile:
+                return False
+
+        geo_zip_file = self.filesystem.download(geo_source, test_zip_file)
+        grf = self.filesystem.unzip(geo_zip_file)
+        geofile = open(grf, 'rbU')
                 
-                            if geodim and geodim[0] != int(lrn):
-                                m = "Logrecno mismatch for geodim : {} != {}".format(geodim[0],lrn)
-                                self.error(m)
-                                raise Exception(m)
-                            
-                            first = False
+     
+        first = True
+        for line in geofile.readlines():
+            
+            rows  += 1
+            
+            if rows > 20000 and self.run_args.test:
+                break
+
+            geo = struct.unpack(unpack_str, line[:-1])
+             
+            if not geo:
+                raise ValueError("Failed to match regex on line: "+line) 
+
+            segments = {}
     
-                            yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
+            lrn = geo[6]
+          
+            for g in gens:
+                try:
+                    seg_number,  row = g.send(None if first else lrn)
+                    segments[seg_number] = row
+                    # The logrecno must match up across all files, except
+                    # when ( in PCT tables ) there is no entry
+                    if len(row) > 5 and row[4] != lrn:
+                        raise Exception("Logrecno mismatch for seg {} : {} != {}"
+                                        .format(seg_number, row[4],lrn))
+                except StopIteration:
+                    # Apparently, the StopIteration exception, raised in
+                    # a generator function, gets propagated all the way up, 
+                    # ending all higher level generators. thanks for nuthin. 
+                    break
     
-                        # Check that there are no extra lines. 
-                        if not self.run_args.testself.run_args.test:
-                            for g in gens:
-                                try:
-                                    while g.next(): 
-                                        raise Exception("Should not have extra items left")
-                                except StopIteration:
-                                    pass
-        except Exception as e:
-            self.error(str(e))
+            geodim = geodim_gen.next() if geodim_gen is not None else None
+
+            if geodim and geodim[0] != int(lrn):
+                m = "Logrecno mismatch for geodim : {} != {}".format(geodim[0],lrn)
+                self.error(m)
+                raise Exception(m)
+            
+            first = False
+
+            yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
+
+        geofile.close()
+
+#                    # Check that there are no extra lines. 
+#                    if not self.run_args.test:
+#                        for g in gens:
+#                            try:
+#                                while g.next(): 
+#                                    raise Exception("Should not have extra items left")
+#                            except StopIteration:
+#                                pass
+
                 
     def geo_table_names(self):
         return ([

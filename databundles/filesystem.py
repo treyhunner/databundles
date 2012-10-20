@@ -10,8 +10,14 @@ from databundles.orm import File
 from contextlib import contextmanager
 import zipfile
 import urllib
+import databundles.util, logging
 
-    
+logger = databundles.util.get_logger(__name__)
+logger.setLevel(logging.ERROR)
+
+class DownloadFailedError(Exception):
+    pass
+
 class FileRef(File):
     '''Extends the File orm class with awareness of the filsystem'''
     def __init__(self, bundle):
@@ -247,7 +253,6 @@ class BundleFilesystem(Filesystem):
         
         return abs_path
  
-    @contextmanager
     def unzip(self,path):
         '''Context manager to extract a single file from a zip archive, and delete
         it when finished'''
@@ -256,18 +261,18 @@ class BundleFilesystem(Filesystem):
         cache = self.get_cache('extracts')
 
         tmpdir = tempfile.mkdtemp(str(uuid.uuid4()))
-      
+   
         try:
             with zipfile.ZipFile(path) as zf:
                 name = iter(zf.namelist()).next() # Assume only one file in zip archive.    
 
                 abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)
-                
-                # Only return the first file. 
-                yield abs_path
-          
+
+                return abs_path
         finally:
             self.rm_rf(tmpdir)
+            
+        return None
 
     @contextmanager
     def unzip_dir(self,path,  cache=True):
@@ -312,9 +317,7 @@ class BundleFilesystem(Filesystem):
             import shutil
             shutil.rmtree(extractDir)
         
-
-    @contextmanager
-    def download(self,url):
+    def download(self,url, test_f=None):
         '''Context manager to download a file, return it for us, 
         and delete it when done.
         
@@ -323,25 +326,28 @@ class BundleFilesystem(Filesystem):
         '''
         
         import tempfile
-        
-        yields = 0
+        import zipfile
+        import urlparse
+      
         cache = self.get_cache('downloads')
-        
-        for attempts in range(3):
-            excpt = None
+        parsed = urlparse.urlparse(url)
+        file_path = parsed.netloc+'/'+urllib.quote_plus(parsed.path.replace('/','_'),'_')
+
+        # We download to a temp file, then move it into place when 
+        # done. This allows the code to detect and correct partial
+        # downloads. 
+        download_path = os.path.join(tempfile.gettempdir(),file_path+".download")
             
+        for attempts in range(3):
+   
             if attempts > 0:
                 self.bundle.error("Retrying download of {}".format(url))
-            
-            try:    
-                import urlparse 
-                parsed = urlparse.urlparse(url)
-                file_path = parsed.netloc+'/'+urllib.quote_plus(parsed.path.replace('/','_'),'_')
-    
-                # We download to a temp file, then move it into place when 
-                # done. This allows the code to detect and correct partial
-                # downloads. 
-                download_path = os.path.join(tempfile.gettempdir(),file_path+".download")
+
+            cached_file = None
+            out_file = None
+            excpt = None
+                        
+            try:                  
                 if os.path.exists(download_path):
                     os.remove(download_path)
 
@@ -349,6 +355,11 @@ class BundleFilesystem(Filesystem):
           
                 if cached_file:
                     out_file = cached_file
+                    
+                    if test_f and not test_f(out_file):
+                        cache.remove(file_path, True)
+                        raise DownloadFailedError("Cached Download didn't pass test function "+url)
+                    
                 else:
                     dirname = os.path.dirname(download_path)
                     if not os.path.isdir(dirname):
@@ -359,22 +370,34 @@ class BundleFilesystem(Filesystem):
                     download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
                     
                     if not os.path.exists(download_path):
-                        raise Exception("Failed to download "+url)
+                        raise DownloadFailedError("Failed to download "+url)
+                    
+                    if test_f and not test_f(download_path):
+                        raise DownloadFailedError("Download didn't pass test function "+url)
                     
                     out_file = cache.put(download_path, file_path)
-                   
-                yields += 1
-                yield out_file
+       
                 break
                 
+            except DownloadFailedError as e:
+                self.bundle.error("Failed:  "+str(e))
+                excpt = e
             except IOError as e:
                 self.bundle.error("Failed to download "+url+" to "+file_path+" : "+str(e))
                 excpt = e
             except urllib.ContentTooShortError as e:
-                self.bundle.error("Content too short. ")
+                self.bundle.error("Content too short for "+url)
                 excpt = e
+            except zipfile.BadZipfile as e:
+                # Code that uses the yield value -- like th filesystem.unzip method
+                # can throw exceptions that will propagate to here. Unexpected, but very useful. 
+                # We should probably create a FileNotValueError, but I'm lazy. 
+                self.bundle.error("Got an invalid zip file for "+url)
+                cache.remove(file_path)
+                excpt = e
+                
             except Exception as e:
-                self.bundle.error('Unexpected error '+str(e))
+                self.bundle.error("Unexpected download error '"+str(e)+"' when downloading "+url)
                 raise e
                 
         if download_path and os.path.exists(download_path):
@@ -382,10 +405,8 @@ class BundleFilesystem(Filesystem):
 
         if excpt:
             raise excpt
-        
-        if yields == 0:
-            raise RuntimeError("Generators must yield at least once")
-        
+    
+        return out_file
 
     def get_url(self,source_url, create=False):
         '''Return a database record for a file'''
@@ -610,8 +631,11 @@ class FsCache(object):
         from the upstream before declaring failure. 
         '''
         import shutil
-        
+
+        logger.debug("{} get {}".format(self.repo_id,rel_path)) 
+               
         path = os.path.join(self.cache_dir, rel_path)
+
       
         # If is already exists in the repo, just return it. 
         if  os.path.exists(path):
@@ -619,6 +643,7 @@ class FsCache(object):
             if not os.path.isfile(path):
                 raise ValueError("Path does not point to a file")
             
+            logger.debug("{} get {} found ".format(self.repo_id, path))
             return path
             
         if not self.upstream:
@@ -628,6 +653,7 @@ class FsCache(object):
         stream = self.upstream.get_stream(rel_path)
         
         if not stream:
+            logger.debug("{} get not found in upstream ()".format(self.repo_id,rel_path)) 
             return None
         
         # Got a stream from upstream, so put the file in this cache. 
@@ -648,6 +674,7 @@ class FsCache(object):
         if not os.path.exists(path):
             raise Exception("Failed to copy upstream data to {} ".format(path))
         
+        logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
         return path
     
     def put(self, source, rel_path):

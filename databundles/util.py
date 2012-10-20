@@ -11,6 +11,27 @@ import functools
 from itertools import ifilterfalse
 from heapq import nsmallest
 from operator import itemgetter
+import logging
+
+logger_init = set()
+
+def get_logger(name):
+    
+    logger = logging.getLogger(name)
+            
+    if name not in logger_init:
+   
+        logger.setLevel(logging.DEBUG)
+        
+        formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        ch.setLevel(logging.DEBUG)
+        logger.addHandler(ch)
+        
+        logger_init.add(name)
+        
+    return logger
 
 
 class Counter(dict):

@@ -12,7 +12,7 @@ from databundles.partition import Partitions
 import os.path
 from databundles.dbexceptions import  ConfigurationError
 from databundles.run import RunConfig
-import logging
+import databundles.util
 
 
 class Bundle(object):
@@ -30,20 +30,8 @@ class Bundle(object):
         self._library = None
         self._identity = None
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = databundles.util.get_logger(__name__)
         
-        if not hasattr(self.logger, '_bundle_initialized'): # this avoids adding multiple handlers to the loger. 
-        
-            self.logger.setLevel(logging.DEBUG)
-            
-            formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
-            ch = logging.StreamHandler()
-            ch.setFormatter(formatter)
-            ch.setLevel(logging.DEBUG)
-            self.logger.addHandler(ch)
-            
-            self.logger._bundle_initialized = True
-
     @property
     def schema(self):
         if self._schema is None:
