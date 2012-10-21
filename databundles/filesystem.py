@@ -226,9 +226,9 @@ class BundleFilesystem(Filesystem):
         return md5.hexdigest()
  
 
-    def _get_unzip_file(self, cache, tmpdir, zf, path, name):
 
-        
+    def _get_unzip_file(self, cache, tmpdir, zf, path, name):
+ 
         name = name.replace('/','').replace('..','')
         
         base = os.path.basename(path)
@@ -251,6 +251,12 @@ class BundleFilesystem(Filesystem):
         # Store it in the cache.           
         abs_path = cache.put(tmp_abs_path, rel_path)
         
+        # There have been zip files that have been truncated, but I don't know
+        # why. this is a stab i the dark to catch it. 
+        if self.file_hash(tmp_abs_path) != self.file_hash(abs_path):
+            raise Exception('Zip file extract error: md5({}) != md5({})'
+                            .format(tmp_abs_path,abs_path ))
+
         return abs_path
  
     def unzip(self,path):
@@ -326,7 +332,6 @@ class BundleFilesystem(Filesystem):
         '''
         
         import tempfile
-        import zipfile
         import urlparse
       
         cache = self.get_cache('downloads')

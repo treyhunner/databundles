@@ -35,6 +35,8 @@ class UsCensusBundle(BuildBundle):
         
         self._urls_cache = None
     
+        self._geo_tables = None
+    
         self._geo_dim_locks = {} 
     
     #####################################
@@ -43,7 +45,6 @@ class UsCensusBundle(BuildBundle):
     
     def prepare(self):
         '''Create the prototype database'''
-
 
         if not self.database.exists():
             self.database.create()
@@ -57,9 +58,23 @@ class UsCensusBundle(BuildBundle):
         self.create_split_table_schema()
     
         self.generate_partitions()
-
-
+ 
         return True
+    
+    @property
+    def geo_tables(self):
+        
+        if self._geo_tables is None:
+            self._geo_tables = []
+            m = { t.name:t for t in self.schema.tables }
+            
+            for table_name in self.geo_table_names():
+                table = m[table_name]
+                
+                if table.data.get('split_table', '') == 'A':
+                    self._geo_tables.append(table)
+                    
+        return self._geo_tables
     
     def scrape_urls(self, suffix='_uf1'):
         
@@ -125,7 +140,7 @@ class UsCensusBundle(BuildBundle):
         from databundles.partition import PartitionIdentity
         #
         # Geo split files
-        for table in self.geo_tables():
+        for table in self.geo_tables:
             pid = PartitionIdentity(self.identity, table=table.name)
             partition = self.partitions.find(pid) # Find puts id_ into partition.identity
             
@@ -615,7 +630,7 @@ class UsCensusBundle(BuildBundle):
         
         processor_set = OrderedDict()
         
-        for table in self.geo_tables():
+        for table in self.geo_tables:
           
             source_cols = ([c.name for c in table.columns 
                                 if not ( c.name.endswith('_id') and not c.is_primary_key)
@@ -635,15 +650,6 @@ class UsCensusBundle(BuildBundle):
         return processor_set
    
 
-    def geo_tables(self):
-        
-        m = { t.name:t for t in self.schema.tables }
-        
-        for table_name in self.geo_table_names():
-            table = m[table_name]
-            
-            if table.data.get('split_table', '') == 'A':
-                yield table
         
     def geo_keys(self):
         return  [ t+'_id' for t in self.geo_table_names()]
@@ -694,7 +700,7 @@ class UsCensusBundle(BuildBundle):
     def geo_partition_map(self):
         '''Create a map from table id to partition for the geo split table'''
         partitions = {}
-        for table in self.geo_tables():
+        for table in self.geo_tables:
             partitions[table.id_] = self.geo_partition(table, True)
             
         return partitions

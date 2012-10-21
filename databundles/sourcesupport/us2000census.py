@@ -215,7 +215,12 @@ class Us2000CensusBundle(UsCensusBundle):
             if rows > 20000 and self.run_args.test:
                 break
 
-            geo = struct.unpack(unpack_str, line[:-1])
+            try:
+                geo = struct.unpack(unpack_str, line[:-1])
+            except struct.error as e:
+                self.error("Struct error for state={}, file={}, line_len={}, row={}, \nline={}"
+                           .format(state,grf,len(line),rows, line))
+                raise e
              
             if not geo:
                 raise ValueError("Failed to match regex on line: "+line) 
@@ -223,8 +228,9 @@ class Us2000CensusBundle(UsCensusBundle):
             segments = {}
     
             lrn = geo[6]
-          
-            for g in gens:
+       
+            # load segment data from all of the files. 
+            for index, g in enumerate(gens):
                 try:
                     seg_number,  row = g.send(None if first else lrn)
                     segments[seg_number] = row
@@ -237,8 +243,12 @@ class Us2000CensusBundle(UsCensusBundle):
                     # Apparently, the StopIteration exception, raised in
                     # a generator function, gets propagated all the way up, 
                     # ending all higher level generators. thanks for nuthin. 
+                    
+                    #self.log("Got StopIteration in generate_rows at logrec={}. Is seg file state={} index={} seg_number={} shorter?"
+                    #         .format(lrn,state, index, seg_number))
+                    
                     break
-    
+ 
             geodim = geodim_gen.next() if geodim_gen is not None else None
 
             if geodim and geodim[0] != int(lrn):
@@ -247,7 +257,15 @@ class Us2000CensusBundle(UsCensusBundle):
                 raise Exception(m)
             
             first = False
-
+            
+            if not 1 in segments:
+                # There are segments that are shorter than others ( There are two groups
+                # of sizes, but the first segment is always the same size ( in lines ) 
+                # as the geo file. If not, it is an error. 
+                m = "Segment 1 is short for state={}".format(state)
+                self.error(m)
+                raise Exception(m)
+                
             yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
 
         geofile.close()

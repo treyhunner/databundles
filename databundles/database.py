@@ -187,18 +187,15 @@ class Database(object):
         
         if not self._engine:
             self._engine = create_engine('sqlite:///'+self.path, echo=False) 
-         
             from sqlalchemy import event
             event.listen(self._engine, 'connect', _pragma_on_connect)
-            
-            
+             
         return self._engine
 
     @property
     def connection(self):
         '''Return an SqlAlchemy connection'''
         if not self._connection:
-        
             self._connection = self.engine.connect()
             
         return self._connection
