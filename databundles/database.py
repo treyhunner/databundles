@@ -72,21 +72,45 @@ class TempFile(object):
                 self._writer.writerow(self.header)
             
         return self._writer
+     
+    @property
+    def linewriter(self):
+        '''Like writer, but does not write a header. '''
+        if self._writer is None:
+            import csv
+            self.close()
+            
+            if self.exists:
+                mode = 'a+'
+            else:
+                mode = 'w'
+            
+            self.file = open(self.path, mode)
+            self._writer = csv.writer(self.file)
+
+        return self._writer
             
   
     @property
     def reader(self, mode='r'):
+        '''Open a DictReader on the temp file. '''
         if self._reader is None:
             import csv
-            self._reader = csv.DictReader(open(self.path, mode))
+            self.close()
+            self.file = open(self.path, mode, buffering=1*1024*1024)
+            self._reader = csv.DictReader(self.file)
             
         return self._reader
        
     @property
-    def linereader(self, mode='r'):
+    def linereader(self, mode='r', skip_header = True):
+        '''Open a regular, list-oriented reader on the temp file
+        '''
         if self._reader is None:
             import csv
-            self._reader = csv.reader(open(self.path, mode))
+            self.close()
+            self.file = open(self.path, mode, buffering=1*1024*1024)
+            self._reader = csv.reader(self.file)
             
         return self._reader
        

@@ -149,8 +149,7 @@ class BuildBundle(Bundle):
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
         self.ptick_count = 0;
 
-
-    def parse_args(self,argv):
+    def configure_arg_parser(self, argv):
         import argparse
         
         parser = argparse.ArgumentParser(prog='python bundle.py',
@@ -170,6 +169,12 @@ class BuildBundle(Bundle):
         
         parser.add_argument('-m','--multi', default=False, action="store",  
                             nargs='?', type = int, help='Run the build process on multiple processors')
+        
+        return parser
+
+    def parse_args(self,argv):
+
+        parser = self.configure_arg_parser(argv)
     
         args = parser.parse_args()
         
@@ -180,7 +185,6 @@ class BuildBundle(Bundle):
         if len(args.phases) ==  0 or (len(args.phases) == 1 and args.phases[0] == 'all'):    
             args.phases = ['prepare','build', 'install']
       
-            self.run_args = args
             
         if args.test is None: # If not specified, is False. If specified with not value, is None
             args.test = 1
@@ -190,8 +194,7 @@ class BuildBundle(Bundle):
             import multiprocessing
             args.multi = multiprocessing.cpu_count()
 
-
-       
+        self.run_args = args
             
         return args
 

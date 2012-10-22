@@ -39,6 +39,20 @@ class UsCensusBundle(BuildBundle):
     
         self._geo_dim_locks = {} 
     
+    def configure_arg_parser(self, argv):
+    
+        def csv(value):
+            return value.split(',')
+        
+        parser = super(UsCensusBundle, self).configure_arg_parser(argv)
+        
+        parser.add_argument('-s','--subphase', action='store', default = 'all',  help='Specify a sub-phase')
+        
+        parser.add_argument('-S','--states', action='store', default = ['all'],  
+                             type=csv,  help='Specify a sub-phase')
+        
+        return parser
+    
     #####################################
     # Peparation
     #####################################
@@ -75,6 +89,18 @@ class UsCensusBundle(BuildBundle):
                     self._geo_tables.append(table)
                     
         return self._geo_tables
+    
+    @property
+    def states(self):
+        if 'all' in self.run_args.states:
+            states = self.urls['geos'].keys()
+            states.sort()  
+            return states
+        else:
+
+            states = [ s for s in self.urls['geos'].keys() if s in self.run_args.states ]
+            states.sort()
+            return states  
     
     def scrape_urls(self, suffix='_uf1'):
         
@@ -262,56 +288,59 @@ class UsCensusBundle(BuildBundle):
         '''Create data  partitions. 
         First, creates all of the state segments, one partition per segment per 
         state. Then creates a partition for each of the geo files. '''
-    
         from multiprocessing import Pool
-
-        # Split up the state geo files into .csv files, and 
-        # create the build/geodim files that will link logrecnos to
-        # geo split table records. 
-
-        if self.run_args.multi and run_geo_dim_f:
-            
-            pool = Pool(processes=int(self.run_args.multi))
-      
-            result = pool.map_async(run_geo_dim_f, enumerate(self.urls['geos'].keys()))
-            print result.get()
-        else:
-            for state in self.urls['geos'].keys():
-                self.log("Building geo dim for {}".format(state))
-                self.run_geo_dim(state)
+    
+        if self.run_args.subphase in ['test']:
+            print self.states
+         
+        if self.run_args.subphase in ['all','geo-dim']:
+            # Split up the state geo files into .csv files, and 
+            # create the build/geodim files that will link logrecnos to
+            # geo split table records. 
+    
+            if self.run_args.multi and run_geo_dim_f:
+                
+                pool = Pool(processes=int(self.run_args.multi))
+          
+                result = pool.map_async(run_geo_dim_f, enumerate(self.urls['geos'].keys()))
+                print result.get()
+            else:
+                for state in self.states:
+                    self.run_geo_dim(state)
+             
+        if self.run_args.subphase in ['all','join-geo-dim']:   
+            self.join_geo_dim()
         
-        self.log("DONE, FOR TESTINING, in build()")
-        return False
+        if self.run_args.subphase in ['all','fact']:   
 
-
-        # Combine the geodim tables with the  state population tables, and
-        # produce .csv files for each of the tables. 
-        if self.run_args.multi and run_state_tables_f:
-            
-            pool = Pool(processes=int(self.run_args.multi))
+            # Combine the geodim tables with the  state population tables, and
+            # produce .csv files for each of the tables. 
+            if self.run_args.multi and run_state_tables_f:
+                
+                pool = Pool(processes=int(self.run_args.multi))
+          
+                result = pool.map_async(run_state_tables_f, enumerate(self.urls['geos'].keys()))
+                print result.get()
+            else:
+                for state in self.states:
+                    self.log("Building fact tables for {}".format(state))
+                    self.run_state_tables(state)
       
-            result = pool.map_async(run_state_tables_f, enumerate(self.urls['geos'].keys()))
-            print result.get()
-        else:
-            for state in self.urls['geos'].keys():
-                self.log("Building fact tables for {}".format(state))
-                self.run_state_tables(state)
       
-      
+        if self.run_args.subphase in ['all','load-fact']:  
         # Load all of the fact table tempfiles into the fact table databases
         # and store the databases in the library. 
-        if self.run_args.multi and run_fact_db_f:
-            pool = Pool(processes=int(self.run_args.multi))
-            
-            result = pool.map_async(run_fact_db_f, [ (n,table.id_) for n, table in enumerate(self.fact_tables())])
-            print result.get()
-        else:
-            for table in self.fact_tables():
-                self.run_fact_db(table.id_)
-          
+            if self.run_args.multi and run_fact_db_f:
+                pool = Pool(processes=int(self.run_args.multi))
+                
+                result = pool.map_async(run_fact_db_f, [ (n,table.id_) for n, table in enumerate(self.fact_tables())])
+                print result.get()
+            else:
+                for table in self.fact_tables():
+                    self.run_fact_db(table.id_)
+              
         return True
-    
-   
+
     def run_geo_dim(self, state):
         '''Break up the geo files into seperate files, combine them 
         nationally, and store them in temporary CSV files. Creates a set of 
@@ -328,14 +357,16 @@ class UsCensusBundle(BuildBundle):
             row_hash[table_id] = {}
      
         row_i = 0
+        
       
         marker_f = self.filesystem.build_path('markers',state+"_geo_dim")
         
         if os.path.exists(marker_f):
             self.log("Geo dim exists for {}, skipping".format(state))
             return
-
-        self.log("Initializing state: "+state+' ')
+        else:
+            self.log("Building geo dim for {}".format(state))
+       
 
         record_code_partition = self.get_record_code_partition(geo_processors, geo_partitions)
            
@@ -741,7 +772,7 @@ class UsCensusBundle(BuildBundle):
         
         m = hashlib.md5()
         for x in values[1:]:  # The first record is the primary key
-            m.update(str(x))   
+            m.update(str(x)+'|') # '|' is so 1,23,4 and 12,3,4 aren't the same   
         # Less than 16 to avoid integer overflow issues. Not sure it works. 
         hash = int(m.hexdigest()[:14], 16) # First 8 hex digits = 32 bit @ReservedAssignment
      
@@ -807,6 +838,109 @@ class UsCensusBundle(BuildBundle):
             tf.writer.writerow(values)
         
             return r
+
+    def join_geo_dim(self):
+        geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
+        geo_processors = self.geo_processors()
+
+
+        record_code_partition = self.get_record_code_partition(geo_processors, 
+                                                               geo_partitions)
+        geo_partitions = self.geo_partition_map() 
+        
+        hashes = {}
+        
+        for table_id, partition in  geo_partitions.items():
+            
+            #if partition.table.name in ['area','record_code','recno', 'block']:
+            #    continue
+            
+            #if partition.table.name != 'urban_type':
+            #    continue
+                
+            if partition.table.name == 'record_code':
+                continue
+            
+            hashes[table_id] = self._join_geo_dim(partition, self.states)
+           
+        print "DONE"
+           
+        import time
+        time.sleep(60)
+           
+    def _join_geo_dim(self, partition, states):
+        import time
+
+        t_start = time.time()
+      
+        row_i = 0;
+     
+        hash_map = {}
+        table_name = partition.table.name
+        
+        self.log("Build hash map for {}".format(partition.table.name))
+        
+        for state_num,state in enumerate(states):
+            tf = partition.database.tempfile(partition.table, suffix=state)
+            reader = tf.linereader
+            reader.next() # skip the header. 
+            line_no = 0
+            
+            for row in reader:
+                row_i += 1
+                line_no += 1
+                if row_i % 1000000 == 0:
+                    self.log("Hash "+str(int( row_i/(time.time()-t_start)))+
+                             '/s '+str(row_i/1000)+"K ")
+                    
+                hash = row[-1]
+           
+                
+                hash_map[hash] = (state, line_no, row_i)
+
+                
+            tf.close()
+                
+        if row_i != len(hash_map):
+            self.error("{}: hash map doesn't match number of input rows: {} != {}"
+                       .format(partition.table.name, len(hash_map), row_i))
+
+        return hash
+
+        row_i = 0;
+        t_start = time.time()
+        lines = {}
+        state_num = 0
+        for state in states:
+            state_num += 1
+            tf = record_code_partition.database.tempfile(record_code_partition.table, 
+                                                         suffix=state)
+            
+            reader = tf.linereader
+            reader.next() # skip the header. 
+            lines[state_num] = {}
+            for row in reader:
+                row_i += 1
+                
+                if row_i % 100000 == 0:
+                    self.log("GEO "+state+" "+str(int( row_i/(time.time()-t_start)))+
+                             '/s '+str(row_i/1000)+"K ")
+    
+                lines[state_num][int(row[2])] = ( int(row[3]),int(row[4]),int(row[5]),int(row[6]),
+                int(row[7]),int(row[8]),int(row[9]),int(row[10]),
+                int(row[11]),int(row[12]),int(row[13]),int(row[14]))   
+
+        print "Done "
+        print len(lines)
+        time.sleep(60)
+
+        return 
+        for table_id, cp in geo_processors.items():
+            partition = geo_partitions[table_id]
+            for state in states:
+                tf = partition.database.tempfile(partition.table, suffix=state)
+                print tf.path
+
 
 def make_geoid(state, county, tract, block=None, blockgroup=None):
     '''Create a geoid for common blocks. This is not appropriate for

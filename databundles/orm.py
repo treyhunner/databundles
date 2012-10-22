@@ -389,7 +389,7 @@ class Table(Base):
             return header, re.compile(regex) , regex 
 
     def get_fixed_unpack(self):
-            '''Using the size values for the columsn for the table, construct a
+            '''Using the size values for the columns for the table, construct a
             regular expression to  parsing a fixed width file.'''
         
             unpack_str = ''

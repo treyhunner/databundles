@@ -246,8 +246,6 @@ def run(argv, bundle_class):
         print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
         import time
         time.sleep(1)
-        
-        
 
     if 'clean' in args.phases:
         b.clean()

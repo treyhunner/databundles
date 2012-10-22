@@ -204,7 +204,7 @@ class Us2000CensusBundle(UsCensusBundle):
 
         geo_zip_file = self.filesystem.download(geo_source, test_zip_file)
         grf = self.filesystem.unzip(geo_zip_file)
-        geofile = open(grf, 'rbU')
+        geofile = open(grf, 'rbU', buffering=1*1024*1024)
                 
      
         first = True
@@ -283,17 +283,18 @@ class Us2000CensusBundle(UsCensusBundle):
     def geo_table_names(self):
         return ([
                  'record_code',
-                 'recno',
+                 'grain',
                  'area',
+                 'flags',
+                 'zacta',
                  'block',
-                 'cons_city',
+                 'state',
                  'county',
                  'leg_district',
                  'metro_type',
                  'place',
                  'schools',
                  'spec_area',
-                 'state', 
                  'urban_type',     
                  ]
                 )

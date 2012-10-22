@@ -95,9 +95,12 @@ class Filesystem(object):
         
         if config.get('dir',False):
 
-            return FsCache(config.get('dir'), 
-                           maxsize=config.get('size',10000))
-            
+            if config.get('size', False):
+                return FsLimitedCache(config.get('dir'), 
+                               maxsize=config.get('size',10000))
+            else:
+                return FsCache(config.get('dir'))               
+                
         elif config.get('bucket',False):
             
             return S3Cache(bucket=config.get('bucket'), 
@@ -475,7 +478,7 @@ class BundleFilesystem(Filesystem):
         return o
    
 
-class FsCache(object):
+class FsLimitedCache(object):
     '''A cache that transfers files to and from a remote filesystem
     
     The `FsCache` stores files in a filesystem, possily retrieving and storing
@@ -488,7 +491,6 @@ class FsCache(object):
     files are deleted to free up space. 
     
      '''
-
 
     def __init__(self, cache_dir, maxsize=10000, upstream=None):
         '''Init a new FileSystem Cache
@@ -505,6 +507,8 @@ class FsCache(object):
         self.maxsize = int(maxsize * 1048578)  # size in MB
         self.upstream = upstream
         self._database = None
+        
+        self.use_db = True
    
         if not os.path.isdir(self.cache_dir):
             os.makedirs(self.cache_dir)
@@ -515,6 +519,9 @@ class FsCache(object):
     @property
     def database(self):
         import sqlite3
+        
+        if not self.use_db:
+            raise Exception("Shoundn't get here")
         
         if not self._database:
             db_path = os.path.join(self.cache_dir, 'file_database.db')
@@ -530,7 +537,8 @@ class FsCache(object):
                 conn.execute(create_sql)
                 conn.close()
                 
-            self._database = sqlite3.connect(db_path)
+            # Long timeout to deal with contention during multiprocessing use
+            self._database = sqlite3.connect(db_path,60)
             
         return self._database
             
@@ -747,6 +755,161 @@ class FsCache(object):
         path = path.strip('/')
         
         raise NotImplementedError() 
+
+class FsCache(object):
+    '''A cache that transfers files to and from a remote filesystem
+    
+    The `FsCache` stores files in a filesystem, possily retrieving and storing
+    files to an upstream cache. 
+    
+    When files are written , they are written through to the upstream. If a file
+    is requested that does not exist, it is fetched from the upstream. 
+    
+    When a file is added that causes the disk usage to exceed `maxsize`, the oldest
+    files are deleted to free up space. 
+    
+     '''
+
+    def __init__(self, cache_dir,  upstream=None):
+        '''Init a new FileSystem Cache
+        
+        Args:
+            cache_dir
+            maxsize. Maximum size of the cache, in GB
+        
+        '''
+        
+        from databundles.dbexceptions import ConfigurationError
+        self.cache_dir = cache_dir
+        self.upstream = upstream
+     
+        if not os.path.isdir(self.cache_dir):
+            os.makedirs(self.cache_dir)
+        
+        if not os.path.isdir(self.cache_dir):
+            raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.cache_dir)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        p = self.get(rel_path)
+        
+        if not p:
+            return None
+        
+        return open(p)
+        
+    def get(self, rel_path):
+        '''Return the file path referenced but rel_path, or None if
+        it can't be found. If an upstream is declared, it will try to get the file
+        from the upstream before declaring failure. 
+        '''
+        import shutil
+
+        logger.debug("{} get {}".format(self.repo_id,rel_path)) 
+               
+        path = os.path.join(self.cache_dir, rel_path)
+      
+        # If is already exists in the repo, just return it. 
+        if  os.path.exists(path):
+            
+            if not os.path.isfile(path):
+                raise ValueError("Path does not point to a file")
+            
+            logger.debug("{} get {} found ".format(self.repo_id, path))
+            return path
+            
+        if not self.upstream:
+            # If we don't have an upstream, then we are done. 
+            return None
+     
+        stream = self.upstream.get_stream(rel_path)
+        
+        if not stream:
+            logger.debug("{} get not found in upstream ()".format(self.repo_id,rel_path)) 
+            return None
+        
+        # Got a stream from upstream, so put the file in this cache. 
+        dirname = os.path.dirname(path)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        
+        with open(path,'w') as f:
+            shutil.copyfileobj(stream, f)
+        
+        stream.close()
+        
+        if not os.path.exists(path):
+            raise Exception("Failed to copy upstream data to {} ".format(path))
+        
+        logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
+        return path
+    
+    def put(self, source, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            source: Absolute path to the source file, or a file-like object
+            rel_path: path relative to the root of the repository
+        
+        '''
+        
+        import shutil
+    
+        repo_path = os.path.join(self.cache_dir, rel_path)
+      
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+    
+        try:
+            # Try it as a file-like object
+            shutil.copyfileobj(source, repo_path)
+            source.seek(0)
+        except AttributeError: 
+            # Nope, try a filename. 
+            shutil.copyfile(source, repo_path)
+            
+        size = os.path.getsize(repo_path)
+
+        if self.upstream:
+            self.upstream.put(source, rel_path)
+
+        return repo_path
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        if self.upstream:
+            return self.upstream.find(query)
+        else:
+            return False
+    
+    def remove(self,rel_path, propagate = False):
+        '''Delete the file from the cache, and from the upstream'''
+        repo_path = os.path.join(self.cache_dir, rel_path)
+
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+
+        self.database.commit()
+            
+        if self.upstream and propagate :
+            self.upstream.remove(rel_path)    
+            
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
+
 
 
 class S3Cache(object):
