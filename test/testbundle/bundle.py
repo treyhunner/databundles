@@ -54,6 +54,8 @@ class Bundle(BuildBundle):
         # Now write random data to each of the pable partitions. 
         
         for partition in self.partitions.all:
+            if partition.table.name == 'all':
+                continue;
             #self.log("Loading "+partition.name)
             db = partition.database.path
             table_name = partition.table.name

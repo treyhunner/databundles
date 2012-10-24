@@ -295,21 +295,4 @@ class Us2010CensusBundle(UsCensusBundle):
                         raise Exception("Should not hae extra items left. got {} ".format(str(lines_left)))
 
 
-    def geo_table_names(self):
-        return (['record_code',
-                 'recno',
-                 'area',
-                 'block',
-                 'cons_city',
-                 'county',
-                 'leg_district',
-                 'metro_type',
-                 'place',
-                 'schools',
-                 'spec_area',
-                 'state', 
-                 'urban_type',     
-                 ]
-                )
- 
             

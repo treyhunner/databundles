@@ -183,13 +183,17 @@ class CensusTransform(BasicTransform):
             msg = column.name
             f = lambda v, msg = msg: coerce_float_except(v, msg)
         else:
-            f = lambda v: v
+            f = lambda v: v.strip()
 
         if column.default and column.default.strip():
             if column.datatype == 'text':
                 default = column.default 
+            elif column.datatype == 'real':
+                default = float(column.default) 
+            elif column.datatype == 'integer':
+                default = int(column.default) 
             else:
-                default = int(column.default)
+                raise ValueError('Unknown column datatype: '+column.datatype)
         else:
             default = None
         

@@ -97,12 +97,13 @@ class Us2000CensusBundle(UsCensusBundle):
         files. This one is specific to the files produced by dumpoing the Access97
         shell for the 2000 census '''
         import csv
-        
+
         with open(self.headers_file, 'rbU') as f:
             reader  = csv.DictReader(f )
             last_seg = None
             table = None
             for row in reader:
+
                 if not row['TABLE']:
                     continue
                 
@@ -280,22 +281,5 @@ class Us2000CensusBundle(UsCensusBundle):
 #                                pass
 
                 
-    def geo_table_names(self):
-        return ([
-                 'record_code',
-                 'grain',
-                 'area',
-                 'flags',
-                 'zacta',
-                 'block',
-                 'state',
-                 'county',
-                 'leg_district',
-                 'metro_type',
-                 'place',
-                 'schools',
-                 'spec_area',
-                 'urban_type',     
-                 ]
-                )
+
   

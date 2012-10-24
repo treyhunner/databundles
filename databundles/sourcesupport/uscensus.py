@@ -9,7 +9,7 @@ Base class bundle for the US Census
 from  databundles.bundle import BuildBundle
 import os.path  
 import yaml
-import threading
+
 
 
 
@@ -65,30 +65,17 @@ class UsCensusBundle(BuildBundle):
 
         self.scrape_urls()
       
-        self.create_table_schema()
+        self.create_geo_dim_table_schema()
+      
+        self.create_fact_table_schema()
       
         self.make_range_map()
-
-        self.create_split_table_schema()
     
         self.generate_partitions()
  
         return True
     
-    @property
-    def geo_tables(self):
-        
-        if self._geo_tables is None:
-            self._geo_tables = []
-            m = { t.name:t for t in self.schema.tables }
-            
-            for table_name in self.geo_table_names():
-                table = m[table_name]
-                
-                if table.data.get('split_table', '') == 'A':
-                    self._geo_tables.append(table)
-                    
-        return self._geo_tables
+
     
     @property
     def states(self):
@@ -128,6 +115,12 @@ class UsCensusBundle(BuildBundle):
         segment = None
        
         for table in self.schema.tables:
+            
+            if table.data.get("split_table", False) or table.name == 'sf1geo':
+                # Don't look at geo dim tables
+                continue;
+            
+            print "TABLE", table.name
             
             if segment != int(table.data['segment']):
                 last_col = 4
@@ -195,7 +188,46 @@ class UsCensusBundle(BuildBundle):
         
         return True
 
-    def create_table_schema(self):
+
+    def create_geo_dim_table_schema(self):
+        '''Create the split table schema from  the geoschema_filef. 
+        
+        The "split" tables are the individual tables, which are split out from 
+        the segment files. 
+        '''
+
+        if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
+            self.log("Reusing schema")
+            return True
+
+        from databundles.orm import Column
+        with open(self.geoschema_file, 'rbU') as f:
+            self.schema.schema_from_file(f)
+    
+        # Add extra fields to all of the split_tables
+        record_code_table = None
+        for table in self.schema.tables:
+            
+            if not table.data.get('split_table', False):
+                continue;
+            
+            # For each of the other geo dim tables, add a foreign key 
+            # to the record_code
+            if table.name == 'record_code':
+                # SHould be the first table. 
+                record_code_table = table
+            else:
+                record_code_table.add_column(table.name+"_id",
+                                             is_foreign_key =True,
+                                             datatype=Column.DATATYPE_INTEGER)
+            
+            # Add a hash column to store a hash value for all of the other values. 
+            # This is used in dicts in memory. 
+            if not table.column('hash', False):
+                table.add_column('hash',  datatype=Column.DATATYPE_INTEGER,
+                                  uindexes = 'uihash')
+                
+    def create_fact_table_schema(self):
         '''Uses the generate_schema_rows() generator to creeate rows for the fact table
         The geo split table is created in '''
         from databundles.orm import Column
@@ -205,7 +237,7 @@ class UsCensusBundle(BuildBundle):
         
         commit = False
         
-        if len(self.schema.tables) > 0 and len(self.schema.columns) > 0:
+        if len(self.schema.tables) > 20 and len(self.schema.columns) > 400:
             log("Reusing schema")
             return True
             
@@ -213,7 +245,7 @@ class UsCensusBundle(BuildBundle):
             log("Regenerating schema. This could be slow ... ")
         
         log("Generating main table schemas")
-      
+
         for row in self.generate_schema_rows():
 
             if row['type'] == 'table':
@@ -236,12 +268,20 @@ class UsCensusBundle(BuildBundle):
                 #                             The number of the segment file             
                 # LOGRECNO         Text (7),  Logical Record Number
 
-                for fk in self.geo_keys():
-                    self.schema.add_column(t, fk,
+                # Add all of the foreign keys for the geo tables to the 
+                # fact table record.  
+                #for fk in self.geo_keys():
+                #    self.schema.add_column(t, fk,
+                #                           datatype=Column.DATATYPE_INTEGER, 
+                #                           is_foreign_key =True,
+                #                            commit = commit)
+                
+                # Add a foreign key reference to the record_code table. 
+                self.schema.add_column(t, "record_code_id",
                                            datatype=Column.DATATYPE_INTEGER, 
                                            is_foreign_key =True,
                                            commit = commit)
-              
+                
             else:
 
                 if row['decimal'] and int(row['decimal']) > 0:
@@ -257,28 +297,10 @@ class UsCensusBundle(BuildBundle):
 
         tick("\n")
         
+
         if not commit: # If we don't commit in the library, must do it here. 
             self.database.session.commit()
 
-    def create_split_table_schema(self):
-        '''Create the split table schema from  the geoschema_filef. 
-        
-        The "split" tables are the individual tables, which are split out from 
-        the segment files. 
-        '''
-
-        from databundles.orm import Column
-        with open(self.geoschema_file, 'rbU') as f:
-            self.schema.schema_from_file(f)
-    
-        # Add extra fields to all of the split_tables
-        for table in self.schema.tables:
-            if not table.data.get('split_table', False):
-                continue;
-            
-            if not table.column('hash', False):
-                table.add_column('hash',  datatype=Column.DATATYPE_INTEGER,
-                                  uindexes = 'uihash')
 
     #############################################
     # Build 
@@ -290,6 +312,7 @@ class UsCensusBundle(BuildBundle):
         state. Then creates a partition for each of the geo files. '''
         from multiprocessing import Pool
     
+   
         if self.run_args.subphase in ['test']:
             print self.states
          
@@ -352,13 +375,15 @@ class UsCensusBundle(BuildBundle):
         geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
         geo_processors = self.geo_processors()
      
+        fileid  = self.config.build.fileid
+        release_id = self.config.build.release_id
+     
         row_hash = {} #@RservedAssignment
         for table_id, cp in geo_processors.items(): #@UnusedVariable
             row_hash[table_id] = {}
      
         row_i = 0
         
-      
         marker_f = self.filesystem.build_path('markers',state+"_geo_dim")
         
         if os.path.exists(marker_f):
@@ -367,7 +392,6 @@ class UsCensusBundle(BuildBundle):
         else:
             self.log("Building geo dim for {}".format(state))
        
-
         record_code_partition = self.get_record_code_partition(geo_processors, geo_partitions)
            
         tf = record_code_partition.database.tempfile(record_code_partition.table, suffix=state)
@@ -398,7 +422,7 @@ class UsCensusBundle(BuildBundle):
        
             # Iterate over all of the geo dimentino tables, taking part of this
             # geo rwo and putting it into the temp file for that geo dim table. 
-        
+      
             for table_id, cp in geo_processors.items():
                 table,  columns, processors = cp
             
@@ -411,12 +435,17 @@ class UsCensusBundle(BuildBundle):
                     # Write a record to the dimension table. 
                     #r = self.write_geo_row_db(row_hash, partition, table, columns, values)
                     r = self.write_geo_row_tf(row_hash, partition, table, columns, values, state)
-                   
+
                     geo_keys.append(r) 
 
             # The first None is for the primary id, the last is for the 
             # hash, which was added automatically to geo_dim tables. 
-            values = [None, state, logrecno] + geo_keys + [None]
+            
+            # The fileid comes from the bundle.yaml configuration b/c it is the same for all records
+            # in the bundle. 
+
+         
+            values = [None,fileid, state, int(logrecno)] + geo_keys + [None]
 
             tf = record_code_partition.database.tempfile(record_code_partition.table, suffix=state)
             tf.writer.writerow(values)
@@ -431,7 +460,6 @@ class UsCensusBundle(BuildBundle):
         with open(marker_f, 'w') as f:
             f.write(str(time.time()))
         
-   
     def run_state_tables(self, state):
         '''Split up the segment files into seperate tables, and link in the
         geo splits table for foreign keys to the geo splits. '''
@@ -648,7 +676,6 @@ class UsCensusBundle(BuildBundle):
         for table in self.fact_tables():
             partitions[table.id_] = self.fact_partition(table)
  
- 
         return partitions 
           
     #############
@@ -676,14 +703,23 @@ class UsCensusBundle(BuildBundle):
             processors += [lambda row : None]
      
             processor_set[table.id_] = (table, columns, processors )         
-             
-            
+               
         return processor_set
-   
-
+        
+    @property
+    def geo_tables(self):
+        
+        if self._geo_tables is None:
+      
+            self._geo_tables = []
+            for table in self.schema.tables:
+                if table.data.get('split_table',None) == 'A':
+                    self._geo_tables.append(table)
+                    
+        return self._geo_tables
         
     def geo_keys(self):
-        return  [ t+'_id' for t in self.geo_table_names()]
+        return  [ t.name+'_id' for t in self.geo_tables]
     
     def geo_key_columns(self):
         ''' '''
@@ -778,51 +814,10 @@ class UsCensusBundle(BuildBundle):
      
         return hash
 
-    def write_geo_row_db(self, hash, partition, table, columns,values): #@ReservedAssignment
-        '''Write a geo split table row to the temporary file, but only
-        if the hash for the row has never been seen. 
-        
-        This operation is wrapped in a lock to protect both the hash and file
-        '''
-        from sqlalchemy.exc import ProgrammingError
-        
-        with self._geo_dim_locks[table.id_]:
-        
-            th = hash[table.id_]
-                    
-            if values[-1] in th:
-                return th[values[-1]]
-            else:                   
-                r = len(th)+1
-                th[values[-1]] = r
-                values[0] = r
-                
-                table_meta = partition.database.table(table.name)
-                ins = table_meta.insert(values=values)
-                try:
-                    partition.database.session.execute(ins) 
-                except ProgrammingError: 
-                    # This usually happens when we try to insert an 8-bit string
-                    # The Census files are encoded in IBM850, and these error cases
-                    # are converted to unicode. 
-                    
-                    ov = values
-                    values = []
-                    for v in ov:
-                        if isinstance(v, basestring):
-                            values.append(unicode(v.decode("IBM850")))
-                        else:
-                            values.append(v)
-                    ins = table_meta.insert(values=values)
-                    partition.database.session.execute(ins) 
-            
-            return r
-        
     def write_geo_row_tf(self, hash, partition, table, columns,values, state): #@ReservedAssignment
         '''Write a geo split table row to the temporary file, but only
         if the hash for the row has never been seen. 
-        
-        This operation is wrapped in a lock to protect both the hash and file
+       
         '''
 
         th = hash[table.id_]
@@ -843,7 +838,6 @@ class UsCensusBundle(BuildBundle):
         geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
         geo_processors = self.geo_processors()
 
-
         record_code_partition = self.get_record_code_partition(geo_processors, 
                                                                geo_partitions)
         geo_partitions = self.geo_partition_map() 
@@ -852,60 +846,64 @@ class UsCensusBundle(BuildBundle):
         
         for table_id, partition in  geo_partitions.items():
             
-            #if partition.table.name in ['area','record_code','recno', 'block']:
-            #    continue
-            
-            #if partition.table.name != 'urban_type':
-            #    continue
-                
-            if partition.table.name == 'record_code':
+            if partition.table.name in ['block','area','record_code']:
                 continue
             
             hashes[table_id] = self._join_geo_dim(partition, self.states)
-           
-        print "DONE"
-           
-        import time
-        time.sleep(60)
+
            
     def _join_geo_dim(self, partition, states):
+        """Assemble the partition into a the database partition, 
+        and create a lookup file to be used later to set the new values for
+        recno """
         import time
 
         t_start = time.time()
       
         row_i = 0;
-     
-        hash_map = {}
+
         table_name = partition.table.name
         
         self.log("Build hash map for {}".format(partition.table.name))
-        
-        for state_num,state in enumerate(states):
-            tf = partition.database.tempfile(partition.table, suffix=state)
-            reader = tf.linereader
-            reader.next() # skip the header. 
-            line_no = 0
-            
-            for row in reader:
-                row_i += 1
-                line_no += 1
-                if row_i % 1000000 == 0:
-                    self.log("Hash "+str(int( row_i/(time.time()-t_start)))+
-                             '/s '+str(row_i/1000)+"K ")
-                    
-                hash = row[-1]
-           
-                
-                hash_map[hash] = (state, line_no, row_i)
 
+        hash_map = {}
+        with partition.database.inserter(partition.table) as ins:
+            for state_num,state in enumerate(states):
+                tf = partition.database.tempfile(partition.table, suffix=state)
+                reader = tf.linereader
+                reader.next() # skip the header. 
+                line_no = 0
                 
-            tf.close()
-                
+                for row in reader:
+                    row_i += 1
+                    line_no += 1
+    
+                    if row_i % 100000 == 0:
+                        self.log("Hash "+table_name+" "+
+                             str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
+    
+                    hash = row[-1]
+                    if hash not in hash_map:
+                        out_row = [row_i] + row[1:-1] +[None]
+                        hash_map[state+str(line_no)] =  row_i
+                        ins.insert(out_row)
+                        
+                tf.close()
+   
+        
+        self.log("Hash "+table_name+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
+                    
         if row_i != len(hash_map):
             self.error("{}: hash map doesn't match number of input rows: {} != {}"
                        .format(partition.table.name, len(hash_map), row_i))
 
-        return hash
+        print partition.table.name, len(hash_map)
+        
+        
+        
+        return hash_map
+    
+    
 
         row_i = 0;
         t_start = time.time()
@@ -913,8 +911,8 @@ class UsCensusBundle(BuildBundle):
         state_num = 0
         for state in states:
             state_num += 1
-            tf = record_code_partition.database.tempfile(record_code_partition.table, 
-                                                         suffix=state)
+            #tf = record_code_partition.database.tempfile(record_code_partition.table, 
+            #                                             suffix=state)
             
             reader = tf.linereader
             reader.next() # skip the header. 
@@ -935,11 +933,11 @@ class UsCensusBundle(BuildBundle):
         time.sleep(60)
 
         return 
-        for table_id, cp in geo_processors.items():
-            partition = geo_partitions[table_id]
-            for state in states:
-                tf = partition.database.tempfile(partition.table, suffix=state)
-                print tf.path
+        #for table_id, cp in geo_processors.items():
+        #    partition = geo_partitions[table_id]
+        #    for state in states:
+        #        tf = partition.database.tempfile(partition.table, suffix=state)
+        #        print tf.path
 
 
 def make_geoid(state, county, tract, block=None, blockgroup=None):
@@ -964,7 +962,15 @@ def make_geoid(state, county, tract, block=None, blockgroup=None):
     if blockgroup is not None:
         x = x + blockgroup.rjust(4, '0')
     
+def make_lrid(state, logrecno):
+    """ The LRID -- Logical Record Id -- is a unique id for a logical record
+    in a census file, composed of thedistinguishing identifiers for logrec lines
+    and the identity of census file releases. 
     
+    :param config: a `RunConfig` object
+    :rtype: a `Library` object
+    
+    """
     
 
         

@@ -25,7 +25,7 @@ class ValueInserter(object):
         
     def __exit__(self, type_, value, traceback):
         self.session.commit()
-        pass
+        return self
         
 class TempFile(object): 
            
@@ -302,16 +302,23 @@ class Database(object):
             pass
         
 
-    def inserter(self, table_name):
+    def inserter(self, table_or_name):
       
-        if not table_name in self.inspector.get_table_names():
-            t_meta, table = self.bundle.schema.get_table_meta(table_name) #@UnusedVariable
-            t_meta.create_all(bind=self.engine)
-            
+        if isinstance(table_or_name, basestring):
+            table_name = table_or_name
             if not table_name in self.inspector.get_table_names():
-                raise Exception("Don't have table "+table_name)
+                t_meta, table = self.bundle.schema.get_table_meta(table_name) #@UnusedVariable
+                t_meta.create_all(bind=self.engine)
+                
+                if not table_name in self.inspector.get_table_names():
+                    raise Exception("Don't have table "+table_name)
+            table = self.table(table_name)
+            
+        else:
+            table = self.table(table_or_name.name)
+            
         
-        return ValueInserter(self.bundle, self.table(table_name), self)
+        return ValueInserter(self.bundle, table , self)
         
     def load_sql(self, sql_file):
         import sqlite3
