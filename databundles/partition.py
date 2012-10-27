@@ -253,17 +253,7 @@ class Partitions(object):
         
         s = self.bundle.database.session
         return s.query(OrmPartition)
-
-    def find(self, pid=None, **kwargs):
-        '''Return a Partition object from the database based on a PartitionId.
-        The object returned is immutable; changes are not persisted'''
-        op = self.find_orm(pid, **kwargs)
-        
-        if op is not None:
-            return self.partition(op)
-        else:
-            return None
-    
+ 
     
     def get(self, id_):
         '''Get a partition by the id number 
@@ -289,6 +279,24 @@ class Partitions(object):
       
         return self.partition(q.one())
 
+    def find_table(self, table_name):
+        '''Return the first partition that has the given table name'''
+        
+        for partition in self.all:
+            if partition.table and partition.table.name == table_name:
+                return partition
+            
+        return None
+
+    def find(self, pid=None, **kwargs):
+        '''Return a Partition object from the database based on a PartitionId.
+        The object returned is immutable; changes are not persisted'''
+        op = self.find_orm(pid, **kwargs)
+        
+        if op is not None:
+            return self.partition(op)
+        else:
+            return None
     
     def find_orm(self, pid=None, **kwargs):
         '''Return a Partition object from the database based on a PartitionId.

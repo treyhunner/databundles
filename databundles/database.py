@@ -13,20 +13,66 @@ class ValueInserter(object):
         self.table = table
         self.db = db
         self.session = self.db.session
+        self.connection = self.db.connection
         self.ins = self.table.insert()
-      
+        self.cache = []
+        self.header = [c.name for c in self.table.columns]
+        self.transaction = None
+
     def insert(self, values):
-        ins = self.ins.values(values)
-        self.session.execute(ins) 
+        #ins = self.ins.values(values)
+        
+        try:
+            d  = dict(zip(self.header, values))
+         
+            self.cache.append(d)
+         
+            if len(self.cache) > 50000:  
+                self.connection.execute(self.ins, self.cache)
+                self.cache = []
+                
+        except (KeyboardInterrupt, SystemExit):
+            self.transaction.rollback()
+            self.transaction = None
+            self.cache = []
+            raise
+        except Exception as e:
+            self.bundle.error("Exception during ValueInserter.insert: "+str(e))
+            self.transaction.rollback()
+            self.transaction = None
+            self.cache = []
+            raise e
+
+        return True
 
     def __enter__(self): 
-        self.session.begin(subtransactions=True)
+        self.transaction = self.connection.begin()
         return self
         
     def __exit__(self, type_, value, traceback):
-        self.session.commit()
+        
+        if len(self.cache) > 0:       
+            try:
+                self.connection.execute(self.ins, self.cache)
+                self.transaction.commit()
+                self.transaction = None
+                self.cache = []
+            except (KeyboardInterrupt, SystemExit):
+                self.transaction.rollback()
+                self.transaction = None
+                raise
+            except Exception as e:
+                self.bundle.error("Exception during ValueInserter.insert: "+str(e))
+                self.transaction.rollback()
+                self.transaction = None
+                raise
+        else:
+            if self.transaction:
+                self.transaction.commit()
+                
         return self
         
+    
 class TempFile(object): 
            
     def __init__(self, bundle,  db, table, suffix=None, header=None):
@@ -576,8 +622,7 @@ class Database(object):
             f['to_table'] = table[1]
         else:
             raise Exception("Unknown table type "+str(type(table)))
-      
-      
+
         if columns is None:
             pass
         elif isinstance(columns, dict):
@@ -668,8 +713,7 @@ class BundleDb(Database):
 
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''
-    # Not clear that there is a performance improvement. 
-    return 
+
     dbapi_con.execute('PRAGMA journal_mode = OFF')
     dbapi_con.execute('PRAGMA synchronous = OFF')
     dbapi_con.execute('PRAGMA temp_store = MEMORY')

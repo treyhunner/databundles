@@ -3,9 +3,9 @@ Created on Aug 19, 2012
 
 @author: eric
 '''
-from  databundles.sourcesupport.uscensus import UsCensusBundle
+from  databundles.sourcesupport.uscensus import UsCensusDimBundle, UsCensusFactBundle
 
-class Us2000CensusBundle(UsCensusBundle):
+class Us2000CensusDimBundle(UsCensusDimBundle):
     '''
     Bundle code for US 2000 Census, Summary File 1
     '''
@@ -13,19 +13,119 @@ class Us2000CensusBundle(UsCensusBundle):
     def __init__(self,directory=None):
         
         
-        self.super_ = super(Us2000CensusBundle, self)
+        self.super_ = super(Us2000CensusDimBundle, self)
         self.super_.__init__(directory)
         
-        bg = self.config.build
-        self.segmap_file =  self.filesystem.path(bg.segMapFile)
-        self.headers_file =  self.filesystem.path(bg.headersFile)
-        self.geoschema_file = self.filesystem.path(bg.geoschemaFile)
-        self.rangemap_file =  self.filesystem.path(bg.rangeMapFile)
-        self.urls_file =  self.filesystem.path(bg.urlsFile)
-        self.states_file =  self.filesystem.path(bg.statesFile)
         
-        self._table_id_cache = {}
-        self._table_iori_cache = {}
+    def _scrape_urls(self, rootUrl, states_file, suffix='_uf1'):
+        '''Extract all of the URLS from the Census website and store them'''
+        import urllib
+        import urlparse
+        import re
+        from bs4 import BeautifulSoup
+    
+        log = self.log
+        tick = self.ptick
+    
+        # Load in a list of states, so we know which links to follow
+        with open(states_file) as f:
+            states = map(lambda s: s.strip(),f.readlines())
+        
+        # Root URL for downloading files. 
+       
+        self.log('Getting URLS from '+rootUrl)
+       
+        doc = urllib.urlretrieve(rootUrl)
+  
+        # Get all of the links
+        log('S = state, T = segment table, g = geo')
+        tables = {}
+        geos = {}
+       
+        with open(doc[0]) as df:
+            for link in BeautifulSoup(df).find_all('a'):
+                tick('S')
+                if not link.get('href') or not link.string or not link.contents:
+                    continue;# Didn't get a sensible link
+                # Only descend into links that name a state
+                state = link.get('href').strip('/')
+              
+                if link.string and link.contents[0] and state in states :
+                    stateUrl = urlparse.urljoin(rootUrl, link.get('href'))
+                    stateIndex = urllib.urlretrieve(stateUrl)
+                    # Get all of the zip files in the directory
+                    
+                    with open(stateIndex[0]) as f:          
+                        for link in  BeautifulSoup(f).find_all('a'):
+                            
+                            if link.get('href') and  '.zip' in link.get('href'):
+                                final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
+                               
+                                if 'geo'+suffix in final_url:
+                                    tick('g')
+                                    state = re.match('.*/(\w{2})geo'+suffix, final_url).group(1)
+                                    geos[state] = final_url
+
+            
+        return {'tables':tables,'geos':geos}
+                      
+    def generate_rows(self, state):
+        '''A Generator that yelds a tuple that has the logrecno row
+        for all of the segment files and the geo file. '''
+        import struct
+
+        table = self.schema.table('sf1geo')
+        header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable    
+
+        rows = 0;
+
+        def test_zip_file(f):
+            import zipfile
+            try:
+                with zipfile.ZipFile(f) as zf:
+                    return zf.testzip() is None
+            except zipfile.BadZipfile:
+                return False
+
+        geo_source = self.urls['geos'][state]
+        geo_zip_file = self.filesystem.download(geo_source, test_zip_file)
+        grf = self.filesystem.unzip(geo_zip_file)
+        geofile = open(grf, 'rbU', buffering=1*1024*1024)
+
+        for line in geofile.readlines():
+            
+            rows  += 1
+            
+            if rows > 20000 and self.run_args.test:
+                break
+
+            try:
+                geo = struct.unpack(unpack_str, line[:-1])
+            except struct.error as e:
+                self.error("Struct error for state={}, file={}, line_len={}, row={}, \nline={}"
+                           .format(state,grf,len(line),rows, line))
+                raise e
+             
+            if not geo:
+                raise ValueError("Failed to match regex on line: "+line) 
+
+            yield dict(zip(header,geo))
+
+        geofile.close()
+
+                
+
+class Us2000CensusFactBundle(UsCensusFactBundle):
+    '''
+    Bundle code for US 2000 Census, Summary File 1
+    '''
+
+    def __init__(self,directory=None):
+        
+        
+        self.super_ = super(Us2000CensusFactBundle, self)
+        self.super_.__init__(directory)
+        
         
     def _scrape_urls(self, rootUrl, states_file, suffix='_uf1'):
         '''Extract all of the URLS from the Census website and store them'''
@@ -178,7 +278,7 @@ class Us2000CensusBundle(UsCensusBundle):
             raise RuntimeError("Didn't get any lines from {} ".format(zip_file))
                  
         return
-                    
+ 
     def generate_rows(self, state, geodim=False):
         '''A Generator that yelds a tuple that has the logrecno row
         for all of the segment files and the geo file. '''
@@ -206,8 +306,7 @@ class Us2000CensusBundle(UsCensusBundle):
         geo_zip_file = self.filesystem.download(geo_source, test_zip_file)
         grf = self.filesystem.unzip(geo_zip_file)
         geofile = open(grf, 'rbU', buffering=1*1024*1024)
-                
-     
+
         first = True
         for line in geofile.readlines():
             
@@ -270,16 +369,3 @@ class Us2000CensusBundle(UsCensusBundle):
             yield state, segments[1][4], dict(zip(header,geo)), segments, geodim
 
         geofile.close()
-
-#                    # Check that there are no extra lines. 
-#                    if not self.run_args.test:
-#                        for g in gens:
-#                            try:
-#                                while g.next(): 
-#                                    raise Exception("Should not have extra items left")
-#                            except StopIteration:
-#                                pass
-
-                
-
-  

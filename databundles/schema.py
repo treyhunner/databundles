@@ -219,8 +219,7 @@ class Schema(object):
                     
                     constraints[cons.strip()].append(column.name)
             
-    
-    
+
         # Append constraints. 
         for constraint, columns in constraints.items():
             at.append_constraint(UniqueConstraint(name=constraint,*columns))
@@ -232,9 +231,9 @@ class Schema(object):
         # Add unique indexes   
         for index, columns in uindexes.items():
             Index(index, unique = True ,*columns)
-    
-        return metadata, at
         
+        return metadata, at
+ 
     def create_tables(self):
         '''Create the defined tables as database tables.'''
         self.bundle.database.commit()
@@ -317,8 +316,7 @@ class Schema(object):
             data = { k.replace('d_','',1): v for k,v in row.items() if k.startswith('d_') }
             
             description = row.get('description','').strip()
-            
-            
+
             self.add_column(t,row['column'],
                                    is_primary_key= True if row.get('is_pk', False) else False,
                                    is_foreign_key= True if row.get('is_fk', False) else False,

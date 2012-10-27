@@ -183,7 +183,14 @@ class CensusTransform(BasicTransform):
             msg = column.name
             f = lambda v, msg = msg: coerce_float_except(v, msg)
         else:
-            f = lambda v: v.strip()
+           
+            # This answer claims that the files are encoded in IBM850, but for the 2000
+            # census, latin1 seems to work correctly. 
+            # http://stackoverflow.com/questions/2477360/character-encoding-for-us-census-cartographic-boundary-files
+            
+            # Unicode, et al, is $#^#% horrible, so we're punting and using XML encoding, 
+            # which we will claim is to make the name appear correctly in web pages.       
+            f = lambda v: v.strip().decode('latin1').encode('ascii','xmlcharrefreplace')
 
         if column.default and column.default.strip():
             if column.datatype == 'text':
