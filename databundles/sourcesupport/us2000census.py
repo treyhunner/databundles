@@ -70,8 +70,8 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
         return {'tables':tables,'geos':geos}
                       
     def generate_rows(self, state):
-        '''A Generator that yelds a tuple that has the logrecno row
-        for all of the segment files and the geo file. '''
+        '''A generator that yield rows from the state geo files. It will 
+        unpack the fixed width file and return a dict'''
         import struct
 
         table = self.schema.table('sf1geo')
@@ -104,7 +104,6 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
             except struct.error as e:
                 self.error("Struct error for state={}, file={}, line_len={}, row={}, \nline={}"
                            .format(state,grf,len(line),rows, line))
-                raise e
              
             if not geo:
                 raise ValueError("Failed to match regex on line: "+line) 

@@ -15,6 +15,7 @@ class PartitionIdentity(Identity):
     time = None
     space = None
     table = None
+    grain = None
     
     def __init__(self, *args, **kwargs):
 
@@ -103,6 +104,7 @@ class Partition(object):
         self.record = record
         
         self._database =  None
+        self._tempfile_cache = {}
      
     def init(self):
         '''Initialize the partition, loading in any SQL, etc. '''
@@ -121,7 +123,7 @@ class Partition(object):
        
         source =  name_parts.pop(0)
         p = self.identity
-        partition_path = [ str(i) for i in [p.time,p.space,p.table] if i is not None]
+        partition_path = [ str(i) for i in [p.time,p.space,p.table,p.grain] if i is not None]
        
         return source,  name_parts, partition_path 
     
@@ -145,6 +147,27 @@ class Partition(object):
             self._database = PartitionDb(self.bundle, self, file_path=path)
             
         return self._database
+
+    def tempfile(self, table=None, suffix=None,ignore_first=False):
+        '''Return a tempfile object for this partition'''
+        
+        ckey = (table,suffix)
+
+        tf = self._tempfile_cache.get(ckey, None)   
+        if tf:
+            return tf
+        else:                
+            if table is None and self.table:
+                table = self.table;
+            tf = self.database.tempfile(table, suffix=suffix, ignore_first=ignore_first)
+            self._tempfile_cache[ckey] = tf
+            return tf
+      
+
+    @property
+    def data(self):
+        return self.record.data
+    
     
     @property
     def table(self):
@@ -192,6 +215,10 @@ class Partition(object):
                 t_meta, table = self.bundle.schema.get_table_meta(t) #@UnusedVariable
                 t_meta.create_all(bind=self.database.engine)
     
+
+    def create(self):
+        self.create_with_tables(tables=self.identity.table)
+
 
     def __repr__(self):
         return "<partition: {}>".format(self.name)
@@ -273,6 +300,10 @@ class Partitions(object):
         # This is needed to flush newly created partitions, I think ... 
         self.bundle.database.session.close()
         
+        if isinstance(id_, PartitionIdentity):
+            id_ = id_.identity.id_
+            
+        
         q = (self.bundle.database.session
              .query(OrmPartition)
              .filter(OrmPartition.id_==id_.encode('ascii')))
@@ -327,6 +358,7 @@ class Partitions(object):
             q = q.filter(OrmPartition.grain==grain)
     
         if table is not None:
+        
             tr = self.bundle.schema.table(table)
             
             q = q.filter(OrmPartition.t_id==tr.id_)
@@ -352,6 +384,7 @@ class Partitions(object):
          
         op = OrmPartition(name = pid.name,
              space = pid.space,
+             grain = pid.grain, 
              time = pid.time,
              t_id = table.id_ if table else None,
              d_id = self.bundle.identity.id_,
@@ -381,6 +414,25 @@ class Partitions(object):
         p = self.partition(op)
         return p
 
+    def find_or_new(self, pid):
 
+        partition =  self.find(pid)
+        
+        if not partition:
+            partition = self.new_partition(pid)
+        
+        return partition;
+    
+    def delete(self, partition):
+        from databundles.orm import Partition as OrmPartition
+        
+
+        q = (self.bundle.database.session
+             .query(OrmPartition)
+             .filter(OrmPartition.id_==partition.identity.id_))
+      
+        q.delete()
+  
+    
               
 

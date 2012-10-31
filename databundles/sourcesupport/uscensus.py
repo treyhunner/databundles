@@ -55,9 +55,7 @@ class UsCensusBundle(BuildBundle):
                              type=csv,  help='Specify a sub-phase')
         
         return parser
-    
-
-
+ 
     def scrape_urls(self, suffix='_uf1'):
         
         if os.path.exists(self.urls_file):
@@ -71,7 +69,6 @@ class UsCensusBundle(BuildBundle):
             
         return self.urls
 
- 
     #############################################
     # Generate rows from multiple files?
 
@@ -125,6 +122,51 @@ class UsCensusDimBundle(UsCensusBundle):
  
         return True    
     
+    def create_hash_map_table(self,name):
+        from databundles.orm import Column
+        
+        t = self.schema.add_table(name,data={'temp':True})
+
+        self.schema.add_column(t, name+"_id",
+                       datatype=Column.DATATYPE_INTEGER, 
+                       is_primary_key =True,commit = False)
+
+        self.schema.add_column(t, 'geoid',
+                       datatype=Column.DATATYPE_INTEGER, 
+                       commit = False,
+                       uindexes = name+'_lrid'
+                       )
+        
+        self.schema.add_column(t, 'logrecno',
+                       datatype=Column.DATATYPE_INTEGER, 
+                       commit = False,
+                       uindexes = name+'_lrid'
+                       )
+
+        self.schema.add_column(t, 'hash',
+                       datatype=Column.DATATYPE_INTEGER, 
+                       commit = False)
+        
+        self.schema.add_column(t, 'rec_id',
+                       datatype=Column.DATATYPE_INTEGER, 
+                       commit = False)
+
+
+        
+        #for col_name in ['fileid','stusab','sumlev','geocomp','chariter','cisfn','logrecno']:   
+        #    self.schema.add_column(t, col_name,
+        #                           datatype=Column.DATATYPE_INTEGER, 
+        #                           is_foreign_key =True,commit = False)
+
+     
+        # Also make a partition for the table. 
+        from databundles.partition import PartitionIdentity
+
+        partition = self.partitions.find_or_new(PartitionIdentity(self.identity, table=name))
+        partition.data['temp'] = True
+        partition.data['map'] = True
+
+        self.database.session.commit()
 
     def create_geo_dim_table_schema(self):
         '''Create the split table schema from  the geoschema_filef. 
@@ -151,12 +193,16 @@ class UsCensusDimBundle(UsCensusBundle):
             # For each of the other geo dim tables, add a foreign key 
             # to the record_code
             if table.name == 'record_code':
-                # SHould be the first table. 
+                # Should be the first table. 
                 record_code_table = table
             else:
                 record_code_table.add_column(table.name+"_id",
                                              is_foreign_key =True,
-                                             datatype=Column.DATATYPE_INTEGER)
+                                             datatype=Column.DATATYPE_INTEGER64)
+                
+                # Also create another table that we will use to map the geo dim hash
+                # values back to sequentual numbers. 
+                self.create_hash_map_table(table.name+"_map")
             
             # Add a hash column to store a hash value for all of the other values. 
             # This is used in dicts in memory. 
@@ -176,6 +222,10 @@ class UsCensusDimBundle(UsCensusBundle):
             if not partition:
                 self.log("Create partition for "+table.name)
                 partition = self.partitions.new_partition(pid)
+                
+                
+        # The map files link the hash for a split table to the sequential id for that
+        # table. 
 
     @property
     def states(self):
@@ -264,6 +314,10 @@ class UsCensusDimBundle(UsCensusBundle):
             print self.states
             print self.states_dict
          
+        # Special process to run the sf1geo partition
+        if self.run_args.subphase in ['sf1geo']:
+            self.run_sf1_geo()
+         
         # Split up the state geo files into .csv files, and 
         # create the build/geodim files that will link logrecnos to
         # geo split table records. 
@@ -296,14 +350,70 @@ class UsCensusDimBundle(UsCensusBundle):
                 for table_id, partition in  self.geo_partition_map().items(): #@UnusedVariable
                     self.join_geo_dim(partition)
 
+        if self.run_args.subphase in ['all','join-maps']:  
+            self.join_maps()
+
+        if self.run_args.subphase in ['all','reindex']:  
+            self.reindex()
+
+        return False
+
+        # Join all of the seperate partitions into a single partition
+        
+        if self.run_args.subphase in ['all','join-partitions']:  
+            self.join_partitions()
+
+        if self.run_args.subphase in ['all','load-sql']:  
+            self.post_create_file =  self.filesystem.path(self.config.build.postCreateSql)
+            self.database.load_sql(self.post_create_file)
+
+        return True
+
+    def run_sf1_geo(self):
+        import time
+        from databundles.partition import PartitionIdentity
+        
+        t_start = time.time()
+        row_i = 0
+        
+        table = self.schema.table('sf1geo')
+        
+        pid = PartitionIdentity(self.identity, table=table.name)
+        partition = self.partitions.find(pid) # Find puts id_ into partition.identity
+        
+        if not partition:
+            self.log("Create partition for "+table.name)
+            partition = self.partitions.new_partition(pid)
+        
+        if not partition.database.exists():
+            partition.create_with_tables(table.name)
+        
+        partition.database.connection.execute("delete from sf1geo")
+        
+        # Make the sqlite connect allow 8 bit strings, which are used in 
+        # the names in Puerto Rico
+
+        with partition.database.inserter(partition.table) as ins:
+            for state in self.states:
+                for row in self.generate_rows(state): #@UnusedVariable
+                    
+                    row_i += 1
+                
+                    if row_i % 100000 == 0:
+                        # Prints the processing rate in 1,000 records per sec.
+                        self.log("SF1 "+state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
+                
+                    #print row['fileid'], row['stusab'], row['sumlev'], row['geocomp'], row['chariter'], row['cifsn'], row['logrecno']
+                    row['name'] = row['name'].decode('latin1').encode('ascii','xmlcharrefreplace')
+                    ins.insert(row)
 
 
+        partition.database.load_sql(self.filesystem.path(self.config.build.sf1IndexSql))
 
     def run_geo_dim(self, state):
-        '''Break up the geo files into seperate files, combine them 
-        nationally, and store them in temporary CSV files. Creates a set of 
-        files for each state, the geodim files, that link the state and logrecnos
-        to the primary keys for the geodim records. '''
+        '''Break up a state geo file into seperate geo dim split tables, as CSV files. 
+        This will aso create a CSV file for the record_code table for the state, which 
+        holds the hash values of the split table entries. '''
         
         import time
      
@@ -326,40 +436,52 @@ class UsCensusDimBundle(UsCensusBundle):
         else:
             self.log("Building geo dim for {}".format(state))
        
-        record_code_partition = self.get_record_code_partition(geo_processors, geo_partitions)
+        record_code_partition = self.get_record_code_partition(geo_partitions)
            
-        tf = record_code_partition.database.tempfile(record_code_partition.table, suffix=state)
+        tf = record_code_partition.tempfile( suffix=state)
         if tf.exists:
             tf.delete()
-                
+    
         # Delete any of the files that may still exist. 
                     
         for table_id, cp in geo_processors.items():
             partition = geo_partitions[table_id]
-            tf = partition.database.tempfile(partition.table, suffix=state)
+            tf = partition.tempfile(suffix=state)
+
             if tf.exists:
                 tf.delete()
+                
+            try:
+                # ignore_first removes the first id field from the header. We only need
+                # it here on the first call to tempfile, since the object is cached. 
+                ptmtf = partition.table_map.tempfile(suffix=state,ignore_first=True);
+                if ptmtf.exists:
+                    tf.delete()
+            except:
+                pass
 
         for geo in self.generate_rows(state): #@UnusedVariable
-           
-         
+  
             if row_i == 0:
                 self.log("Starting loop for state: "+state+' ')
                 t_start = time.time()
       
-            geo['_abbrev'] = state
+            geo['abbrev'] = state
       
             row_i += 1
             
-            if row_i % 5000 == 0:
+            if row_i % 10000 == 0:
                 # Prints the processing rate in 1,000 records per sec.
                 self.log("GEO "+state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
-            
-            geo_keys = []
+
+
+            geoid = self.make_geoid(fileid, state, geo['sumlev'], geo['geocomp'], 
+                                 geo['chariter'], geo['cifsn'])
        
             # Iterate over all of the geo dimension tables, taking part of this
             # geo row and putting it into the temp file for that geo dim table. 
       
+            hash_keys = []
             for table_id, cp in geo_processors.items():
                 table,  columns, processors = cp #@UnusedVariable
             
@@ -379,19 +501,21 @@ class UsCensusDimBundle(UsCensusBundle):
                     th.add(row_hash)
                     values[0] = row_hash
                     
-                    tf = partition.database.tempfile(table, suffix=state)
-                    tf.writer.writerow( values)
-                    
-                geo_keys.append(row_hash) 
+                    tf = partition.tempfile( suffix=state)
+                    tf.writer.writerow(values)
+
+                ptmtf = partition.table_map.tempfile(suffix=state);
+                ptmtf.writer.writerow((geoid,  int(geo['logrecno']), row_hash, 0 ))
+                
+                hash_keys.append(row_hash)
 
             # The first None is for the primary id, the last is for the 
             # row_hash, which was added automatically to geo_dim tables.           
             # The fileid comes from the bundle.yaml configuration b/c it is the same for all records
             # in the bundle. 
          
-            values = [None,fileid, state, int(geo['logrecno'])] + geo_keys + [None]
-
-            tf = record_code_partition.database.tempfile(record_code_partition.table, suffix=state)
+            values = [None, int(geo['logrecno']),geoid]  + hash_keys
+            tf = record_code_partition.tempfile(suffix=state)
             tf.writer.writerow(values)
 
         # Close all of the tempfiles. 
@@ -403,6 +527,157 @@ class UsCensusDimBundle(UsCensusBundle):
             
         with open(marker_f, 'w') as f:
             f.write(str(time.time()))
+
+
+    def join_maps(self):
+        """
+        Copy all of the seperate map files into a single temporary partition, where
+        we can construct smaller, sequential id number to use for table keys instead of
+        the much larger hash values. 
+        """
+        from databundles.partition import Partition, PartitionIdentity
+        
+        cp = self.partitions.find_or_new(PartitionIdentity(self.identity, grain='tempmap'))
+            
+        print "DATABSE", cp.identity.name, cp.database.path
+        
+        # First, join them all into partitions. 
+        for partition in self.partitions:
+    
+            if partition.data.get('map',False):
+                self.join_map(partition)
+                self.copy_join_maps(partition, cp)
+           
+        self.database.create_table('record_code')
+ 
+        #self.partitions.delete(cp) # deleted the partition record. 
+ 
+        # Then join all of the seperate partitions into one. 
+    
+    def join_map(self,partition):
+        print "Join Map",partition.identity.name
+        partition.create()
+        for state in self.states:
+            ptmtf = partition.tempfile(suffix=state);
+            print ptmtf.path
+            partition.database.load_tempfile(ptmtf)
+
+    def copy_join_maps(self, source_part, dest_part):
+        """Copy the map table from its home partition into a single common 
+        partition, and extract all of the unique hash values to product smaller
+        sequential id values for the
+        """
+        dd = dest_part.database
+        sname = source_part.table.name
+        thname = source_part.table.name+'_htmap'
+        aid = dd.attach(source_part.database.path)
+                
+        dd.connection.execute(
+        "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, hash INTEGER);"
+        .format(thname))
+        
+        dd.connection.execute(
+        "CREATE TABLE IF NOT EXISTS {} AS SELECT * FROM {}.{}"
+        .format(sname, aid, sname))
+
+        dd.detach(aid)
+
+        dd.connection.execute("INSERT INTO {} SELECT DISTINCT NULL,hash FROM {}"
+                              .format(thname, source_part.table.name))
+        
+
+        print "AID",aid
+        
+
+    def reindex(self):
+        from databundles.partition import Partition, PartitionIdentity
+        import tables
+        
+        h5 = self.database.hd5file()
+        t = h5.table('record_code')
+     
+        
+        rcp = self.get_record_code_partition()
+        
+        row_i = 0;
+        for state in self.states:
+            tf = rcp.database.tempfile(rcp.table, suffix=state)
+            reader = tf.linereader
+            reader.next() # skip the header. 
+
+            for row in reader:
+                row_i += 1
+                row[0] = row_i
+                t.append([row])
+                
+                if row_i > 100:
+                    break;
+                  
+        
+        h5.close()
+        
+        h5 = self.database.hd5file()
+        t = h5.table('record_code',mode='w')
+        
+        for i,row in enumerate(t.iterrows()):
+            print i,row.fetch_all_fields()
+        
+            if i> 100:
+                break;
+        
+        h5.close()
+        
+        return
+        
+        cp = self.partitions.find_or_new(PartitionIdentity(self.identity, grain='tempmap'))
+   
+        hash_maps = {}
+        for partition in self.geo_partition_map().values():
+            table = partition.table
+           
+            if table.name != 'location':
+                continue;
+
+            htm = partition.table.name+'_map_htmap'
+
+            h = {}
+            for row in cp.database.connection.execute("SELECT id, hash FROM {}".format(htm)):
+                h[row[0]] = row[1]
+            hash_maps[table.name+"_id"] = h
+            print table.name, len(h)
+ 
+        print "Done"
+        import time
+        time.sleep(60)
+ 
+
+    def join_partitions(self):
+        '''Copy all of the seperate partitions into the main database. '''
+        
+        for partition in self.partitions:
+        
+            if partition.data.get('map',False):
+                continue;
+            
+            if partition.table.name == 'record_code':
+                continue;
+        
+            self.log("Join partition {}".format(partition.identity.name))
+            
+            if not partition.database.exists():
+                self.log("   Creating partition {}".format(partition.identity.name))
+                partition.create_with_tables(partition.table.name)
+            
+            table_name = partition.table.name
+            
+            self.database.create_table(table_name)    
+            self.database.clean_table(table_name)
+            
+            attach_name = self.database.attach(partition, table_name)
+            
+            self.database.copy_from_attached(table_name, name=attach_name)
+
+            self.database.detach(attach_name)
 
     def join_geo_dim(self, partition):
         """Assemble the partition into a the database partition, 
@@ -431,9 +706,7 @@ class UsCensusDimBundle(UsCensusBundle):
                 reader = tf.linereader
                 reader.next() # skip the header. 
                 line_no = 0
-                
-                print "State ",state
-                
+
                 for row in reader:
                     row_i += 1
                     line_no += 1
@@ -448,8 +721,7 @@ class UsCensusDimBundle(UsCensusBundle):
                     if row[0] not in hash_set:
                         hash_set.add(row[0])
                         ins.insert(row)
-                       
-                       
+ 
                 tf.close()
 
         self.log("Hash "+table_name+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
@@ -475,16 +747,12 @@ class UsCensusDimBundle(UsCensusBundle):
     
 
 
-    def get_record_code_partition(self, geo_processors=None, geo_partitions=None):
+    def get_record_code_partition(self, geo_partitions=None):
          
         if geo_partitions is None:
             geo_partitions = self.geo_partition_map() # must come before geo_processors. Creates partitions
-        
-        if  geo_processors is None:
-            geo_processors = self.geo_processors()
-        
-        for table_id, cp in geo_processors.items(): #@UnusedVariable
-            partition = geo_partitions[table_id]
+
+        for partition in geo_partitions.values(): #@UnusedVariable
             if partition.table.name == 'record_code':
                 record_code_partition = partition
                 
@@ -560,6 +828,11 @@ class UsCensusDimBundle(UsCensusBundle):
                 db.dbapi_connection.commit()
                 db.dbapi_close()
             
+        # Link in the table_map partition
+        if table.name != 'record_code':
+            partition.table_map = self.partitions.find_or_new(
+                        PartitionIdentity(self.identity, table=table.name+"_map"))
+            
         return partition
    
     def geo_partition_map(self):
@@ -574,29 +847,33 @@ class UsCensusDimBundle(UsCensusBundle):
     #############
     # Geo Table and Partition Acessors.    
      
+    def get_geo_processor(self, table):
+        
+        from databundles.transform import  CensusTransform
+        
+        source_cols = ([c.name for c in table.columns 
+                            if not ( c.name.endswith('_id') and not c.is_primary_key)
+                            and c.name != 'hash'
+                           ])
+        
+        columns = [c for c in table.columns if c.name in source_cols  ]  
+        processors = [CensusTransform(c) for c in columns]
+
+        return columns, processors
+            
     def geo_processors(self):
         '''Generate a complete set of geo processors for all of the split tables'''
-        from databundles.transform import  CensusTransform
+        
         from collections import  OrderedDict
         
         processor_set = OrderedDict()
         
         for table in self.geo_tables:
-          
-            source_cols = ([c.name for c in table.columns 
-                                if not ( c.name.endswith('_id') and not c.is_primary_key)
-                                and c.name != 'hash'
-                               ])
-            
-            columns = [c for c in table.columns if c.name in source_cols  ]  
-            processors = [CensusTransform(c) for c in columns]
-            processors[0] = lambda row : None # Primary key column
-
+            columns, processors = self.get_geo_processor(table)
             processors += [lambda row : None]
-     
-            processor_set[table.id_] = (table, columns, processors )     
-
-               
+            processors[0] = lambda row : None # Primary key column
+            processor_set[table.id_] = (table, columns, processors )
+ 
         return processor_set
         
     @property
@@ -627,9 +904,7 @@ class UsCensusDimBundle(UsCensusBundle):
      
         return hash
 
-
-
-    def make_lrid(self,  state, logrecno):
+    def make_geoid(self,  fileid, state, sumlev, geocomp, chariter, cifsn):
         """ The LRID -- Logical Record Id -- is a unique id for a logical record
         in a census file, composed of thedistinguishing identifiers for logrec lines
         and the identity of census file releases. 
@@ -641,24 +916,31 @@ class UsCensusDimBundle(UsCensusBundle):
         :rtype: integer
         
         """
-        
+ 
         if isinstance(state, basestring):
             try:
                 # Try it as a number
                 state = int(state)
             except:
-                state = self.state_map(state)
+                state = self.states_dict[state]
         else:
             pass
-        
-        logrecno = int(logrecno)
-    
-        return (
-                self._release_id + # 4 digits
-               + state * 10000 + # 2 digits
-               + logrecno * 1000000
-               )   
 
+        chariter = (int(chariter) if chariter.strip()  else  -1) + 1;
+        cifsn = (int(cifsn) if cifsn.strip()  else  -1) + 1
+
+        geoid= ("{:d}{:02d}{:03d}{:02d}{:03d}{:02d}"
+        .format( int(fileid), int(state), int(sumlev), 
+                int(geocomp), chariter, cifsn))
+    
+        return int(geoid)
+
+
+        def install(self):
+   
+            self.log("Install bundle")  
+            dest = self.library.put(self)
+            self.log("Installed to {} ".format(dest))
 
 
 class UsCensusFactBundle(UsCensusBundle):
@@ -1017,8 +1299,7 @@ class UsCensusFactBundle(UsCensusBundle):
             partitions[table.id_] = self.fact_partition(table)
  
         return partitions 
-  
-  
+ 
        
 def make_geoid(state, county, tract, block=None, blockgroup=None):
     '''Create a geoid for common blocks. This is not appropriate for

@@ -8,7 +8,7 @@ import os.path
 
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''
-    def __init__(self, bundle, table, db):
+    def __init__(self, bundle, table, db, cache_size=50000, text_factory = None):
         self.bundle = bundle
         self.table = table
         self.db = db
@@ -18,16 +18,24 @@ class ValueInserter(object):
         self.cache = []
         self.header = [c.name for c in self.table.columns]
         self.transaction = None
+        self.cache_size = cache_size
 
+        if text_factory:
+            print self.db.engine.raw_connection()
+            self.db.engine.raw_connection().connection.text_factory = text_factory
+            
     def insert(self, values):
-        #ins = self.ins.values(values)
-        
+       
         try:
-            d  = dict(zip(self.header, values))
+            if isinstance(values, dict):
+                d = values
+            else:
+                d  = dict(zip(self.header, values))
          
             self.cache.append(d)
          
-            if len(self.cache) > 50000:  
+            if len(self.cache) >= self.cache_size:
+
                 self.connection.execute(self.ins, self.cache)
                 self.cache = []
                 
@@ -75,14 +83,14 @@ class ValueInserter(object):
     
 class TempFile(object): 
            
-    def __init__(self, bundle,  db, table, suffix=None, header=None):
+    def __init__(self, bundle,  db, table, suffix=None, header=None, ignore_first=False):
         self.bundle = bundle
         self.db = db 
         self.table = table
         self.file = None
         self.suffix = suffix
-        
-        
+        self.ignore_first = ignore_first
+
         if header is None:
             header = [ c.name for c in table.columns ]
         else:
@@ -115,8 +123,11 @@ class TempFile(object):
             self._writer = csv.writer(self.file)
             
             if mode == 'w':
-                self._writer.writerow(self.header)
-            
+                if self.ignore_first:
+                    self._writer.writerow(self.header[1:])
+                else:
+                    self._writer.writerow(self.header)
+                
         return self._writer
      
     @property
@@ -181,8 +192,70 @@ class TempFile(object):
             self._writer = None
             
             hk = self.table.name+'-'+str(self.suffix)
-            if hk in self.db.tempfiles:
-                del self.db.tempfiles[hk]
+            if hk in self.db._tempfiles:
+                del self.db._tempfiles[hk]
+  
+
+class HD5File(object):
+    
+    def __init__(self, bundle, db, suffix=None):
+        import os
+        import tables
+        
+        self.bundle = bundle
+
+        self.file = None
+        self.suffix = suffix
+
+        self._path = str(db.path).replace('.db','.h5')
+        self._file = None
+
+    def create_table(self):
+        pass
+
+    def table(self, table_name, mode='a'):
+        import tables
+        from databundles.orm import Column
+        
+        from collections import OrderedDict
+        
+        self._file = tables.openFile(self._path, mode = mode)
+        
+        try:
+            return self._file.root._f_getChild(table_name)
+        except tables.NoSuchNodeError:
+
+            tdef = self.bundle.schema.table(table_name)
+            descr = {}
+            for i, col in enumerate(tdef.columns):
+                if col.datatype == Column.DATATYPE_INTEGER64:
+                    descr[str(col.name)] = tables.Int64Col(pos=i)
+                    
+                elif col.datatype == Column.DATATYPE_INTEGER:
+                    descr[str(col.name)] = tables.Int32Col(pos=i)
+                    
+                elif col.datatype == Column.DATATYPE_REAL:
+                    descr[str(col.name)] = tables.Float32Col(pos=i)
+                    
+                elif col.datatype == Column.DATATYPE_TEXT:
+                    descr[str(col.name)] = tables.StringCol(pos=i, itemsize= col.width if col.width else 50)
+                else:
+                    raise ValueError('Unknown datatype: '+col.datatype)
+
+            print descr
+            table = self._file.createTable(self._file.root, table_name, descr)
+        
+            return table
+        
+    @property
+    def root(self):
+        return self._file.root
+        
+    def close(self):
+        if self._file:
+            self._file.close()
+        
+    
   
 class Database(object):
     '''Represents a Sqlite database'''
@@ -230,7 +303,8 @@ class Database(object):
         
         self._table_meta_cache = {}
         
-        self.tempfiles = {}
+        self._tempfiles = {}
+        self._hd5file = None
        
     @property
     def name(self):
@@ -257,6 +331,7 @@ class Database(object):
         
         if not self._engine:
             self._engine = create_engine('sqlite:///'+self.path, echo=False) 
+            #self._engine = create_engine('sqlite://') 
             from sqlalchemy import event
             event.listen(self._engine, 'connect', _pragma_on_connect)
              
@@ -298,15 +373,24 @@ class Database(object):
             self._dbapi_connection.close();
             self._dbapi_connection = None            
         
-    def tempfile(self, table, header=None, suffix=None):
+    def tempfile(self, table, header=None, suffix=None, ignore_first=False):
         
-        hk = table.name+'-'+str(suffix)
-        
-        if hk not in self.tempfiles:
-            self.tempfiles[hk] = TempFile(self.bundle, self, table, header=header, suffix=suffix)
+        hk = (table,suffix)
+    
+        if hk not in self._tempfiles:
+            self._tempfiles[hk] = TempFile(self.bundle, self, table, header=header, 
+                                          suffix=suffix, ignore_first=ignore_first)
       
-        return self.tempfiles[hk]
+        return self._tempfiles[hk]
 
+
+    def hd5file(self):
+        
+        if self._hd5file is None:
+            self._hd5file = HD5File(self.bundle, self)
+            
+        return self._hd5file
+   
 
     @property
     def inspector(self):
@@ -348,7 +432,7 @@ class Database(object):
             pass
         
 
-    def inserter(self, table_or_name):
+    def inserter(self, table_or_name,**kwargs):
       
         if isinstance(table_or_name, basestring):
             table_name = table_or_name
@@ -364,7 +448,7 @@ class Database(object):
             table = self.table(table_or_name.name)
             
         
-        return ValueInserter(self.bundle, table , self)
+        return ValueInserter(self.bundle, table , self,**kwargs)
         
     def load_sql(self, sql_file):
         import sqlite3
@@ -379,12 +463,19 @@ class Database(object):
         conn.commit()
         
     def clean_table(self, table):
-        self.dbapi_cursor.execute('DELETE FROM {} '.format(table.name))
+
+        if isinstance(table, basestring):
+            self.connection.execute('DELETE FROM {} '.format(table))
+        else:
+            self.connection.execute('DELETE FROM {} '.format(table.name))
+            
+        self.commit()
+
         
     def load_tempfile(self, tempfile):
         '''Load a tempfile into the database. Uses the header line of the temp file
         for the column names '''
-        
+    
         if not tempfile.exists:
             self.bundle.log("Tempfile already deleted. Skipping")
             return
@@ -407,9 +498,9 @@ class Database(object):
                          )
         
         try:
-            # Corrects the rare case when there is non-unicode 8-bit chars, 
-            #probably in the name fields for a sub-barrio in Puerto Rico
-            self.dbapi_connection.text_factory = lambda x: unicode(x, "utf-8", "ignore")
+
+            # self.dbapi_connection.text_factory = lambda x: unicode(x, "utf-8", "ignore")
+            #self.dbapi_connection.text_factory = lambda x: None if not x.strip() else x;
             
             if False: # For debugging some hash conflicts
                 for row in lr:
@@ -553,6 +644,7 @@ class Database(object):
                 
         """
         from identity import Identity
+        from partition import Partition
     
         if isinstance(id_,basestring):
             #  Strings are path names
@@ -561,6 +653,10 @@ class Database(object):
             path = id_.path
         elif isinstance(id_,Database):
             path = id_.path
+        elif isinstance(id_,Partition):
+            path = id_.database.path
+        else:
+            raise Exception("Can't attach: Don't understand id_: {}".format(repr(id_)))
         
         if name is None:
             import random, string

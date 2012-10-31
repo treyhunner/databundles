@@ -81,7 +81,7 @@ class BasicTransform(object):
   
         # for numbers try to coerce to an integer. We'd have to use a helper func
         # with a try/catch, except in this case, integers are always all digits here 
-        if str(column.datatype) == 'integer':
+        if str(column.datatype) == 'integer' or str(column.datatype) == 'integer64' :
             #f = lambda v: int(v)
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
@@ -176,7 +176,7 @@ class CensusTransform(BasicTransform):
   
         # for numbers try to coerce to an integer. We'd have to use a helper func
         # with a try/catch, except in this case, integers are always all digits here 
-        if column.datatype == 'integer':
+        if column.datatype == 'integer'  or str(column.datatype) == 'integer64' :
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
         elif column.datatype == 'real':
@@ -197,7 +197,7 @@ class CensusTransform(BasicTransform):
                 default = column.default 
             elif column.datatype == 'real':
                 default = float(column.default) 
-            elif column.datatype == 'integer':
+            elif column.datatype == 'integer'  or str(column.datatype) == 'integer64' :
                 default = int(column.default) 
             else:
                 raise ValueError('Unknown column datatype: '+column.datatype)

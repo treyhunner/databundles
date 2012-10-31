@@ -170,6 +170,7 @@ class Column(Base):
 
     DATATYPE_TEXT = 'text'
     DATATYPE_INTEGER ='integer' 
+    DATATYPE_INTEGER64 ='integer64' 
     DATATYPE_REAL = 'real'
     DATATYPE_NUMERIC = 'numeric'
     DATATYPE_DATE = 'date'
@@ -493,7 +494,7 @@ class Partition(Base):
         from sqlalchemy.orm import object_session
         from partition import PartitionIdentity
         
-        args = {'id': self.id_, 'space':self.space, 'time':self.time}
+        args = {'id': self.id_, 'space':self.space, 'time':self.time, 'grain':self.grain}
         
         table = self.table
         

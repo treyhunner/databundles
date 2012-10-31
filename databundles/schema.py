@@ -3,6 +3,9 @@ Created on Jun 23, 2012
 
 @author: eric
 '''
+
+from databundles.dbexceptions import ConfigurationError
+
 def _clean_flag( in_flag):
     
     if in_flag is None or in_flag == '0':
@@ -113,6 +116,9 @@ class Schema(object):
      
         return row
         
+    def copy_table(self, source, dest_name):
+        nt = self.add_table(dest_name)
+        
     def add_column(self, table, name,**kwargs):
         '''Add a column to the schema'''
     
@@ -143,6 +149,7 @@ class Schema(object):
         None: sqlalchemy.types.Text,
         Column.DATATYPE_TEXT: sqlalchemy.types.Text,
         Column.DATATYPE_INTEGER:sqlalchemy.types.Integer,
+        Column.DATATYPE_INTEGER64:sqlalchemy.types.Integer,
         Column.DATATYPE_REAL:sqlalchemy.types.Float,     
         Column.DATATYPE_DATE: sqlalchemy.types.Date,
         Column.DATATYPE_TIME:sqlalchemy.types.Time,
@@ -256,15 +263,22 @@ class Schema(object):
         tm = {
               'TEXT':Column.DATATYPE_TEXT,
               'INTEGER':Column.DATATYPE_INTEGER,
+              'INTEGER64':Column.DATATYPE_INTEGER,
               'REAL':Column.DATATYPE_REAL,
               }
 
         new_table = True
         last_table = None
+        line_no = 1; # Accounts for file header. Data starts on line 2
         for row in reader:
             
             # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
             # in UTF-8
+            
+            line_no += 1
+            
+            if not row.get('column', False) and not row.get('table', False):
+                continue
             
             row = { k:str(v).decode('utf8', 'ignore').encode('ascii','ignore').strip() for k,v in row.items()}
             
@@ -297,13 +311,20 @@ class Schema(object):
             else:
                 default = None
             
+            if not row.get('column', False):
+                raise ConfigurationError("Row error: no column on line {}".format(line_no))
+            if not row.get('table', False):
+                raise ConfigurationError("Row error: no table on line {}".format(line_no))
+            if not row.get('type', False):
+                raise ConfigurationError("Row error: no type on line {}".format(line_no))
+            
             # Build the index and unique constraint values. 
             indexes = [ row['table']+'_'+c for c in row.keys() if (re.match('i\d+', c) and _clean_flag(row[c]))]  
             uindexes = [ row['table']+'_'+c for c in row.keys() if (re.match('ui\d+', c) and _clean_flag(row[c]))]  
             uniques = [ row['table']+'_'+c for c in row.keys() if (re.match('u\d+', c) and  _clean_flag(row[c]))]  
-            
+  
             datatype = tm[row['type'].strip()]
-            
+         
             width = _clean_int(row.get('width', None))
             size = _clean_int(row.get('size',None))
             
