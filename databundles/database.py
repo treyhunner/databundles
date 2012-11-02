@@ -5,6 +5,7 @@ Created on Jun 10, 2012
 '''
 
 import os.path
+import anydbm
 
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''
@@ -213,7 +214,7 @@ class HD5File(object):
     def create_table(self):
         pass
 
-    def table(self, table_name, mode='a'):
+    def table(self, table_name, mode='a', expected=None):
         import tables
         from databundles.orm import Column
         
@@ -229,32 +230,86 @@ class HD5File(object):
             descr = {}
             for i, col in enumerate(tdef.columns):
                 if col.datatype == Column.DATATYPE_INTEGER64:
-                    descr[str(col.name)] = tables.Int64Col(pos=i)
+                    descr[str(col.name)] = tables.Int64Col(pos=i) #@UndefinedVariable
                     
                 elif col.datatype == Column.DATATYPE_INTEGER:
-                    descr[str(col.name)] = tables.Int32Col(pos=i)
+                    descr[str(col.name)] = tables.Int32Col(pos=i) #@UndefinedVariable
                     
                 elif col.datatype == Column.DATATYPE_REAL:
-                    descr[str(col.name)] = tables.Float32Col(pos=i)
+                    descr[str(col.name)] = tables.Float32Col(pos=i) #@UndefinedVariable
                     
                 elif col.datatype == Column.DATATYPE_TEXT:
-                    descr[str(col.name)] = tables.StringCol(pos=i, itemsize= col.width if col.width else 50)
+                    descr[str(col.name)] = tables.StringCol(pos=i, itemsize= col.width if col.width else 50) #@UndefinedVariable
                 else:
                     raise ValueError('Unknown datatype: '+col.datatype)
 
-            print descr
-            table = self._file.createTable(self._file.root, table_name, descr)
+ 
+            table = self._file.createTable(self._file.root, table_name, descr, expectedrows=expected)
         
             return table
         
+
+class DbmFile(object):
+    
+    def __init__(self, bundle, db, table=None, suffix=None):
+        import os
+        import tables
+        
+        self.bundle = bundle
+
+        self.suffix = suffix
+
+        self._table = table
+        try:
+            table_name = table.name
+        except:
+            table_name = table
+
+        self._path = str(db.path).replace('.db','');
+
+        if table_name:
+            self._path += '-'+table_name
+            
+        if suffix:
+            self._path += '-'+suffix
+            
+        self._path += '.dbm'
+       
+            
+        self._file = None
+      
+        
     @property
-    def root(self):
-        return self._file.root
+    def reader(self):
+        self.close()
+        self._file = anydbm.open(self._path, 'r')
+        return self
+   
+    @property
+    def writer(self):
+        self.close()
+        self._file = anydbm.open(self._path, 'c')
+        return self
+        
+    def delete(self):
+        
+        if os.path.exists(self._path):
+            os.remove(self._path)
+        
         
     def close(self):
         if self._file:
             self._file.close()
+            self._file = None
+
+    
+    def __getitem__(self, key):
+        return self._file[key]
         
+
+    def __setitem__(self, key, val):
+        #print key,'<-',val
+        self._file[str(key)] =  str(val)
     
   
 class Database(object):
@@ -304,6 +359,7 @@ class Database(object):
         self._table_meta_cache = {}
         
         self._tempfiles = {}
+        self._dbmfiles = {}
         self._hd5file = None
        
     @property
@@ -390,6 +446,15 @@ class Database(object):
             self._hd5file = HD5File(self.bundle, self)
             
         return self._hd5file
+    
+    def dbm(self,table=None, suffix=None):
+        
+        hk = (table,suffix)
+    
+        if hk not in self._dbmfiles:
+            self._dbmfiles[hk] = DbmFile(self.bundle, self, table=table, suffix=suffix)
+      
+        return self._dbmfiles[hk]
    
 
     @property
@@ -472,7 +537,7 @@ class Database(object):
         self.commit()
 
         
-    def load_tempfile(self, tempfile):
+    def load_tempfile(self, tempfile, table=None):
         '''Load a tempfile into the database. Uses the header line of the temp file
         for the column names '''
     
@@ -488,10 +553,19 @@ class Database(object):
             self.bundle.error("Failed to get header line from {} ".format(tempfile.path))
             raise e
  
+        if table is None:
+            table = tempfile.table
+            
+        try: # Table is either an object, or a string
+            table_name = table.name
+        except:
+            table_name = table
+ 
+       
        
         ins =  ("""INSERT INTO {table} ({columns}) VALUES ({values})"""
                             .format(
-                                 table=tempfile.table.name,
+                                 table=table_name,
                                  columns =','.join(column_names),
                                  values = ','.join(['?' for c in column_names]) #@UnusedVariable
                             )
@@ -501,6 +575,8 @@ class Database(object):
 
             # self.dbapi_connection.text_factory = lambda x: unicode(x, "utf-8", "ignore")
             #self.dbapi_connection.text_factory = lambda x: None if not x.strip() else x;
+            
+            self.create_table(table_name)
             
             if False: # For debugging some hash conflicts
                 for row in lr:
@@ -694,7 +770,7 @@ class Database(object):
             map_. a dict of k:v pairs for the values in this database to
             copy to the remote database. If None, copy all values
         
-            name. Name of the other datbase
+            name. The attach name of the other datbase, from self.attach()
         
             on_conflict. How conflicts should be handled
             

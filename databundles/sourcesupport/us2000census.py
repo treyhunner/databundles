@@ -70,7 +70,7 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
         return {'tables':tables,'geos':geos}
                       
     def generate_rows(self, state):
-        '''A generator that yield rows from the state geo files. It will 
+        '''A generator that yields rows from the state geo files. It will 
         unpack the fixed width file and return a dict'''
         import struct
 

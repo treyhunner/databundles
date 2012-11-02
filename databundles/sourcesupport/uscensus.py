@@ -121,52 +121,7 @@ class UsCensusDimBundle(UsCensusBundle):
         self.generate_partitions()
  
         return True    
-    
-    def create_hash_map_table(self,name):
-        from databundles.orm import Column
-        
-        t = self.schema.add_table(name,data={'temp':True})
-
-        self.schema.add_column(t, name+"_id",
-                       datatype=Column.DATATYPE_INTEGER, 
-                       is_primary_key =True,commit = False)
-
-        self.schema.add_column(t, 'geoid',
-                       datatype=Column.DATATYPE_INTEGER, 
-                       commit = False,
-                       uindexes = name+'_lrid'
-                       )
-        
-        self.schema.add_column(t, 'logrecno',
-                       datatype=Column.DATATYPE_INTEGER, 
-                       commit = False,
-                       uindexes = name+'_lrid'
-                       )
-
-        self.schema.add_column(t, 'hash',
-                       datatype=Column.DATATYPE_INTEGER, 
-                       commit = False)
-        
-        self.schema.add_column(t, 'rec_id',
-                       datatype=Column.DATATYPE_INTEGER, 
-                       commit = False)
-
-
-        
-        #for col_name in ['fileid','stusab','sumlev','geocomp','chariter','cisfn','logrecno']:   
-        #    self.schema.add_column(t, col_name,
-        #                           datatype=Column.DATATYPE_INTEGER, 
-        #                           is_foreign_key =True,commit = False)
-
-     
-        # Also make a partition for the table. 
-        from databundles.partition import PartitionIdentity
-
-        partition = self.partitions.find_or_new(PartitionIdentity(self.identity, table=name))
-        partition.data['temp'] = True
-        partition.data['map'] = True
-
-        self.database.session.commit()
+   
 
     def create_geo_dim_table_schema(self):
         '''Create the split table schema from  the geoschema_filef. 
@@ -199,16 +154,13 @@ class UsCensusDimBundle(UsCensusBundle):
                 record_code_table.add_column(table.name+"_id",
                                              is_foreign_key =True,
                                              datatype=Column.DATATYPE_INTEGER64)
+
+                # Add a hash column to store a hash value for all of the other values. 
+                # This is used in dicts in memory. 
                 
-                # Also create another table that we will use to map the geo dim hash
-                # values back to sequentual numbers. 
-                self.create_hash_map_table(table.name+"_map")
-            
-            # Add a hash column to store a hash value for all of the other values. 
-            # This is used in dicts in memory. 
-            #if not table.column('hash', False):
-            #    table.add_column('hash',  datatype=Column.DATATYPE_INTEGER,
-            #                      uindexes = 'uihash')
+                if not table.column('hash', False):
+                    table.add_column('hash',  datatype=Column.DATATYPE_INTEGER,
+                                      uindexes = 'uihash')
 
 
     def generate_partitions(self):
@@ -347,16 +299,18 @@ class UsCensusDimBundle(UsCensusBundle):
                 result = pool.map_async(run_join_geo_dim_f,ids)
                 print result.get()
             else:
-                for table_id, partition in  self.geo_partition_map().items(): #@UnusedVariable
+                for partition in  self.geo_partition_map().values(): #@UnusedVariable
                     self.join_geo_dim(partition)
 
-        if self.run_args.subphase in ['all','join-maps']:  
-            self.join_maps()
-
-        if self.run_args.subphase in ['all','reindex']:  
-            self.reindex()
+        if self.run_args.subphase in ['rebuild-hash-translations']:  
+            self.rebuild_hash_translations()
+            
+        if self.run_args.subphase in ['all','reindex-record-code']:  
+            self.reindex_record_code()
 
         return False
+
+     
 
         # Join all of the seperate partitions into a single partition
         
@@ -499,14 +453,13 @@ class UsCensusDimBundle(UsCensusBundle):
                 # guarantee uniqueness across states. 
                 if row_hash not in th:  
                     th.add(row_hash)
-                    values[0] = row_hash
+                    values[0] = 0
+                    values[-1] = row_hash
                     
                     tf = partition.tempfile( suffix=state)
+   
                     tf.writer.writerow(values)
 
-                ptmtf = partition.table_map.tempfile(suffix=state);
-                ptmtf.writer.writerow((geoid,  int(geo['logrecno']), row_hash, 0 ))
-                
                 hash_keys.append(row_hash)
 
             # The first None is for the primary id, the last is for the 
@@ -528,128 +481,63 @@ class UsCensusDimBundle(UsCensusBundle):
         with open(marker_f, 'w') as f:
             f.write(str(time.time()))
 
-
-    def join_maps(self):
-        """
-        Copy all of the seperate map files into a single temporary partition, where
-        we can construct smaller, sequential id number to use for table keys instead of
-        the much larger hash values. 
-        """
-        from databundles.partition import Partition, PartitionIdentity
-        
-        cp = self.partitions.find_or_new(PartitionIdentity(self.identity, grain='tempmap'))
-            
-        print "DATABSE", cp.identity.name, cp.database.path
-        
-        # First, join them all into partitions. 
-        for partition in self.partitions:
-    
-            if partition.data.get('map',False):
-                self.join_map(partition)
-                self.copy_join_maps(partition, cp)
-           
-        self.database.create_table('record_code')
- 
-        #self.partitions.delete(cp) # deleted the partition record. 
- 
-        # Then join all of the seperate partitions into one. 
-    
-    def join_map(self,partition):
-        print "Join Map",partition.identity.name
-        partition.create()
-        for state in self.states:
-            ptmtf = partition.tempfile(suffix=state);
-            print ptmtf.path
-            partition.database.load_tempfile(ptmtf)
-
-    def copy_join_maps(self, source_part, dest_part):
-        """Copy the map table from its home partition into a single common 
-        partition, and extract all of the unique hash values to product smaller
-        sequential id values for the
-        """
-        dd = dest_part.database
-        sname = source_part.table.name
-        thname = source_part.table.name+'_htmap'
-        aid = dd.attach(source_part.database.path)
-                
-        dd.connection.execute(
-        "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, hash INTEGER);"
-        .format(thname))
-        
-        dd.connection.execute(
-        "CREATE TABLE IF NOT EXISTS {} AS SELECT * FROM {}.{}"
-        .format(sname, aid, sname))
-
-        dd.detach(aid)
-
-        dd.connection.execute("INSERT INTO {} SELECT DISTINCT NULL,hash FROM {}"
-                              .format(thname, source_part.table.name))
-        
-
-        print "AID",aid
-        
-
-    def reindex(self):
-        from databundles.partition import Partition, PartitionIdentity
-        import tables
-        
-        h5 = self.database.hd5file()
-        t = h5.table('record_code')
-     
-        
-        rcp = self.get_record_code_partition()
-        
-        row_i = 0;
-        for state in self.states:
-            tf = rcp.database.tempfile(rcp.table, suffix=state)
-            reader = tf.linereader
-            reader.next() # skip the header. 
-
-            for row in reader:
-                row_i += 1
-                row[0] = row_i
-                t.append([row])
-                
-                if row_i > 100:
-                    break;
-                  
-        
-        h5.close()
-        
-        h5 = self.database.hd5file()
-        t = h5.table('record_code',mode='w')
-        
-        for i,row in enumerate(t.iterrows()):
-            print i,row.fetch_all_fields()
-        
-            if i> 100:
-                break;
-        
-        h5.close()
-        
-        return
-        
-        cp = self.partitions.find_or_new(PartitionIdentity(self.identity, grain='tempmap'))
-   
-        hash_maps = {}
-        for partition in self.geo_partition_map().values():
-            table = partition.table
-           
-            if table.name != 'location':
-                continue;
-
-            htm = partition.table.name+'_map_htmap'
-
-            h = {}
-            for row in cp.database.connection.execute("SELECT id, hash FROM {}".format(htm)):
-                h[row[0]] = row[1]
-            hash_maps[table.name+"_id"] = h
-            print table.name, len(h)
- 
-        print "Done"
+    def rebuild_hash_translations(self):
+        '''Rebuild the DBM files that link the hash values to primary keys
+        '''
         import time
-        time.sleep(60)
- 
+        import struct
+        t_start = time.time()
+        row_i = 0;
+        for partition in  self.geo_partition_map().values(): 
+            if partition.table.name == 'record_code':
+                continue;
+            
+            # Get a handle on the dmb database that translated hash values to 
+            # primary keeys
+            partition.database.dbm(partition.table).delete()
+            dbm = partition.database.dbm(partition.table).writer
+            
+            for row in partition.database.session.execute("SELECT * FROM {}".format(partition.table.name)):
+                row_i += 1
+                #print row['hash'],'->',row[0]
+                if not row['hash']:
+                    print partition.table.name, row
+                    continue;
+          
+                #dbm[struct.pack(">Q",row['hash'])] = struct.pack(">L",row[0])
+                dbm[str(row['hash'])] = str(row[0])
+                if row_i % 100000 == 0:
+                    self.log("Rehash "+partition.table.name+" "+
+                             str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
+                    
+            dbm.close()
+
+    def reindex_record_code(self):
+        '''Translate the hash values in the forieng keys point to the geo dim tables
+        with the primary keys for the corresponding records '''
+        import struct
+        rcp = self.get_record_code_partition();
+        
+        translators = []
+        for col in rcp.table.columns[3:]:
+            name = col.name.replace('_id','');
+            partition = self.partitions.find_table(name)
+
+            # Get a handle on the dmb database that translated hash values to 
+            # primary keeys
+            dbm = partition.database.dbm(partition.table).reader
+            translators.append(dbm)
+
+        for row in rcp.database.session.execute("SELECT * FROM record_code"):
+            
+            print "--------"
+            print row
+
+            new_row = list(row[0:3]) + [ int(translators[i][str(v)]) for i,v in enumerate(row[3: ])]
+           
+            print new_row
+            
+
 
     def join_partitions(self):
         '''Copy all of the seperate partitions into the main database. '''
@@ -680,14 +568,16 @@ class UsCensusDimBundle(UsCensusBundle):
             self.database.detach(attach_name)
 
     def join_geo_dim(self, partition):
-        """Assemble the partition into a the database partition, 
+        """Assemble the partition into the database partition, 
         and create a lookup file to be used later to set the new values for
-        recno """
+        recno.
+        
+        The output is one database partition for each of the geodim table, and
+        one dbm file for each geodim that maps hash to primary key. 
+        """
         import time
 
         t_start = time.time()
-      
-        row_i = 0;
 
         table_name = partition.table.name
         
@@ -698,31 +588,53 @@ class UsCensusDimBundle(UsCensusBundle):
             return partition.identity.name
         else:
             self.log("Join geo dim for {}".format(partition.table.name))
-       
-        hash_set = set()
-        with partition.database.inserter(partition.table) as ins:
-            for state in self.states:
-                tf = partition.database.tempfile(partition.table, suffix=state)
-                reader = tf.linereader
-                reader.next() # skip the header. 
-                line_no = 0
 
-                for row in reader:
-                    row_i += 1
-                    line_no += 1
+        force = True if table_name == 'record_code' else False
+
+        hash_set = set()
+        row_i = 0;
+        primary_key = 0;
+        
+        partition.database.dbm(partition.table).delete()
+        dbm = partition.database.dbm(partition.table).writer
+        
+        with partition.database.inserter(partition.table) as ins:
+            try:
+                for state in self.states:
+                    tf = partition.database.tempfile(partition.table, suffix=state)
+                    print tf.path
+                    reader = tf.linereader
+                    reader.next() # skip the header. 
+                    line_no = 0
+                  
+                    for row in reader:
+                        row_i += 1
+                        line_no += 1
+        
+                        if row_i % 100000 == 0:
+                            self.log("Join "+table_name+" "+state+" "+
+                                 str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
+                            
+                        # The record_code tables doesn't use the hash for a primary lkey
+                        if not row[0]: row[0] = row_i
     
-                    if row_i % 100000 == 0:
-                        self.log("Join "+table_name+" "+
-                             str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
-                        
-                    # The record_code tables doesn't use the hash for a primary lkey
-                    if not row[0]: row[0] = row_i
-                        
-                    if row[0] not in hash_set:
-                        hash_set.add(row[0])
-                        ins.insert(row)
- 
+                        if row[-1] not in hash_set or force == True: # Only write unique rows
+                            # Set the primary key for the row. 
+                            primary_key += 1
+                            hash_set.add(row[-1])
+                            row[0] = primary_key
+                            
+                            ins.insert(row) # Insert into the partition database. 
+                            
+                            if not force:
+                                dbm[row[-1]] = primary_key # Map the hash to the pkey, to update record_code later. 
+                                
+            except Exception as e:
+                self.error("Error: "+str(e))
+                raise
+                
                 tf.close()
+            dbm.close()
 
         self.log("Hash "+table_name+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
                     
@@ -828,10 +740,6 @@ class UsCensusDimBundle(UsCensusBundle):
                 db.dbapi_connection.commit()
                 db.dbapi_close()
             
-        # Link in the table_map partition
-        if table.name != 'record_code':
-            partition.table_map = self.partitions.find_or_new(
-                        PartitionIdentity(self.identity, table=table.name+"_map"))
             
         return partition
    
