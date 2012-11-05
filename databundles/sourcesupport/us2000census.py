@@ -3,7 +3,8 @@ Created on Aug 19, 2012
 
 @author: eric
 '''
-from  databundles.sourcesupport.uscensus import UsCensusDimBundle, UsCensusFactBundle
+from  databundles.sourcesupport.uscensus import UsCensusDimBundle
+from  databundles.sourcesupport.uscensus import UsCensusFactBundle
 
 class Us2000CensusDimBundle(UsCensusDimBundle):
     '''
@@ -57,10 +58,9 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
                     
                     with open(stateIndex[0]) as f:          
                         for link in  BeautifulSoup(f).find_all('a'):
-                            
+
                             if link.get('href') and  '.zip' in link.get('href'):
                                 final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
-                               
                                 if 'geo'+suffix in final_url:
                                     tick('g')
                                     state = re.match('.*/(\w{2})geo'+suffix, final_url).group(1)
@@ -73,6 +73,7 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
         '''A generator that yields rows from the state geo files. It will 
         unpack the fixed width file and return a dict'''
         import struct
+        import zipfile
 
         table = self.schema.table('sf1geo')
         header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable    
@@ -80,7 +81,6 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
         rows = 0;
 
         def test_zip_file(f):
-            import zipfile
             try:
                 with zipfile.ZipFile(f) as zf:
                     return zf.testzip() is None
@@ -88,8 +88,11 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
                 return False
 
         geo_source = self.urls['geos'][state]
+    
         geo_zip_file = self.filesystem.download(geo_source, test_zip_file)
+
         grf = self.filesystem.unzip(geo_zip_file)
+
         geofile = open(grf, 'rbU', buffering=1*1024*1024)
 
         for line in geofile.readlines():
@@ -112,7 +115,6 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
 
         geofile.close()
 
-                
 
 class Us2000CensusFactBundle(UsCensusFactBundle):
     '''
@@ -149,7 +151,7 @@ class Us2000CensusFactBundle(UsCensusFactBundle):
         log('S = state, T = segment table, g = geo')
         tables = {}
         geos = {}
-       
+
         with open(doc[0]) as df:
             for link in BeautifulSoup(df).find_all('a'):
                 tick('S')
@@ -166,10 +168,10 @@ class Us2000CensusFactBundle(UsCensusFactBundle):
                     with open(stateIndex[0]) as f:
                     
                         for link in  BeautifulSoup(f).find_all('a'):
-                            
                             if link.get('href') and  '.zip' in link.get('href'):
                                 final_url = urlparse.urljoin(stateUrl, link.get('href')).encode('ascii', 'ignore')
                                
+                                
                                 if 'geo'+suffix in final_url:
                                     tick('g')
                                     state = re.match('.*/(\w{2})geo'+suffix, final_url).group(1)

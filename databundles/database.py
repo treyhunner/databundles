@@ -252,9 +252,7 @@ class HD5File(object):
 class DbmFile(object):
     
     def __init__(self, bundle, db, table=None, suffix=None):
-        import os
-        import tables
-        
+
         self.bundle = bundle
 
         self.suffix = suffix
@@ -886,6 +884,7 @@ class BundleDb(Database):
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''
 
+    return;
     dbapi_con.execute('PRAGMA journal_mode = OFF')
     dbapi_con.execute('PRAGMA synchronous = OFF')
     dbapi_con.execute('PRAGMA temp_store = MEMORY')

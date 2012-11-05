@@ -348,7 +348,7 @@ class BundleFileConfig(BundleConfig):
    
         if not self._run_config.identity.get('id',False):
             from databundles.identity import DatasetNumber
-            self._run_config.id_ = str(DatasetNumber())
+            self._run_config.identity.id = str(DatasetNumber())
             self.rewrite()
    
         if not os.path.exists(self.local_file):
@@ -368,16 +368,21 @@ class BundleFileConfig(BundleConfig):
     def rewrite(self):
         '''Re-writes the file from its own data. Reformats it, and updates
         the modification time'''
-        import yaml
+        import yaml, copy
         
         temp = self.local_file+".temp"
         old = self.local_file+".old"
         
-     
-        data = self._run_config.dump()
+
+        full_config =  dict(self._run_config.config.items())
+
+        data = {}
+        data['identity'] = dict(full_config['identity'].items())
+      
+        data['build'] = dict(full_config['build'].items())
         
         with open(temp, 'w') as f:
-            f.write(data)
+            yaml.safe_dump( dict(data), f, default_flow_style=False, indent=4, encoding='utf-8' )
     
         if os.path.exists(temp):
             os.rename(self.local_file, old)

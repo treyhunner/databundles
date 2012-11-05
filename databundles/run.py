@@ -4,12 +4,11 @@ Created on Jun 10, 2012
 @author: eric
 '''
 
-import yaml
 import os.path
 
-import itertools as it, operator as op, functools as ft
+import itertools as it, operator as op
 from collections import Mapping, OrderedDict, defaultdict
-import os, sys
+
 
 try: import yaml, yaml.constructor
 except ImportError: pass
@@ -19,10 +18,10 @@ def patch_file_open():
     openfiles = set()
     oldfile = __builtin__.file
     class newfile(oldfile):
-        def __init__(self, *args):
+        def __init__(self, *args,**kwargs):
             self.x = args[0]
             print "### {} OPENING {} ###".format(len(openfiles), str(self.x))         
-            oldfile.__init__(self, *args)
+            oldfile.__init__(self, *args,**kwargs)
             openfiles.add(self)
     
         def close(self):
@@ -32,8 +31,8 @@ def patch_file_open():
             
     oldopen = __builtin__.open
     
-    def newopen(*args):
-        return newfile(*args)
+    def newopen(*args,**kwargs):
+        return newfile(*args,**kwargs)
     
     __builtin__.file = newfile
     __builtin__.open = newopen

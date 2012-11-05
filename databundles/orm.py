@@ -504,6 +504,7 @@ class Partition(Base):
         if self.dataset is None:
             # The relationship will be null until the object is committed
             s = object_session(self)
+
             ds = s.query(Dataset).filter(Dataset.id_ == self.d_id).one()
             id_ = ds.identity
         else:

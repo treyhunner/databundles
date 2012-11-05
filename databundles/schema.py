@@ -233,11 +233,11 @@ class Schema(object):
              
         # Add indexes   
         for index, columns in indexes.items():
-            Index(index, unique = False ,*columns)
+            Index(table.name+'_'+index, unique = False ,*columns)
     
         # Add unique indexes   
         for index, columns in uindexes.items():
-            Index(index, unique = True ,*columns)
+            Index(table.name+'_'+index, unique = True ,*columns)
         
         return metadata, at
  
@@ -271,7 +271,7 @@ class Schema(object):
         last_table = None
         line_no = 1; # Accounts for file header. Data starts on line 2
         for row in reader:
-            
+          
             # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
             # in UTF-8
             

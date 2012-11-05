@@ -270,8 +270,7 @@ class Test(unittest.TestCase):
         l1.verify()
         
     def test_s3(self):
-        from databundles.filesystem import S3Cache, FsCache
-     
+
         fs = self.bundle.filesystem
   
         # Set up the test directory and make some test files. 

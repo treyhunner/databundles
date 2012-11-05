@@ -333,7 +333,7 @@ class BundleFilesystem(Filesystem):
         Will store the downloaded file into the cache defined
         by filesystem.download
         '''
-        
+
         import tempfile
         import urlparse
       
@@ -345,7 +345,7 @@ class BundleFilesystem(Filesystem):
         # done. This allows the code to detect and correct partial
         # downloads. 
         download_path = os.path.join(tempfile.gettempdir(),file_path+".download")
-            
+          
         for attempts in range(3):
    
             if attempts > 0:
@@ -360,31 +360,34 @@ class BundleFilesystem(Filesystem):
                     os.remove(download_path)
 
                 cached_file = cache.get(file_path)
-          
+                       
                 if cached_file:
+                 
                     out_file = cached_file
                     
                     if test_f and not test_f(out_file):
                         cache.remove(file_path, True)
                         raise DownloadFailedError("Cached Download didn't pass test function "+url)
+                   
                     
                 else:
+
                     dirname = os.path.dirname(download_path)
                     if not os.path.isdir(dirname):
                         os.makedirs(dirname)
-                    
+
                     self.bundle.log("Downloading "+url)
                     self.bundle.log("  --> "+file_path)
                     download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
-                    
+
                     if not os.path.exists(download_path):
                         raise DownloadFailedError("Failed to download "+url)
                     
                     if test_f and not test_f(download_path):
                         raise DownloadFailedError("Download didn't pass test function "+url)
-                    
+
                     out_file = cache.put(download_path, file_path)
-       
+
                 break
                 
             except DownloadFailedError as e:
@@ -407,13 +410,14 @@ class BundleFilesystem(Filesystem):
             except Exception as e:
                 self.bundle.error("Unexpected download error '"+str(e)+"' when downloading "+url)
                 raise e
-                
+              
+
         if download_path and os.path.exists(download_path):
             os.remove(download_path) 
 
         if excpt:
             raise excpt
-    
+
         return out_file
 
     def get_url(self,source_url, create=False):
