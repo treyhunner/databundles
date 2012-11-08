@@ -63,8 +63,7 @@ class UsCensusBundle(BuildBundle):
         self._states_dict = None
     
         self._geo_dim_locks = {} 
-     
-        
+
     
     def configure_arg_parser(self, argv):
     
@@ -155,8 +154,6 @@ class UsCensusBundle(BuildBundle):
     
         return int(geoid)
 
-     
-          
 
 class UsCensusDimBundle(UsCensusBundle):
     
@@ -243,63 +240,6 @@ class UsCensusDimBundle(UsCensusBundle):
                  
         return self._states
 
-    def make_range_map(self):
-        
-        if os.path.exists(self.rangemap_file):
-            self.log("Re-using range map")
-            return
-
-        self.log("Making range map")
-
-        range_map = {}
-        
-        segment = None
-       
-        for table in self.schema.tables:
-            
-            if table.data.get("split_table", False) or table.name == 'sf1geo':
-                # Don't look at geo dim tables
-                continue;
-   
-            if segment != int(table.data['segment']):
-                last_col = 4
-                segment = int(table.data['segment'])
-            
-            col_start = min(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
-            col_end = max(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
-        
-            if segment not in range_map:
-                range_map[segment] = {}
-        
-            range_map[segment][table.id_.encode('ascii', 'ignore')] = {
-                                'start':last_col + col_start,  
-                                'end':last_col + col_end+ 1, 
-                                'length': col_end-col_start + 1,
-                                'table' : table.name.encode('ascii', 'ignore')}
-            
-                         
-            #print "{:5s} {:4d} {:4d} {:4d} {:4d}".format(table.name,  int(segment), col_end-col_start + 1, 
-            #                                        last_col + col_start, last_col + col_end  )
-
-            #print range_map[segment][table.id_.encode('ascii', 'ignore')]
-         
-            last_col += col_end
-            
-            self.ptick('.')
-
-    
-        self.ptick('\n')
-
-        with open(self.rangemap_file, 'w')as f:
-            yaml.dump(range_map, f,indent=4, default_flow_style=False)  
-
-
-        # First install the bundle main database into the library
-        # so all of the tables will be there for installing the
-        # partitions. 
-        self.log("Install bundle")
-        self.library.put(self)
-       
 
     #############################################
     # Build 
@@ -380,7 +320,7 @@ class UsCensusDimBundle(UsCensusBundle):
         t_start = time.time()
         row_i = 0
         
-        table = self.schema.table('sf1geo')
+        table = self.schema.table('geofile')
         
         pid = PartitionIdentity(self.identity, table=table.name)
 
@@ -393,7 +333,7 @@ class UsCensusDimBundle(UsCensusBundle):
         if not partition.database.exists():
             partition.create_with_tables(table.name)
         
-        partition.database.connection.execute("delete from sf1geo")
+        partition.database.connection.execute("delete from geofile")
         
         # Make the sqlite connect allow 8 bit strings, which are used in 
         # the names in Puerto Rico
@@ -420,7 +360,7 @@ class UsCensusDimBundle(UsCensusBundle):
         This will aso create a CSV file for the record_code table for the state, which 
         holds the hash values of the split table entries. '''
         
-        import time
+        import time, copy
      
         # Create the record_code partition, since it doesn't get created with the other
         # geo tables. 
@@ -472,6 +412,7 @@ class UsCensusDimBundle(UsCensusBundle):
             except:
                 pass
 
+
         # Iterate over all of the geo rows for this state. 
         for geo in self.generate_rows(state): #@UnusedVariable
          
@@ -486,9 +427,6 @@ class UsCensusDimBundle(UsCensusBundle):
 
             geo['abbrev'] = state
 
-            geoid = self.make_geoid(release_id, state, geo['sumlev'], geo['geocomp'], 
-                                 geo['chariter'], geo['cifsn'])
-
             # Iterate over all of the geo dimension tables, taking part of this
             # geo row and putting it into the temp file for that geo dim table. 
       
@@ -499,11 +437,14 @@ class UsCensusDimBundle(UsCensusBundle):
             
                 partition = geo_partitions[table_id]
 
-              
                 # Extract a subset form the geo row for this geo dim table. 
-                values=[ f(geo) for f in processors ]
-                
-                row_hash = self.row_hash(values)
+                values = [ f(geo) for f in processors ]
+                         
+                if not table.validate_or(values):
+                    # Substitute the empty row
+                    values = copy.copy( table.null_row)
+
+                row_hash = table.row_hash(values)
                 th = row_hash_map[table.id_]
              
                 # The local row_hash check reduces the number of calls to writerow, but
@@ -511,11 +452,11 @@ class UsCensusDimBundle(UsCensusBundle):
                 # guarantee uniqueness across states. 
                 if row_hash not in th:  
                     th.add(row_hash)
-                    values[0] = 0
+                    
                     values[-1] = row_hash
                     
                     tf = partition.tempfile( suffix=state)
-   
+
                     tf.writer.writerow(values)
 
                 hash_keys.append(row_hash)
@@ -525,7 +466,7 @@ class UsCensusDimBundle(UsCensusBundle):
             # The fileid comes from the bundle.yaml configuration b/c it is the same for all records
             # in the bundle. 
          
-            values = [None, int(geo['logrecno']),geoid]  + hash_keys
+            values = [None, int(geo['logrecno']),int(geo['sumlev']),int(geo['geocomp'])]  + hash_keys
             tf = record_code_partition.tempfile(suffix=state)
             tf.writer.writerow(values)
 
@@ -555,14 +496,13 @@ class UsCensusDimBundle(UsCensusBundle):
             
             for row in partition.database.session.execute("SELECT * FROM {}".format(partition.table.name)):
                 row_i += 1
-                #print row['hash'],'->',row[0]
+
                 if not row['hash']:
                     print partition.table.name, row
                     continue;
           
-                #dbm[struct.pack(">Q",row['hash'])] = struct.pack(">L",row[0])
                 dbm[str(row['hash'])] = str(row[0])
-                if row_i % 100000 == 0:
+                if row_i % 1000 == 0:
                     self.log("Rehash "+partition.table.name+" "+
                              str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
                     
@@ -578,15 +518,22 @@ class UsCensusDimBundle(UsCensusBundle):
         rcp = self.get_record_code_partition();
 
         translators = []
-        for col in rcp.table.columns[3:]:
+        for col in rcp.table.columns[4:]:
             name = col.name.replace('_id','');
             partition = self.partitions.find_table(name)
+
+            if not partition:
+                self.error("MISSING PARTITION! for table: "+name)
+                continue
 
             # Get a handle on the dmb database that translated hash values to 
             # primary keeys
          
-            dbm = partition.database.dbm(partition.table).reader      
-            translators.append(dbm)
+            try:
+                dbm = partition.database.dbm(partition.table).reader      
+                translators.append(dbm)
+            except: 
+                self.error("Failed to get DBM file for partition {}".format(partition.identity.name))
 
         row_i = 0
      
@@ -606,23 +553,25 @@ class UsCensusDimBundle(UsCensusBundle):
                     
                     row_i += 1
                 
-                    new_row = list(row[0:3]) + [ int(translators[i][str(v)]) for i,v in enumerate(row[3: ])]
+                    new_row = list(row[0:4]) + [ int(translators[i][str(v)]) for i,v in enumerate(row[4: ])]
         
                     ins.insert(new_row)
         
                     if row_i % 10000 == 0:
+                           
                             self.log("Reindex record_code "+
                                      str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
             except Exception as e:
-                self.error("Reindex error: "+str(e))
-                raise
+                self.error("Reindex error for table {} : {} ".format(rcp.table.name, str(e)))
+             
+        self.database.session.commit()   
 
     def join_partitions(self):
         '''Copy all of the seperate partitions into the main database. '''
         
         # record-code partition hasn't been created yet. 
 
-        for partition in self.dim_partitions:
+        for partition in self.geo_partition_map().values():
 
             self.log("Join partition {}".format(partition.identity.name))
             
@@ -663,7 +612,14 @@ class UsCensusDimBundle(UsCensusBundle):
         else:
             self.log("load geo dim for {}".format(partition.table.name))
 
-        force = True if table_name == 'record_code' else False
+        if table_name == 'record_code':
+            force = True # Write all rows, not just hash unique ones. 
+            # Create the record_code partition, since it doesn't get created with the other
+            # geo tables. Only needed if the partitions have been deleted and recreated before
+            # running this step seperateoly. 
+            unused = self.geo_partition(self.schema.table('record_code'), True )
+        else:
+            force = False
 
         hash_set = set()
         row_i = 0;
@@ -692,16 +648,22 @@ class UsCensusDimBundle(UsCensusBundle):
                         # The record_code tables doesn't use the hash for a primary lkey
                         if not row[0]: row[0] = row_i
     
-                        if row[-1] not in hash_set or force == True: # Only write unique rows
-                            # Set the primary key for the row. 
-                            primary_key += 1
-                            hash_set.add(row[-1])
+                        if force: # For the record_code partition, write all rows. 
+                            primary_key += 1     
                             row[0] = primary_key
                             
                             ins.insert(row) # Insert into the partition database. 
                             
-                            if not force:
-                                dbm[row[-1]] = primary_key # Map the hash to the pkey, to update record_code later. 
+                        elif row[-1] not in hash_set:
+                            # Set the primary key for the row. 
+                            primary_key += 1     
+                            row[0] = primary_key
+                            
+                            ins.insert(row) # Insert into the partition database. 
+                       
+                            hash_set.add(row[-1])
+                            dbm[row[-1]] = primary_key # Map the hash to the pkey, to update record_code later. 
+                            
                     tf.close()     
             except Exception as e:
                 self.error("Error: "+str(e))
@@ -880,26 +842,15 @@ class UsCensusDimBundle(UsCensusBundle):
         return self._geo_tables
 
       
-    def row_hash(self, values):
-        '''Calculate a hash from a database row, for geo split tables '''  
-        import hashlib
-        
-        m = hashlib.md5()
-        for x in values[1:]:  # The first record is the primary key
-            try:
-                m.update(x.encode('utf-8')+'|') # '|' is so 1,23,4 and 12,3,4 aren't the same  
-            except:
-                m.update(str(x)+'|')
-        # Less than 16 to avoid integer overflow issues. Not sure it works. 
-        hash = int(m.hexdigest()[:14], 16) # First 8 hex digits = 32 bit @ReservedAssignment
-     
-        return hash
 
-        def install(self):
-   
-            self.log("Install bundle")  
-            dest = self.library.put(self)
-            self.log("Installed to {} ".format(dest))
+    
+    def install(self):  
+        
+        return True
+          
+        self.log("Install bundle")  
+        dest = self.library.put(self)
+        self.log("Installed to {} ".format(dest))
 
 
 class UsCensusFactBundle(UsCensusBundle):
@@ -1069,7 +1020,66 @@ class UsCensusFactBundle(UsCensusBundle):
                     self.run_fact_db(table.id_)
               
         return True
-      
+
+    def make_range_map(self):
+        
+        if os.path.exists(self.rangemap_file):
+            self.log("Re-using range map")
+            return
+
+        self.log("Making range map")
+
+        range_map = {}
+        
+        segment = None
+       
+        for table in self.schema.tables:
+            
+            if table.data.get("split_table", False) or table.name == 'geofile':
+                # Don't look at geo dim tables
+                continue;
+   
+            if segment != int(table.data['segment']):
+                last_col = 4
+                segment = int(table.data['segment'])
+            
+            col_start = min(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
+            col_end = max(int(c.data['source_col']) for c in table.columns if c.data.get('source_col', False))
+        
+            if segment not in range_map:
+                range_map[segment] = {}
+        
+            range_map[segment][table.id_.encode('ascii', 'ignore')] = {
+                                'start':last_col + col_start,  
+                                'end':last_col + col_end+ 1, 
+                                'length': col_end-col_start + 1,
+                                'table' : table.name.encode('ascii', 'ignore')}
+            
+                         
+            #print "{:5s} {:4d} {:4d} {:4d} {:4d}".format(table.name,  int(segment), col_end-col_start + 1, 
+            #                                        last_col + col_start, last_col + col_end  )
+
+            #print range_map[segment][table.id_.encode('ascii', 'ignore')]
+         
+            last_col += col_end
+            
+            self.ptick('.')
+
+    
+        self.ptick('\n')
+
+        with open(self.rangemap_file, 'w')as f:
+            yaml.dump(range_map, f,indent=4, default_flow_style=False)  
+
+
+        # First install the bundle main database into the library
+        # so all of the tables will be there for installing the
+        # partitions. 
+        self.log("Install bundle")
+        self.library.put(self)
+       
+
+
     def run_state_tables(self, state):
         '''Split up the segment files into seperate tables, and link in the
         geo splits table for foreign keys to the geo splits. '''

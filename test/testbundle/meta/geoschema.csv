@@ -1,1 +1,23 @@
-table,column,is_pk,i1,ui1,type,width,default,description,Notes,d_data_onetone,tone_id,1,,,INTEGER,,,,,onetone,text,,1,,TEXT,,DEFAULT,,,twotone,integer,,,1,INTEGER,,-1,,,threetone,float,,,1,REAL,,3.14,,,fourttwo,ttwo_id,1,,,INTEGER,,,,,onettwo,text,,1,,TEXT,,DEFAULT,,,twottwo,integer,,,1,INTEGER,,-1,,,threettwo,float,,,1,REAL,,3.14,,,fourtthree,tthree_id,1,,,INTEGER,,,,,onetthree,text,,1,,TEXT,,DEFAULT,,,twotthree,integer,,,1,INTEGER,,-1,,,threetthree,float,,,1,REAL,,3.14,,,fourall,all_id,,,,INTEGER,,,,,oneall,text1,,,,TEXT,3,NONE,,,twoall,text2,,,,TEXT,4,NONE,,,all,integer1,,,,INTEGER,3,-1,,,threeall,integer2,,,,INTEGER,4,-1,,,fourall,integer3,,,,INTEGER,5,-1,,,all,float,,,,REAL,5,-1,,,
+"table","column","is_pk","i1","ui1","type","width","default","description","Notes","d_data_one","d_mandatory","d_hash"
+"tone","tone_id",1,,,"INTEGER",,,,,"one",,
+"tone","text",,1,,"TEXT",,"DEFAULT",,,"two",1,1
+"tone","integer",,,1,"INTEGER",,-1,,,"three",,1
+"tone","float",,,1,"REAL",,3.14,,,"four",,
+,,,,,,,,,,,,
+"ttwo","ttwo_id",1,,,"INTEGER",,,,,"one",,
+"ttwo","text",,1,,"TEXT",,"DEFAULT",,,"two",,
+"ttwo","integer",,,1,"INTEGER",,-1,,,"three",1,1
+"ttwo","float",,,1,"REAL",,3.14,,,"four",,1
+,,,,,,,,,,,,
+"tthree","tthree_id",1,,,"INTEGER",,,,,"one",,
+"tthree","text",,1,,"TEXT",,"DEFAULT",,,"two",,1
+"tthree","integer",,,1,"INTEGER",,-1,,,"three",,
+"tthree","float",,,1,"REAL",,3.14,,,"four",1,1
+,,,,,,,,,,,,
+"all","all_id",,,,"INTEGER",,,,,"one",,
+"all","text1",,,,"TEXT",3,"NONE",,,"two",,
+"all","text2",,,,"TEXT",4,"NONE",,,,,
+"all","integer1",,,,"INTEGER",3,-1,,,"three",1,
+"all","integer2",,,,"INTEGER",4,-1,,,"four",1,
+"all","integer3",,,,"INTEGER",5,-1,,,,,
+"all","float",,,,"REAL",5,-1,,,,,

@@ -6,20 +6,49 @@ Created on Jun 22, 2012
 import unittest
 from  testbundle.bundle import Bundle
 from databundles.identity import * #@UnusedWildImport
+import time
 
 class Test(unittest.TestCase):
 
     def setUp(self):
 
         bundle = Bundle()      
-        bundle.clean()
-        
-        self.bundle = Bundle()
-        
+
+        self.bundle = Bundle()    
         self.bundle_dir = bundle.bundle_dir
+
+        marker = self.bundle.filesystem.build_path('test-marker')
+        build_dir =  self.bundle.filesystem.build_path()+'/' # Slash needed for rsync
+        save_dir = self.bundle.filesystem.build_path()+"-save/"
+            
+        # For most cases, re-set the bundle by copying from a saved version. If
+        # the bundle doesn't exist and the saved version doesn't exist, 
+        # build a new one. 
+
+        if not os.path.exists(marker):
+            print "Build dir marker ({}) is missing".format(marker)
+            bundle.clean()
+            
+            if not os.path.exists(save_dir):
+                print "Save dir is missing; re-build bundle. "
+                self.bundle.prepare()
+                self.bundle.build()
+                
+                with open(marker, 'w') as f:
+                    f.write(str(time.time()))
+                # Copy the newly built bundle to the save directory    
+                os.system("rm -rf {1}; rsync -arv {0} {1} > /dev/null ".format(build_dir, save_dir))
+
+        # Always copy, just to be safe. 
+        print "Copying bundle from {}".format(save_dir)
+        os.system("rm -rf {0}; rsync -arv {1} {0}  > /dev/null ".format(build_dir, save_dir))
+  
         
-        self.bundle.prepare()
-        self.bundle.build()
+    def save_bundle(self):
+        pass
+        
+    def restore_bundle(self):
+        pass 
       
     def test_objectnumber(self):
           
@@ -142,9 +171,9 @@ class Test(unittest.TestCase):
       
         self.bundle.database.session.commit()
         
-        self.assertIn('d1DxuZ0601', [c.id_ for c in t.columns])
-        self.assertIn('d1DxuZ0602', [c.id_ for c in t.columns])
-        self.assertIn('d1DxuZ0603', [c.id_ for c in t.columns])
+        self.assertIn('d1DxuZ0701', [c.id_ for c in t.columns])
+        self.assertIn('d1DxuZ0702', [c.id_ for c in t.columns])
+        self.assertIn('d1DxuZ0703', [c.id_ for c in t.columns])
         
     def test_generate_schema(self):
         '''Uses the generateSchema method in the bundle'''
@@ -183,8 +212,7 @@ class Test(unittest.TestCase):
         s.add_column(t,name='col1', datatype=Column.DATATYPE_INTEGER, default=-1, illegal_value = '999' )
         s.add_column(t,name='col2', datatype=Column.DATATYPE_TEXT )   
         s.add_column(t,name='col3', datatype=Column.DATATYPE_REAL )
-        
-        
+
         self.bundle.database.session.commit()
         
         c1 = t.column('col1')
@@ -200,6 +228,89 @@ class Test(unittest.TestCase):
         self.assertEquals(-3, CensusTransform(c1)({'col1': ' # '}))
         self.assertEquals(-2, CensusTransform(c1)({'col1': ' ! '}))
        
+       
+    def test_validator(self):
+       
+        #
+        # Validators
+        #
+        
+        
+        tests =[
+                ( 'tone',True, (None,'VALUE',0,0) ),
+                ( 'tone',True, (None,'VALUE',-1,0) ),
+                ( 'tone',False, (None,'DEFAULT',0,0) ),
+                ( 'tone',False, (None,'DEFAULT',-1,0) ),
+                
+                ( 'ttwo',True, (None,'DEFAULT',0,0) ),
+                ( 'ttwo',True, (None,'DEFAULT',0,3.14) ),
+                ( 'ttwo',False, (None,'DEFAULT',-1,0) ),
+                
+                ( 'tthree',True, (None,'DEFAULT',0,0) ),
+                ( 'tthree',False, (None,'DEFAULT',0,3.14) ),
+                
+                ( 'all',True, (None,'text1','text2',1,2,3,3.14)),
+                ( 'all',False, (None,'text1','text2',-1,-1,3,3.14)),
+                ( 'all',False, (None,'text1','text2',-1,2,3,3.14)),
+                ( 'all',False, (None,'text1','text2',1,-1,3,3.14)),
+              ]
+     
+        for test in tests: 
+            table_name, truth, row = test
+            table =  self.bundle.schema.table(table_name);
+            vd =table._get_validator()
+            if truth:
+                self.assertTrue(vd(row), "Test not 'true' for table '{}': {}".format(table_name,row))
+            else:
+                self.assertFalse(vd(row), "Test not 'false' for table '{}': {}".format(table_name,row))
+
+        # Testing the "OR" join of multiple columns. 
+
+        tests =[
+                ( 'tone',True, (None,'VALUE',0,0) ), #1
+                ( 'tone',True, (None,'VALUE',-1,0) ),
+                ( 'tone',False, (None,'DEFAULT',0,0) ),
+                ( 'tone',False, (None,'DEFAULT',-1,0) ),
+                
+                ( 'ttwo',True, (None,'DEFAULT',0,0) ), #5
+                ( 'ttwo',True, (None,'DEFAULT',0,3.14) ),
+                ( 'ttwo',False, (None,'DEFAULT',-1,0) ),
+                
+                ( 'tthree',True, (None,'DEFAULT',0,0) ), #8
+                ( 'tthree',False, (None,'DEFAULT',0,3.14) ),
+                
+                ( 'all',True, (None,'text1','text2',1,2,3,3.14)), #10
+                ( 'all',False, (None,'text1','text2',-1,-1,3,3.14)), #11
+                ( 'all',True, (None,'text1','text2',-1,2,3,3.14)), #12
+                ( 'all',True, (None,'text1','text2',1,-1,3,3.14)), #13
+              ]
+     
+        for i, test in enumerate(tests): 
+            table_name, truth, row = test
+            table =  self.bundle.schema.table(table_name);
+            vd =table._get_validator(and_join=False)
+            if truth:
+                self.assertTrue(vd(row), "Test {} not 'true' for table '{}': {}".format(i+1, table_name,row))
+            else:
+                self.assertFalse(vd(row), "Test {} not 'false' for table '{}': {}".format(i+1, table_name,row))
+
+        
+        # Test the hash functions. This test depends on the d_test values in geoschema.csv
+        tests =[
+        ( 'tone','A|1|', (None,'A',1,2) ), 
+        ( 'ttwo','1|2|', (None,'B',1,2) ), 
+        ( 'tthree','C|2|', (None,'C',1,2) )]
+        
+        import hashlib
+        
+        for i, test in enumerate(tests): 
+            table_name, hashed_str, row = test
+            table =  self.bundle.schema.table(table_name);
+           
+            m = hashlib.md5()
+            m.update(hashed_str)
+            
+            self.assertEquals(int(m.hexdigest()[:14], 16), table.row_hash(row))
         
     def test_partition(self):
         
@@ -225,8 +336,9 @@ class Test(unittest.TestCase):
         
         self.bundle.database.session.commit()
         
-        # 3 partitions from the build, three we just created. 
-        self.assertEqual(6, len(self.bundle.partitions.all))
+        # 4 partitions from the build ( defined in meta/geoschema.csv),
+        # three we just created. 
+        self.assertEqual(7, len(self.bundle.partitions.all))
         
         p = self.bundle.partitions.new_partition(pid1)   
         self.assertEquals('pid1',p.data['pid'] )
@@ -257,14 +369,6 @@ class Test(unittest.TestCase):
         s.commit()
         p.database.create()
         
-    def test_config(self):
-
-        db_config = self.bundle.db_config
-       
-        db_config.foo.bar = 'bingo'
-       
-        self.assertEquals('bingo', db_config.foo.bar)
-     
         
     def x_test_tempfile(self):
   

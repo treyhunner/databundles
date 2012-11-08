@@ -3,6 +3,7 @@ Created on Jun 21, 2012
 
 @author: eric
 '''
+from sqlalchemy import orm
 from sqlalchemy import event
 from sqlalchemy import Column as SAColumn, Integer, Boolean
 from sqlalchemy import Float as Real,  Text, ForeignKey
@@ -277,6 +278,15 @@ class Table(Base):
         if self.name:
             self.name = self.mangle_name(self.name)
 
+        self.init_on_load()
+    
+    @orm.reconstructor
+    def init_on_load(self):
+        self._or_validator = None
+        self._and_validator = None
+        self._null_row = None
+        self._row_hasher = None
+        
     @staticmethod
     def before_insert(mapper, conn, target):
         '''event.listen method for Sqlalchemy to set the seqience_id for this  
@@ -409,6 +419,99 @@ class Table(Base):
                 header.append(col.name)
            
             return header, unpack_str, length
+
+    @property
+    def null_row(self):
+        if self._null_row is None:
+            self._null_row = []
+            for col in self.columns:
+                if col.default:
+                    self._null_row.append(col.default)
+                else:
+                    self._null_row.append(None)
+            
+        return self._null_row
+
+    def _get_validator(self, and_join=True):
+        '''Return a lambda function that, when given a row to this table, 
+        returns true or false to indicate the validitity of the row
+        
+        :param and_join: If true, join multiple column validators with AND, other
+        wise, OR
+        :type and_join: Bool
+        
+        :rtype: a `LibraryDb` object
+    
+            
+        '''
+
+        f = prior = lambda row : True
+        first = True
+        for i,col in  enumerate(self.columns):
+
+            if col.data.get('mandatory', False):
+                default_value = col.default
+                index = i
+                
+                if and_join:
+                    f = lambda row, default_value=default_value, index=index, prior=prior: prior(row) and str(row[index]) != str(default_value)
+                elif first:
+                    # OR joins would either need the initial F to be 'false', or just don't use it
+                    f = lambda row, default_value=default_value, index=index:  str(row[index]) != str(default_value)  
+                else:
+                    f = lambda row, default_value=default_value, index=index, prior=prior: prior(row) or str(row[index]) != str(default_value)
+                            
+                prior = f
+                first = False
+            
+        return f
+    
+    def validate_or(self, values):
+
+        if self._or_validator is None:
+            self._or_validator = self._get_validator(and_join=False)
+        
+        return self._or_validator(values)
+     
+    def validate_and(self, values):
+
+        if self._and_validator is None:
+            self._and_validator = self._get_validator(and_join=True)
+        
+        return self._and_validator(values)
+    
+    def _get_hasher(self):
+        '''Return a  function to generate a hash for the row'''
+        import hashlib
+ 
+        # Try making the hash set from the columns marked 'hash'
+        indexes = [ i for i,c in enumerate(self.columns) if  
+                   c.data.get('hash',False) and  not c.is_primary_key  ]
+ 
+        # Otherwise, just use everything by the primary key. 
+        if len(indexes) == 0:
+            indexes = [ i for i,c in enumerate(self.columns) if not c.is_primary_key ]
+
+        def hasher(values):
+            m = hashlib.md5()
+            for index in indexes: 
+                x = values[index]
+                try:
+                    m.update(x.encode('utf-8')+'|') # '|' is so 1,23,4 and 12,3,4 aren't the same  
+                except:
+                    m.update(str(x)+'|') 
+            return int(m.hexdigest()[:14], 16)
+        
+        return hasher
+    
+    def row_hash(self, values):
+        '''Calculate a hash from a database row''' 
+        
+        if self._row_hasher is None:
+            self._row_hasher = self._get_hasher()
+            
+        return self._row_hasher(values)
+         
      
 event.listen(Table, 'before_insert', Table.before_insert)
 event.listen(Table, 'before_update', Table.before_update)

@@ -471,8 +471,13 @@ class BundleDbConfig(BundleConfig):
         
         bd = BundleDbConfigDict(self)
       
-        return bd.get(group)
-    
+        group = bd.get(group)
+        
+        if not group:
+            pass
+        
+        
+        return group
 
     def set_value(self, group, key, value):
         from databundles.orm import Config as SAConfig

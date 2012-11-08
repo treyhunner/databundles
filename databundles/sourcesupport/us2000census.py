@@ -75,7 +75,7 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
         import struct
         import zipfile
 
-        table = self.schema.table('sf1geo')
+        table = self.schema.table('geofile')
         header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable    
 
         rows = 0;
@@ -285,7 +285,7 @@ class Us2000CensusFactBundle(UsCensusFactBundle):
         for all of the segment files and the geo file. '''
         import struct
 
-        table = self.schema.table('sf1geo')
+        table = self.schema.table('geofile')
         header, unpack_str, length = table.get_fixed_unpack() #@UnusedVariable
          
         geo_source = self.urls['geos'][state]

@@ -33,6 +33,7 @@ class Bundle(BuildBundle):
             partition = self.partitions.new_partition(pid)   
             partition.create_with_tables(table.name)
                     
+    
     def build(self):
         import random
         from functools import partial
@@ -60,5 +61,19 @@ class Bundle(BuildBundle):
             db = partition.database.path
             table_name = partition.table.name
             petl.dummytable(30000,fields).tosqlite3(db, table_name, create=False) #@UndefinedVariable
+
+
+    def install(self):
+        self.log("Install bundle")  
+        dest = self.library.put(self)
+        self.log("Installed to {} ".format(dest))
+        
+        for partition in self.partitions:
+            dest = self.library.put(partition)
+            self.log("Installed to {} ".format(dest))
+        
+    
+    def fetch(self):
+        pass
 
         
