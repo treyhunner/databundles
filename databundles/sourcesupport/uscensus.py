@@ -50,9 +50,15 @@ class UsCensusBundle(BuildBundle):
         except:
             pass
         
-        self.geoschema_file = self.filesystem.path(bg.geoschemaFile)
-        self.urls_file =  self.filesystem.path(bg.urlsFile)
-        self.states_file =  self.filesystem.path(bg.statesFile)
+        try: self.geoschema_file = self.filesystem.path(bg.geoschemaFile)
+        except: self.log("Missing geoschema file config entry ")
+        
+        try: self.states_file =  self.filesystem.path(bg.statesFile)
+        except: self.log("Missing states file config entry ")
+        
+        try: self.urls_file =  self.filesystem.path(bg.urlsFile)
+        except: self.log("Missing urls file config entry ")
+
 
         self._table_id_cache = {}
 
@@ -334,9 +340,6 @@ class UsCensusDimBundle(UsCensusBundle):
             partition.create_with_tables(table.name)
         
         partition.database.connection.execute("delete from geofile")
-        
-        # Make the sqlite connect allow 8 bit strings, which are used in 
-        # the names in Puerto Rico
 
         with partition.database.inserter(partition.table) as ins:
             for state in self.states:
@@ -349,11 +352,14 @@ class UsCensusDimBundle(UsCensusBundle):
                         self.log("SF1 "+state+" "+str(int( row_i/(time.time()-t_start)))+'/s '+str(row_i/1000)+"K ")
                 
                     #print row['fileid'], row['stusab'], row['sumlev'], row['geocomp'], row['chariter'], row['cifsn'], row['logrecno']
+                    
+                    # To handle the 8-bit names that are in the Puerto Rico file. 
                     row['name'] = row['name'].decode('latin1').encode('ascii','xmlcharrefreplace')
                     ins.insert(row)
 
 
         partition.database.load_sql(self.filesystem.path(self.config.build.sf1IndexSql))
+
 
     def run_geo_dim(self, state):
         '''Break up a state geo file into seperate geo dim split tables, as CSV files. 
@@ -440,9 +446,13 @@ class UsCensusDimBundle(UsCensusBundle):
                 # Extract a subset form the geo row for this geo dim table. 
                 values = [ f(geo) for f in processors ]
                          
+                # If the row does not have all of the required fields, 
+                # map it to the empyt row
                 if not table.validate_or(values):
                     # Substitute the empty row
                     values = copy.copy( table.null_row)
+
+
 
                 row_hash = table.row_hash(values)
                 th = row_hash_map[table.id_]

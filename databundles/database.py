@@ -24,7 +24,7 @@ class ValueInserter(object):
         if text_factory:
             print self.db.engine.raw_connection()
             self.db.engine.raw_connection().connection.text_factory = text_factory
-            
+
     def insert(self, values):
        
         try:
