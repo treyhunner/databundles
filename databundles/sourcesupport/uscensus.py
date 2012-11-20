@@ -9,29 +9,7 @@ Base class bundle for the US Census
 from  databundles.bundle import BuildBundle
 import os.path  
 import yaml
-import zipfile
 
-##
-## Monkey Patch!
-## Need to patch zipfile.testzip b/c it doesn't close file descriptors in 2.7.3
-## The bug apparently exists in several other versions of python 
-## http://bugs.python.org/issue16408
-def  testzip(self):
-    """Read all the files and check the CRC."""
-    chunk_size = 2 ** 20
-    for zinfo in self.filelist:
-        try:
-            # Read by chunks, to avoid an OverflowError or a
-            # MemoryError with very large embedded files.
-            f = self.open(zinfo.filename, "r")
-            while f.read(chunk_size):     # Check CRC-32
-                pass
-            f.close()
-            f._fileobj.close() # This shoulnd't be necessary, but it is. 
-        except zipfile.BadZipfile:
-            return zinfo.filename
-
-zipfile.ZipFile.testzip = testzip
 
 class UsCensusBundle(BuildBundle):
     '''
