@@ -204,9 +204,7 @@ class TempFile(object):
 class HD5File(object):
     
     def __init__(self, bundle, db, suffix=None):
-        import os
-        import tables
-        
+
         self.bundle = bundle
 
         self.file = None
@@ -221,9 +219,7 @@ class HD5File(object):
     def table(self, table_name, mode='a', expected=None):
         import tables
         from databundles.orm import Column
-        
-        from collections import OrderedDict
-        
+
         self._file = tables.openFile(self._path, mode = mode)
         
         try:
@@ -614,10 +610,10 @@ class Database(object):
                 from pkg_resources import resource_string #@UnresolvedImport
                 script_str = resource_string(databundles.__name__, Database.PROTO_SQL_FILE)
          
-            dir = os.path.dirname(self.path);
+            dir_ = os.path.dirname(self.path);
             
-            if not os.path.isdir(dir):
-                os.makedirs(dir)
+            if not os.path.isdir(dir_):
+                os.makedirs(dir_)
          
             self.load_sql(script_str)
             

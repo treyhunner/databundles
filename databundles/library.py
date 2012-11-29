@@ -8,7 +8,7 @@ from databundles.run import  RunConfig
 import os.path
 
 from databundles.dbexceptions import ConfigurationError
-from databundles.filesystem import FsCache, Filesystem
+from databundles.filesystem import  Filesystem
 
 import databundles
 
@@ -853,7 +853,7 @@ class Library(object):
         dst = self.cache.put(src,rel_path)
         self.database.add_file(dst, self.cache.repo_id, bundle.identity.id_)
           
-        # Only installbundles in the database. 
+        # Only install bundles in the database. 
         if  isinstance(bundle, Bundle):
             dataset, partition = self.database.install_bundle(bundle)
         
