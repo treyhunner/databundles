@@ -254,7 +254,8 @@ class BundleFilesystem(Filesystem):
 
 
     def _get_unzip_file(self, cache, tmpdir, zf, path, name):
- 
+        '''Look for a member of a zip file in the cache, and if it doesn next exist, 
+        extract and cache it. '''
         name = name.replace('/','').replace('..','')
         
         base = os.path.basename(path)
@@ -285,7 +286,7 @@ class BundleFilesystem(Filesystem):
 
         return abs_path
  
-    def unzip(self,path):
+    def unzip(self,path, regex=None):
         '''Context manager to extract a single file from a zip archive, and delete
         it when finished'''
         import tempfile, uuid
@@ -296,9 +297,16 @@ class BundleFilesystem(Filesystem):
    
         try:
             with zipfile.ZipFile(path) as zf:
-                name = iter(zf.namelist()).next() # Assume only one file in zip archive.    
-
-                abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)
+                abs_path = None
+                if regex is None:
+                    name = iter(zf.namelist()).next() # Assume only one file in zip archive. 
+                    abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)   
+                else:
+                    
+                    for name in zf.namelist():
+                        if regex.match(name):
+                            abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)   
+                            break
 
                 return abs_path
         finally:
@@ -306,10 +314,9 @@ class BundleFilesystem(Filesystem):
             
         return None
 
-    @contextmanager
     def unzip_dir(self,path,  cache=True):
         '''Extract all of the files in a zip file to a directory, and return
-        the directory. Delete the directory when done. '''
+        the directory. Delete the directory when done, if cache=False '''
        
         raise Exception("Fixme")
        

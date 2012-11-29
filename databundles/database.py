@@ -78,6 +78,10 @@ class ValueInserter(object):
         else:
             if self.transaction:
                 self.transaction.commit()
+               
+        if type_ is not None:
+            self.bundle.error("Got Exception: "+str(value))
+            return False
                 
         return self
         
@@ -738,6 +742,8 @@ class Database(object):
         
         q = """ATTACH DATABASE '{}' AS '{}' """.format(path, name)
     
+
+    
         self.connection.execute(q)
            
         self._last_attach_name = name
@@ -884,12 +890,12 @@ class BundleDb(Database):
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''
 
-    return;
-    dbapi_con.execute('PRAGMA journal_mode = OFF')
-    dbapi_con.execute('PRAGMA synchronous = OFF')
+    dbapi_con.execute('PRAGMA page_size = 8192')
     dbapi_con.execute('PRAGMA temp_store = MEMORY')
     dbapi_con.execute('PRAGMA cache_size = 500000')
     dbapi_con.execute('PRAGMA foreign_keys=ON')
+    dbapi_con.execute('PRAGMA journal_mode = OFF')
+    #dbapi_con.execute('PRAGMA synchronous = OFF')
 
     
 def insert_or_ignore(table, columns):
