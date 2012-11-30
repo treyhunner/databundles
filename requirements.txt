@@ -7,6 +7,6 @@ boto
 decorator
 simplejson
 psycopg2
-cython
+gevent
 tables
 

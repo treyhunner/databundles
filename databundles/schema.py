@@ -47,10 +47,11 @@ class Schema(object):
         self.col_sequence = 1 
 
     def clean(self):
-        from databundles.orm import Table, Column
+        from databundles.orm import Table, Column, Partition
         s = self.bundle.database.session 
-        s.query(Table).delete()
-        s.query(Column).delete()        
+        s.query(Partition).delete()        
+        s.query(Column).delete() 
+        s.query(Table).delete()       
         
     @property
     def tables(self):
