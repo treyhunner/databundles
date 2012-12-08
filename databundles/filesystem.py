@@ -714,7 +714,9 @@ class FsLimitedCache(object):
         
         logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
         return path
-    
+
+
+  
     def put(self, source, rel_path):
         '''Copy a file to the repository
         
@@ -880,6 +882,8 @@ class FsCache(object):
         logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
         return path
     
+   
+  
     def put(self, source, rel_path):
         '''Copy a file to the repository
         
@@ -898,18 +902,23 @@ class FsCache(object):
     
         try:
             # Try it as a file-like object
-            shutil.copyfileobj(source, repo_path)
-            source.seek(0)
-        except AttributeError: 
+            
+            with open(repo_path, 'w+') as repo_sink:
+                shutil.copyfileobj(source,  repo_sink)
+
+        except AttributeError as e: 
             # Nope, try a filename. 
+      
             shutil.copyfile(source, repo_path)
             
         size = os.path.getsize(repo_path)
-
+        
+     
         if self.upstream:
-            self.upstream.put(source, rel_path)
+            self.upstream.put(repo_path, rel_path) 
 
         return repo_path
+        
     
     def find(self,query):
         '''Passes the query to the upstream, if it exists'''
