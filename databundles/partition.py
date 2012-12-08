@@ -123,7 +123,7 @@ class Partition(object):
        
         source =  name_parts.pop(0)
         p = self.identity
-        partition_path = [ str(i) for i in [p.time,p.space,p.table,p.grain] if i is not None]
+        partition_path = [ str(i) for i in [p.table,p.time,p.space,p.grain] if i is not None]
        
         return source,  name_parts, partition_path 
     

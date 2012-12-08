@@ -256,7 +256,10 @@ class BundleFilesystem(Filesystem):
     def _get_unzip_file(self, cache, tmpdir, zf, path, name):
         '''Look for a member of a zip file in the cache, and if it doesn next exist, 
         extract and cache it. '''
-        name = name.replace('/','').replace('..','')
+        name = name.replace('..','')
+        
+        if name[0] == '/':
+            name = name[1:]
         
         base = os.path.basename(path)
         
@@ -315,46 +318,25 @@ class BundleFilesystem(Filesystem):
         return None
 
     def unzip_dir(self,path,  cache=True):
-        '''Extract all of the files in a zip file to a directory, and return
-        the directory. Delete the directory when done, if cache=False '''
-       
-        raise Exception("Fixme")
-       
-        extractDir = self.extracts_path(os.path.basename(path))
-
-        files = []
-     
-        if os.path.exists(extractDir):
-            import glob
-            # File already exists, so don't extract agaain. 
-            yield glob.glob(extractDir+'/*')
-
-        else :
-            try:
-                with zipfile.ZipFile(path) as zf:
-                    for name in zf.namelist():
-                  
-                        extractFilename = os.path.join(extractDir, name)
-                        
-                        files.append(extractFilename)
-                        
-                        if os.path.exists(extractFilename):
-                            os.remove(extractFilename)
-                        
-                        # don't let the name of the file escape the extract dir. 
-                        name = name.replace('/','').replace('..','')
-                        zf.extract(name,extractDir )
-                        
-                    yield files
-            except Exception as e:
-                if os.path.exists(path):
-                    os.remove(path)
-                raise e
-                
+        '''Context manager to extract a single file from a zip archive, and delete
+        it when finished'''
+        import tempfile, uuid
         
-        if  not cache and os.path.isdir(extractDir):
-            import shutil
-            shutil.rmtree(extractDir)
+        cache = self.get_cache('extracts')
+
+        tmpdir = tempfile.mkdtemp(str(uuid.uuid4()))
+   
+        try:
+            with zipfile.ZipFile(path) as zf:
+                abs_path = None 
+                for name in zf.namelist():
+                    abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)   
+                    yield abs_path
+
+        finally:
+            self.rm_rf(tmpdir)
+            
+        return
         
     def download(self,url, test_f=None):
         '''Context manager to download a file, return it for us, 
@@ -366,6 +348,7 @@ class BundleFilesystem(Filesystem):
 
         import tempfile
         import urlparse
+        import urllib2
       
         cache = self.get_cache('downloads')
         parsed = urlparse.urlparse(url)
@@ -375,6 +358,17 @@ class BundleFilesystem(Filesystem):
         # done. This allows the code to detect and correct partial
         # downloads. 
         download_path = os.path.join(tempfile.gettempdir(),file_path+".download")
+          
+        def test_zip_file(f):
+            import zipfile
+            try:
+                with zipfile.ZipFile(f) as zf:
+                    return zf.testzip() is None
+            except zipfile.BadZipfile:
+                return False
+          
+        if test_f == 'zip':
+            test_f = test_zip_file
           
         for attempts in range(3):
    
@@ -386,8 +380,6 @@ class BundleFilesystem(Filesystem):
             excpt = None
                         
             try:                  
-                if os.path.exists(download_path):
-                    os.remove(download_path)
 
                 cached_file = cache.get(file_path)
                        
@@ -402,21 +394,20 @@ class BundleFilesystem(Filesystem):
                     
                 else:
 
-                    dirname = os.path.dirname(download_path)
-                    if not os.path.isdir(dirname):
-                        os.makedirs(dirname)
 
                     self.bundle.log("Downloading "+url)
                     self.bundle.log("  --> "+file_path)
-                    download_path, headers = urllib.urlretrieve(url,download_path) #@UnusedVariable
-
-                    if not os.path.exists(download_path):
-                        raise DownloadFailedError("Failed to download "+url)
+                    
+                    resp = urllib2.urlopen(url)
+                    headers = resp.headers
+                    
+                    if resp.code != 200:
+                        raise DownloadFailedError("Failed to download {}: code: "+format(url, resp.code))
                     
                     if test_f and not test_f(download_path):
                         raise DownloadFailedError("Download didn't pass test function "+url)
 
-                    out_file = cache.put(download_path, file_path)
+                    out_file = cache.put(resp, file_path)
 
                 break
                 
@@ -439,7 +430,7 @@ class BundleFilesystem(Filesystem):
                 
             except Exception as e:
                 self.bundle.error("Unexpected download error '"+str(e)+"' when downloading "+url)
-                raise e
+                raise 
               
 
         if download_path and os.path.exists(download_path):
@@ -742,10 +733,13 @@ class FsLimitedCache(object):
     
         try:
             # Try it as a file-like object
-            shutil.copyfileobj(source, repo_path)
-            source.seek(0)
-        except AttributeError: 
+            
+            with open(repo_path, 'w+') as repo_sink:
+                shutil.copyfileobj(source,  repo_sink)
+
+        except AttributeError as e: 
             # Nope, try a filename. 
+      
             shutil.copyfile(source, repo_path)
             
         size = os.path.getsize(repo_path)
@@ -753,7 +747,7 @@ class FsLimitedCache(object):
         self.add_record(rel_path, size)
         
         if self.upstream:
-            self.upstream.put(source, rel_path)
+            self.upstream.put(repo_path, rel_path)
     
             # Only delete if there is an upstream
             self._free_up_space(size)
