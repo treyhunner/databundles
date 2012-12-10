@@ -183,7 +183,7 @@ class BuildBundle(Bundle):
             
         
         if len(args.phases) ==  0 or (len(args.phases) == 1 and args.phases[0] == 'all'):    
-            args.phases = ['prepare','build', 'install']
+            args.phases = ['prepare','build']
       
             
         if args.test is None: # If not specified, is False. If specified with not value, is None
