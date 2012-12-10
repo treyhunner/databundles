@@ -9,7 +9,6 @@ import os.path
 import itertools as it, operator as op
 from collections import Mapping, OrderedDict, defaultdict
 
-
 try: import yaml, yaml.constructor
 except ImportError: pass
 

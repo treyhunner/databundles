@@ -6,43 +6,19 @@ Created on Jun 22, 2012
 import unittest
 from  testbundle.bundle import Bundle
 from databundles.identity import * #@UnusedWildImport
-import time
+from test_base import  TestBase
 
-class Test(unittest.TestCase):
 
+class Test(TestBase):
+ 
     def setUp(self):
 
-        bundle = Bundle()      
+        self.copy_or_build_bundle()
 
         self.bundle = Bundle()    
-        self.bundle_dir = bundle.bundle_dir
+        self.bundle_dir = self.bundle.bundle_dir
 
-        marker = self.bundle.filesystem.build_path('test-marker')
-        build_dir =  self.bundle.filesystem.build_path()+'/' # Slash needed for rsync
-        save_dir = self.bundle.filesystem.build_path()+"-save/"
-            
-        # For most cases, re-set the bundle by copying from a saved version. If
-        # the bundle doesn't exist and the saved version doesn't exist, 
-        # build a new one. 
 
-        if not os.path.exists(marker):
-            print "Build dir marker ({}) is missing".format(marker)
-            bundle.clean()
-            
-            if not os.path.exists(save_dir):
-                print "Save dir is missing; re-build bundle. "
-                self.bundle.prepare()
-                self.bundle.build()
-                
-                with open(marker, 'w') as f:
-                    f.write(str(time.time()))
-                # Copy the newly built bundle to the save directory    
-                os.system("rm -rf {1}; rsync -arv {0} {1} > /dev/null ".format(build_dir, save_dir))
-
-        # Always copy, just to be safe. 
-        print "Copying bundle from {}".format(save_dir)
-        os.system("rm -rf {0}; rsync -arv {1} {0}  > /dev/null ".format(build_dir, save_dir))
-  
         
     def save_bundle(self):
         pass

@@ -10,6 +10,7 @@ import io
 from databundles.orm import File
 from contextlib import contextmanager
 import zipfile
+import gzip
 import urllib
 import databundles.util, logging
 
@@ -716,7 +717,6 @@ class FsLimitedCache(object):
         return path
 
 
-  
     def put(self, source, rel_path):
         '''Copy a file to the repository
         
@@ -725,36 +725,56 @@ class FsLimitedCache(object):
             rel_path: path relative to the root of the repository
         
         '''
+
+        sink = self.put_stream(rel_path)
         
-        import shutil
-    
+        copy_file_or_flo(source, sink)
+        
+        sink.close()
+
+        return sink.repo_path
+
+    def put_stream(self,rel_path):
+        """return a file object to write into the cache. The caller
+        is responsibile for closing the stream. Bad things happen
+        if you dont close the stream
+        """
+        
         repo_path = os.path.join(self.cache_dir, rel_path)
       
         if not os.path.isdir(os.path.dirname(repo_path)):
             os.makedirs(os.path.dirname(repo_path))
-    
-        try:
-            # Try it as a file-like object
-            
-            with open(repo_path, 'w+') as repo_sink:
-                shutil.copyfileobj(source,  repo_sink)
-
-        except AttributeError as e: 
-            # Nope, try a filename. 
-      
-            shutil.copyfile(source, repo_path)
-            
-        size = os.path.getsize(repo_path)
         
-        self.add_record(rel_path, size)
-        
-        if self.upstream:
-            self.upstream.put(repo_path, rel_path)
-    
-            # Only delete if there is an upstream
-            self._free_up_space(size)
+        sink = open(repo_path,'w+')
+        upstream = self.upstream
+        this = self
+        class flo:
+            def __init__(self):
+                pass 
+            
+            @property
+            def repo_path(self):
+                return repo_path
+            
+            def write(self, d):
+                sink.write(d)
 
-        return repo_path
+            def writelines(self, lines):
+                sink.writelines(lines)
+            
+            def close(self):
+                sink.close()
+                
+                size = os.path.getsize(repo_path)
+                this.add_record(rel_path, size)
+
+                if upstream:
+                    
+                    upstream.put(repo_path, rel_path) 
+                    # Only delete if there is an upstream 
+                    this._free_up_space(size)
+                    
+        return flo()
     
     def find(self,query):
         '''Passes the query to the upstream, if it exists'''
@@ -831,10 +851,15 @@ class FsCache(object):
     def get_stream(self, rel_path):
         p = self.get(rel_path)
         
-        if not p:
+        if p:
+            return open(p) 
+     
+        if not self.upstream:
             return None
+
+        return self.upstream.get_stream(rel_path)
         
-        return open(p)
+        
         
     def get(self, rel_path):
         '''Return the file path referenced but rel_path, or None if
@@ -882,8 +907,7 @@ class FsCache(object):
         logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
         return path
     
-   
-  
+
     def put(self, source, rel_path):
         '''Copy a file to the repository
         
@@ -892,33 +916,45 @@ class FsCache(object):
             rel_path: path relative to the root of the repository
         
         '''
+
+        sink = self.put_stream(rel_path)
         
-        import shutil
-    
+        copy_file_or_flo(source, sink)
+        
+        sink.close()
+
+        return sink.repo_path
+
+    def put_stream(self,rel_path):
+        """return a file object to write into the cache. The caller
+        is responsibile for closing the stream
+        """
+        
         repo_path = os.path.join(self.cache_dir, rel_path)
       
         if not os.path.isdir(os.path.dirname(repo_path)):
             os.makedirs(os.path.dirname(repo_path))
-    
-        try:
-            # Try it as a file-like object
-            
-            with open(repo_path, 'w+') as repo_sink:
-                shutil.copyfileobj(source,  repo_sink)
-
-        except AttributeError as e: 
-            # Nope, try a filename. 
-      
-            shutil.copyfile(source, repo_path)
-            
-        size = os.path.getsize(repo_path)
         
-     
-        if self.upstream:
-            self.upstream.put(repo_path, rel_path) 
-
-        return repo_path
+        sink = open(repo_path,'w+')
+        upstream = self.upstream
         
+        class flo:
+            def __init__(self):
+                pass 
+            
+            @property
+            def repo_path(self):
+                return repo_path
+            
+            def write(self, str):
+                sink.write(str)
+            
+            def close(self):
+                sink.close()
+                if upstream:
+                    upstream.put(repo_path, rel_path) 
+                
+        return flo()
     
     def find(self,query):
         '''Passes the query to the upstream, if it exists'''
@@ -934,8 +970,6 @@ class FsCache(object):
         if os.path.exists(repo_path):
             os.remove(repo_path)
 
-        self.database.commit()
-            
         if self.upstream and propagate :
             self.upstream.remove(rel_path)    
             
@@ -948,6 +982,58 @@ class FsCache(object):
         raise NotImplementedError() 
 
 
+class FsCompressionCache(object):
+    
+    '''A Cache Adapter that compresses files before sending  them to
+    another cache.
+     '''
+
+    def __init__(self, upstream):
+        self.upstream = upstream
+        pass
+    
+    @property
+    def repo_id(self):
+        return "c"+self.upstream.repo_id()
+    
+    def _rename(self, rel_path):
+        return rel_path+".gz"
+    
+    def get_stream(self, rel_path):
+        source = self.upstream.get_stream(self._rename(rel_path))
+   
+        if not source:
+            return None
+   
+        return gzip.GzipFile(fileobj=source)
+        
+    def get(self, rel_path):
+        raise NotImplementedError("Get() is not implemented. Use get_stream()") 
+
+    def put(self, source, rel_path):
+        sink = self.upstream.put_stream(self._rename(rel_path))
+        
+        copy_file_or_flo(source,  gzip.GzipFile(fileobj=sink,  mode='wb'))
+      
+        sink.close()
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        if not self.upstream:
+            raise Exception("CompressionCache must have an upstream")
+        
+        return self.upstream.find(query)
+    
+    def remove(self,rel_path, propagate = False):
+        '''Delete the file from the cache, and from the upstream'''
+        if not self.upstream:
+            raise Exception("CompressionCache must have an upstream")
+
+        self.upstream.remove(self._rename(rel_path))    
+
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        raise NotImplementedError() 
 
 class S3Cache(object):
     '''A cache that transfers files to and from an S3 bucket
@@ -1144,4 +1230,29 @@ class FileChunkIO(io.FileIO):
             b[:n] = array.array(b'b', data)
         return n
 
-       
+def copy_file_or_flo(input_, output):
+    """ Copy a file name or file-like-object to another
+    file name or file-like object"""
+    import shutil 
+    
+    input_opened = False
+    output_opened = False
+    try:
+        if isinstance(input_, basestring):
+            input_ = open(input_,'r')
+            input_opened = True
+    
+        if isinstance(output, basestring):
+            output = open(output,'w+')   
+            output_opened = True 
+            
+        shutil.copyfileobj(input_,  output)
+    finally:
+        if input_opened:
+            input_.close()
+            
+        if output_opened:
+            output.close()
+        
+
+ 

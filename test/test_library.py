@@ -12,34 +12,22 @@ from databundles.library import QueryCommand, get_library
 import logging
 import inspect #@Reimport
 
-class Test(unittest.TestCase):
+from test_base import  TestBase
+
+
+class Test(TestBase):
+ 
 
     def setUp(self):
 
-        self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')
- 
-        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
-            
-        try: self.rm_rf(self.rc.library.root)
-        except: pass
-        
-        self.bundle = Bundle(self.bundle_dir)
-        
-        logger = logging.getLogger(inspect.stack()[0][3])
-        logger.info('clean')
-        self.bundle.clean()
-        self.bundle = Bundle(self.bundle_dir)
-        
-        logger.info('prepare')
-        self.bundle.prepare()
-        
-        logger.info('build')
-        self.bundle.build()
-        logger.info('Setup finished')
-        
-        self.bundle._run_config = self.rc
-        
+        self.copy_or_build_bundle()
+
+        self.bundle = Bundle()    
+        self.bundle_dir = self.bundle.bundle_dir
+
         self.root_dir = '/tmp/test_library'
+        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
+        
         
     @staticmethod
     def rm_rf(d):
@@ -65,10 +53,9 @@ class Test(unittest.TestCase):
     def delete(self):
         pass
 
-    def testName(self):
-        pass
 
     def test_resolve(self):
+        """Test the resolve_id() function"""
         from databundles import resolve_id
         
         self.assertEquals(self.bundle.identity.id_, resolve_id(self.bundle) )
@@ -88,7 +75,7 @@ class Test(unittest.TestCase):
     def test_library_install(self):
         '''Install the bundle and partitions, and check that they are
         correctly installed. Check that installation is idempotent'''
-        
+      
         l = self.get_library()
      
         l.put(self.bundle)
@@ -101,7 +88,7 @@ class Test(unittest.TestCase):
         self.assertTrue(r.bundle is not False)
         self.assertEquals(self.bundle.identity.id_, r.bundle.identity.id_)
         
-        print r.bundle.identity.name
+        print "Stored: ",  r.bundle.identity.name
         
         # Install the partition, then check that we can fetch it
         # a few different ways. 
@@ -167,8 +154,8 @@ class Test(unittest.TestCase):
             self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
 
     def test_cache(self):
-        from databundles.filesystem import  FsCache
-         
+        from databundles.filesystem import  FsCache, FsLimitedCache
+     
         root =  self.root_dir 
         try: Test.rm_rf(root)
         except: pass
@@ -208,8 +195,8 @@ class Test(unittest.TestCase):
         # Now create the cache with an upstream, the first
         # cache we created
        
-        l1 =  FsCache(l1_repo_dir, upstream=l2, maxsize=5)
-       
+        l1 =  FsLimitedCache(l1_repo_dir, upstream=l2, maxsize=5)
+      
         g = l1.get('tf2')
         self.assertTrue(g is not None)
      
@@ -227,7 +214,7 @@ class Test(unittest.TestCase):
             l1.put(testfile,'many'+str(i))
             
         self.assertEquals(4194304, l1.size)
-        self.assertEquals(11534336, l2.size)
+
 
         # Check that the right files got deleted
         self.assertFalse(os.path.exists(os.path.join(l1.cache_dir, 'many1')))   
@@ -268,8 +255,47 @@ class Test(unittest.TestCase):
         l1.remove('many9')
       
         l1.verify()
+
+    def test_compression_cache(self):
+        from databundles.filesystem import  FsCache, FsLimitedCache, FsCompressionCache
+         
+        root =  self.root_dir 
+        try: Test.rm_rf(root)
+        except: pass
+      
+        l1_repo_dir = os.path.join(root,'comp-repo-l1')
+        os.makedirs(l1_repo_dir)
+        l2_repo_dir = os.path.join(root,'comp-repo-l2')
+        os.makedirs(l2_repo_dir)
+        
+        testfile = os.path.join(root,'testfile')
+        
+        with open(testfile,'w+') as f:
+            for i in range(1024):
+                f.write('.'*1023)
+                f.write('\n')
+
+        # Create a cache with an upstream wrapped in compression
+        l3 = FsCache(l2_repo_dir)
+        l2 = FsCompressionCache(l3)
+        l1 = FsCache(l1_repo_dir, upstream=l2)
+      
+        f1 = l1.put(testfile,'tf1')         
+  
+        self.assertTrue(os.path.exists(f1))  
+        
+        l1.remove('tf1')
+        
+        self.assertFalse(os.path.exists(f1))  
+        
+        f1 = l1.get('tf1')
+        
+        self.assertTrue(os.path.exists(f1))  
         
     def test_s3(self):
+
+        # This doesn't actually text S3 operation yet. 
+        
 
         fs = self.bundle.filesystem
   
@@ -320,77 +346,7 @@ class Test(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many3')))      
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many7'))) 
  
-    def test_download(self):
-        
-        urls  = [
-                 'http://www.clarinova.com/',
-                 'http://www.clarinova.com/civic-knowledge',
-                 'http://www.clarinova.com/company',
-                 'http://www.clarinova.com/contact'
-                 ]
-        
- 
-        for url in urls:     
-            with self.bundle.filesystem.download(url) as f:
-                print url, f
-            
-        urls = [
-                'http://www2.census.gov/census_2000/datasets/Summary_File_1/Alaska/akgeo_uf1.zip'
-                ]
-            
-        download_file = None;
-        with self.bundle.filesystem.download(urls[0]) as f:
-            download_file = f
-            
-        with self.bundle.filesystem.unzip(download_file) as ef:
-            print "Extracted "+ef
- 
- 
-    def xs_test_basic(self):
-        import sqlite3
-        import petl
-         
-        l = get_library()
-        
-        rows = l.query().identity(creator='clarinova.com', subset = 'sf1').partition(any=True).all
-        for r in rows:
-           
-            part = l.get(r.Partition)
 
-            print "PART",part.database.path
-
-            q = (l.query()
-                 .identity(dataset = part.identity.dataset,source = part.identity.source,
-                      creator = part.identity.creator, subset = 'sf1geo')
-                 .partition(space = part.identity.space)
-            )
-            
-            geo = l.get(q.one.Partition)
-            
-            print "GEO",geo.database.path
-            
-            for table in part.schema.tables:
-                print part.identity.id_, part.name, table.name
-                l.stream(part.identity.id_, table)
-                l.stream(geo.identity.id_, 'select * from sf1geo') 
-                
-                con = sqlite3.connect(':memory:')
-                c = con.cursor()
-                c.execute("""ATTACH DATABASE '{}' AS part """.format(part.database.path))
-                c.execute("""ATTACH DATABASE '{}' AS geo """.format(geo.database.path))
-                
-                q = """SELECT  p.*, g.*
-                FROM part.{0} as p, geo.sf1geo as g
-                WHERE p.logrecno = g.LOGRECNO AND g.SUMLEV = 80""".format(table.name)
-                
-                print q
-                
-                t = petl.fromdb(con, q)
-                
-                print petl.look(t)
-                
-                con.close()
-     
 def suite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(Test))

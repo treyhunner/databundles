@@ -73,7 +73,7 @@ class Schema(object):
         except sqlalchemy.orm.exc.NoResultFound:
             try:
                 return (db.session.query(Table)
-                        .filter(Table.name==name_or_id).one())
+                        .filter(Table.name==name_or_id.lower()).one())
             except sqlalchemy.orm.exc.NoResultFound:
                 return None
     

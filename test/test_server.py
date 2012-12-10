@@ -23,6 +23,7 @@ class Test(unittest.TestCase):
         from threading import Thread
         import time
         
+        print "Starting library server"
         server = Thread(target = databundles.server.main.test_run)
         
         server.setDaemon(True)
