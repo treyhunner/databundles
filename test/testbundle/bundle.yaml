@@ -9,20 +9,27 @@ identity:
     subset: subset
     variation: variation
 library:
-    dir: /Volumes/DataLibrary/test/cache
+    dir: /Volumes/DataLibrary/test/library1
     cache_size: 10000
     database:
-        dbname: /Volumes/DataLibrary/test/library.db
+        dbname: /Volumes/DataLibrary/test/library1/library.db
         driver: sqlite
-    downloads: /Volumes/DataLibrary/test/downloads
-    extracts: /Volumes/DataLibrary/test/extracts
-    repository: /Volumes/DataLibrary/test/repository
+    downloads: /Volumes/DataLibrary/test/library1/downloads
+    extracts: /Volumes/DataLibrary/test/library1/extracts
+    repository: /Volumes/DataLibrary/test/library1/repository
 
-filesystem:
+filesystem:  
+    s3:
+        options: [compress]
+        bucket: devtest.clarinova.net
+        prefix: library
+        access_key: AKIAIOKK4KSYYGYXWQJQ
+        secret: 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
     library:
-        dir: /Volumes/DataLibrary/test/library
+        dir: /Volumes/DataLibrary/test/library2
         size: 5
         upstream:
+            options: [compress]
             bucket: devtest.clarinova.net
             prefix: library
             access_key: AKIAIOKK4KSYYGYXWQJQ

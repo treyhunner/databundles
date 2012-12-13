@@ -18,22 +18,51 @@ logger_init = set()
 def get_logger(name):
     
     logger = logging.getLogger(name)
-            
-    if name not in logger_init:
-   
-        logger.setLevel(logging.DEBUG)
-        
+
+    if  name not in logger_init:
+
         formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
         ch = logging.StreamHandler()
         ch.setFormatter(formatter)
-        ch.setLevel(logging.DEBUG)
+        #ch.setLevel(logging.DEBUG)
         logger.addHandler(ch)
+        #logger.setLevel(logging.DEBUG) 
         
         logger_init.add(name)
-        
+     
     return logger
 
 
+def bundle_file_type(path_or_file):
+    '''Return a determination if the file is a sqlite file or a gzip file
+    
+    Args
+        :param path: a string pathname to the file or stream to test
+        :type path: a `str` object or file object
+        
+        :rtype: 'gzip' or 'sqlite' or None
+    '''
+    import sys
+    import struct
+ 
+
+    try:
+        loc = path_or_file.tell()
+        d = path_or_file.read(15)
+        path_or_file.seek(loc)
+    except:
+        with open(path_or_file) as f:
+            d = f.read(15)
+    
+    if d == 'SQLite format 3':
+        return 'sqlite'
+    elif hex(struct.unpack('!H',d[0:2])[0]) == '0x1f8b':
+        return 'gzip'
+    else:
+        return None
+        
+
+        
 class Counter(dict):
     'Mapping where default values are zero'
     def __missing__(self, key):

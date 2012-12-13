@@ -146,6 +146,13 @@ class Partition(object):
 
             self._database = PartitionDb(self.bundle, self, file_path=path)
             
+            def add_type(database):
+                from databundles.bundle import BundleDbConfig
+                config = BundleDbConfig(self.database)
+                config.set_value('info','type','partition')
+                
+            self._database._post_create = add_type 
+          
         return self._database
 
     def tempfile(self, table=None, suffix=None,ignore_first=False):

@@ -6,12 +6,22 @@ from bottle import  get, put, post, request, response #@UnresolvedImport
 from bottle import HTTPResponse, static_file, install #@UnresolvedImport
 from bottle import ServerAdapter, server_names #@UnresolvedImport
 
+from decorator import  decorator #@UnresolvedImport
 import databundles.library 
 import databundles.run
+import databundles.util
 from databundles.bundle import DbBundle
-from decorator import  decorator #@UnresolvedImport
 
-library = databundles.library.get_library()
+
+# This might get changed, as in test_run
+run_config = databundles.run.RunConfig()
+
+logger = databundles.util.get_logger(__name__)
+
+def get_library():
+    '''Return the library. In a function to defer execution, so the
+    run_config variable can be altered before it is called. '''
+    return databundles.library.get_library(run_config)
 
 def make_exception_response(e):
     
@@ -85,53 +95,84 @@ install(AllJSONPlugin())
 def get_datasets():
     '''Return all of the dataset identities, as a dict, 
     indexed by id'''
-    return { i.id_ : i.to_dict() for i in library.datasets}
+    return { i.id_ : i.to_dict() for i in get_library().datasets}
     
 @post('/datasets')
+@CaptureException
 def post_dataset(): 
-    '''Store a bundle, calling put() on the bundle file in the Library'''
+    '''Store a bundle, calling put() on the bundle file in the Library.
+    '''
     import uuid # For a random filename. 
     import os, tempfile
+    import databundles.util
+    import zlib
    
-    cf = os.path.join(tempfile.gettempdir(),'rest-downloads',str(uuid.uuid4()))
-    if not os.path.exists(os.path.dirname(cf)):
-        os.makedirs(os.path.dirname(cf))
-    
-    # Read the file directly from the network, writing it to the temp file
-    with open(cf,'w') as f:
+    r = {
+             'path': 'none',
+             'dataset':{'id': 'none', 'name': 'none' }, 
+             'partition' : 'none'
+        }
+   
+    compressed = False
+    try:
+        compressed  = bool(int(request.query.compressed))
+    except: pass
 
+    try:
+        cf = os.path.join(tempfile.gettempdir(),'rest-downloads',str(uuid.uuid4()))
+        if not os.path.exists(os.path.dirname(cf)):
+            os.makedirs(os.path.dirname(cf))
+            
         # Really important to only call request.body once! The property method isn't
         # idempotent!
-        body = request.body
-        chunksize = 8192
-        chunk =  body.read(chunksize) #@UndefinedVariable
-        while chunk:
-            f.write(chunk)
+        body = request.body # Property acessor
+        
+        # This method can recieve data as compressed or not, and determiens which
+        # from the magic number in the head of the data. 
+        data_type = databundles.util.bundle_file_type(body)
+        decomp = zlib.decompressobj(16+zlib.MAX_WBITS) # http://stackoverflow.com/a/2424549/1144479
+     
+        if not data_type:
+            raise Exception("Bad data type: not compressed nor sqlite")
+     
+        # Read the file directly from the network, writing it to the temp file,
+        # and uncompressing it if it is compressesed. 
+        with open(cf,'w') as f:
+
+            chunksize = 8192
             chunk =  body.read(chunksize) #@UndefinedVariable
-    
-    # Now we have the bundle in cf. Stick it in the library. 
-    
-    # Is this a partition or a bundle?
-    tb = DbBundle(cf)
- 
-    dataset, partition, library_path = library.put(tb)
-    
-    # if that worked, OK to remove the temporary file. 
-    os.remove(cf)
-
-    if partition:
-        partition = {'id':partition.identity.id_, 'name':partition.name}
-    else:
-        partition = None 
+            while chunk:
+                if data_type == 'gzip':
+                    f.write(decomp.decompress(chunk))
+                else:
+                    f.write(chunk)
+                chunk =  body.read(chunksize) #@UndefinedVariable
         
-    r = {
-         'path': library_path,
-         'dataset':{'id':dataset.id_, 'name':dataset.name}, 
-         'partition' : partition
-         }
+        # Now we have the bundle in cf. Stick it in the library. 
         
-
-    return r
+        # Is this a partition or a bundle?
+        tb = DbBundle(cf)
+     
+        dataset, partition, library_path = get_library().put(tb)
+        
+        # if that worked, OK to remove the temporary file. 
+        #os.remove(cf)
+    
+        if partition:
+            partition = {'id':partition.identity.id_, 'name':partition.name}
+        else:
+            partition = None 
+            
+        r = {
+             'path': library_path,
+             'dataset':{'id':dataset.id_, 'name':dataset.name}, 
+             'partition' : partition
+             }
+            
+        return r
+    except Exception as e:
+        logger.error("Exception: {} ".format(e))
+        raise
 
 @post('/datasets/find')
 def post_datasets_find():
@@ -141,7 +182,7 @@ def post_datasets_find():
     q = request.json
    
     bq = QueryCommand(q)
-    db_query = library.find(bq)
+    db_query = get_library().find(bq)
     results = db_query.all() #@UnusedVariable
   
     out = []
@@ -163,7 +204,7 @@ def post_datasets_find():
    
 
 def get_dataset_record(id_):
-    ds =  library.findByIdentity(id_)
+    ds =  get_library().findByIdentity(id_)
     
     if len(ds) == 0:
         return None
@@ -193,9 +234,9 @@ def get_dataset_bundle(did):
     
     '''
     
-    bp = library.get(did)
- 
-    return static_file(bp.database.path, root='/', mimetype="application/octet-stream")
+    bp = get_library().get(did)
+
+    return static_file(bp.bundle.database.path, root='/', mimetype="application/octet-stream")
 
 @get('/dataset/:did/info')
 def get_dataset_info(did):
@@ -205,7 +246,24 @@ def get_dataset_info(did):
 @get('/dataset/<id_>/partitions')
 def get_dataset_partitions_info(id_):
     ''' GET    /dataset/:id_/partitions''' 
-    ds =  library.findByIdentity(id_)
+    ds =  get_library().findByIdentity(id_)
+    if len(ds) == 0:
+        return None
+        
+    if len(ds) > 1:
+        raise Exception("Got more than one result")
+    
+    out = {}
+
+    for partition in get_dataset_record(id_).partitions:
+        out[partition.id_] = partition.to_dict()
+        
+    return out;
+
+@post('/dataset/<id_>/partitions')
+def post_dataset_partitions_info(id_):
+    ''' GET    /dataset/:id_/partitions''' 
+    ds =  get_library().findByIdentity(id_)
     if len(ds) == 0:
         return None
         
@@ -252,6 +310,9 @@ def get_test_close():
 
 
 class StoppableWSGIRefServer(ServerAdapter):
+    '''A server that can be stopped by setting the module variable
+    stoppable_wsgi_server_run to false. It is primarily used for testing. '''
+    
     def run(self, handler): # pragma: no cover
         global stoppable_wsgi_server_run
         stoppable_wsgi_server_run = True
@@ -267,10 +328,18 @@ class StoppableWSGIRefServer(ServerAdapter):
 
 server_names['stoppable'] = StoppableWSGIRefServer
 
-def test_run():
+def test_run(config=None):
+    '''Run method to be called from unit tests'''
     from bottle import run, debug
   
+    # Reset the library  with a  different configuration. This is the module
+    # level library, defined at the top of the module. 
+    if config:
+        global run_config
+        run_config = config # If this is called before get_library, will change the lib config
+
     debug()
+
     return run(host='localhost', port=7979, reloader=False, server='stoppable')
 
 def local_run():

@@ -11,13 +11,15 @@ from databundles.run import  RunConfig
 from databundles.library import QueryCommand, get_library
 import logging
 import inspect #@Reimport
+import databundles.util
 
 from test_base import  TestBase
 
+logger = databundles.util.get_logger(__name__)
+logger.setLevel(logging.DEBUG) 
 
 class Test(TestBase):
  
-
     def setUp(self):
 
         self.copy_or_build_bundle()
@@ -28,7 +30,9 @@ class Test(TestBase):
         self.root_dir = '/tmp/test_library'
         self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
         
-        
+        #databundles.util.get_logger('test_base').setLevel(logging.DEBUG) 
+        #databundles.util.get_logger('filesystem').setLevel(logging.DEBUG)  
+              
     @staticmethod
     def rm_rf(d):
         for path in (os.path.join(d,f) for f in os.listdir(d)):
@@ -82,7 +86,6 @@ class Test(TestBase):
         l.put(self.bundle)
         
         r = l.get(self.bundle.identity)
-      
 
         self.assertIsNotNone(r.bundle)
         self.assertTrue(r.bundle is not False)
@@ -257,6 +260,7 @@ class Test(TestBase):
         l1.verify()
 
     def test_compression_cache(self):
+        '''Test a two-level cache where the upstream compresses files '''
         from databundles.filesystem import  FsCache, FsLimitedCache, FsCompressionCache
          
         root =  self.root_dir 
@@ -292,12 +296,34 @@ class Test(TestBase):
         
         self.assertTrue(os.path.exists(f1))  
         
+    def make_s3_cache(self, root, size=None):
+        from databundles.filesystem import  FsCache, FsLimitedCache, FsCompressionCache
+  
+        l1_repo_dir = os.path.join(root,'s3-repo-l1')
+        os.makedirs(l1_repo_dir)
+        l2_repo_dir = os.path.join(root,'s3-repo-l2')
+        os.makedirs(l2_repo_dir)
+    
+   
+        # Create a cache with an upstream wrapped in compression
+   
+        l4 = self.bundle.filesystem.get_cache('library')
+        l3 = FsCache(l2_repo_dir, upstream=l4)
+        l2 = FsCompressionCache(l3)
+        
+        if size is None:
+            l1 = FsCache(l1_repo_dir, upstream=l3)
+        else:
+            l1 = FsLimitedCache(l1_repo_dir, upstream=l3, maxsize=size)
+        
+        #l1 = self.bundle.filesystem.get_cache('library')
+        
+        return (l1_repo_dir, l1)
+        
     def test_s3(self):
 
-        # This doesn't actually text S3 operation yet. 
-        
-
-        fs = self.bundle.filesystem
+      
+        #databundles.util.get_logger('databundles.filesystem').setLevel(logging.DEBUG) 
   
         # Set up the test directory and make some test files. 
 
@@ -306,10 +332,7 @@ class Test(TestBase):
         except: pass
         os.makedirs(root)
                 
-        repo_dir = self.rc.filesystem.downloads.dir
-        try: Test.rm_rf(repo_dir)
-        except: pass       
-  
+
         testfile = os.path.join(root,'testfile')
         
         with open(testfile,'w+') as f:
@@ -317,10 +340,14 @@ class Test(TestBase):
                 f.write('.'*1023)
                 f.write('\n')
          
-        local = fs.get_cache('downloads')
+        #fs = self.bundle.filesystem
+        #local = fs.get_cache('downloads')
+        repo_dir,local = self.make_s3_cache(root, 5)
         
+        logger.info("repo_dir: {}".format(repo_dir))
+      
         for i in range(0,10):
-            print "Putting "+str(i)
+            logger.info("Putting "+str(i))
             local.put(testfile,'many'+str(i))
         
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many1')))   

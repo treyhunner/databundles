@@ -8,7 +8,6 @@ from  testbundle.bundle import Bundle
 from databundles.identity import * #@UnusedWildImport
 from test_base import  TestBase
 
-
 class Test(TestBase):
  
     def setUp(self):

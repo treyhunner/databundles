@@ -8,16 +8,15 @@ import os
 import io
 
 from databundles.orm import File
-from contextlib import contextmanager
 import zipfile
 import gzip
 import urllib
-import databundles.util, logging
+import databundles.util
 
 logger = databundles.util.get_logger(__name__)
-logger.setLevel(logging.ERROR)
 
-##
+
+##makedirs
 ## Monkey Patch!
 ## Need to patch zipfile.testzip b/c it doesn't close file descriptors in 2.7.3
 ## The bug apparently exists in several other versions of python 
@@ -104,7 +103,7 @@ class Filesystem(object):
         subconfig = config.filesystem.get(cache_name,False)
   
         if subconfig is False:
-            raise ConfigurationError("Didn't get filsystem.{} configuration value"
+            raise ConfigurationError("Didn't find filesystem.{} configuration value"
                                      .format(cache_name))
                
         cache = self._get_cache(cache_name, subconfig)
@@ -115,25 +114,34 @@ class Filesystem(object):
         return cache
 
     def _get_cache(self,config_name, config):
+        
         from databundles.dbexceptions import ConfigurationError
         
+        cache = None
         if config.get('dir',False):
 
             if config.get('size', False):
-                return FsLimitedCache(config.get('dir'), 
+                cache =  FsLimitedCache(config.get('dir'), 
                                maxsize=config.get('size',10000))
             else:
-                return FsCache(config.get('dir'))               
+                cache =  FsCache(config.get('dir'))               
                 
         elif config.get('bucket',False):
             
-            return S3Cache(bucket=config.get('bucket'), 
+            cache =  S3Cache(bucket=config.get('bucket'), 
                     prefix=config.get('prefix', None),
                     access_key=config.get('access_key'),
                     secret=config.get('secret'))
             
         else:
             raise ConfigurationError("Can't determine type of cache for key: {}".format(config_name))
+        
+        if config.get('options',False) and isinstance(config.get('options',False), list):
+         
+            if 'compress' in config.get('options'):
+                cache = FsCompressionCache(cache)
+                
+        return cache
         
     @classmethod
     def rm_rf(cls, d):
@@ -939,6 +947,8 @@ class FsCache(object):
         upstream = self.upstream
         
         class flo:
+            '''This File-Like-Object class ensures that the file is also
+            sent to the upstream after it is stored in the FSCache. '''
             def __init__(self):
                 pass 
             
@@ -1017,6 +1027,12 @@ class FsCompressionCache(object):
       
         sink.close()
     
+    def put_stream(self, rel_path):
+        sink = self.upstream.put_stream(self._rename(rel_path))
+        
+        return gzip.GzipFile(fileobj=sink,  mode='wb')
+
+    
     def find(self,query):
         '''Passes the query to the upstream, if it exists'''
         if not self.upstream:
@@ -1034,6 +1050,7 @@ class FsCompressionCache(object):
     def list(self, path=None):
         '''get a list of all of the files in the repository'''
         raise NotImplementedError() 
+
 
 class S3Cache(object):
     '''A cache that transfers files to and from an S3 bucket
@@ -1104,7 +1121,17 @@ class S3Cache(object):
         '''
         raise NotImplementedError('Should only use the stream interface. ')
     
-    def put(self, source, rel_path):
+  
+    def put(self, source, rel_path):  
+        sink = self.put_stream(rel_path)
+        
+        copy_file_or_flo(source, sink)
+        
+        sink.close()
+
+        return rel_path
+    
+    def put_key(self, source, rel_path):
         '''Copy a file to the repository
         
         Args:
@@ -1130,6 +1157,98 @@ class S3Cache(object):
                 k.set_contents_from_filename(source)
             else:
                 k.set_contents_from_filename(source)
+      
+    
+            
+    def put_stream(self, rel_path):
+        '''Return a flie object that can be written to to send data to S3. 
+        This will result in a multi-part upload, possible with each part
+        being sent in its own thread '''
+
+        import Queue
+        
+        import threading
+        
+        class ThreadUploader(threading.Thread):
+            """Thread class for uploading a part to S3"""
+            def __init__(self, n, queue):
+                threading.Thread.__init__(self)
+                self.n = n
+                self.queue = queue
+            
+            def run(self):
+                import time
+                while True:
+                    mp, part_number, buf = self.queue.get()
+                    if mp is None:
+                        logger.debug("put_stream: Thread {} exiting".format(self.n))
+                        self.queue.task_done()
+                        return
+                    logger.debug("put_stream: Thread {}: processing part: {}".format(self.n, part_number))
+                    mp.upload_part_from_file(buf,part_number  )
+                    
+                    self.queue.task_done()
+            
+        
+        if self.prefix is not None:
+            rel_path = self.prefix+"/"+rel_path
+
+        this = self
+        
+        buffer_size = 5*1024*1024 # Min part size is 5MB
+        num_threads = 4
+        thread_upload_queue = Queue.Queue(maxsize=50)
+        
+        for i in range(num_threads):
+            t = ThreadUploader(i, thread_upload_queue)
+            t.setDaemon(True)
+            t.start()
+
+        class flo:
+            '''Object that is returned to the called, for the caller to issue
+            write() or writeline() calls on '''
+       
+            def __init__(self):
+
+                self.mp = this.bucket.initiate_multipart_upload(rel_path)
+                self.part_number = 1;
+                self.buffer = io.BytesIO()
+     
+            def _send_buffer(self):
+                logger.debug("put_stream: sending part {} to thread pool size: {}"
+                             .format(self.part_number, self.buffer.tell()))
+                self.buffer.seek(0)
+                thread_upload_queue.put( (self.mp, self.part_number, self.buffer) )
+                self.part_number += 1;
+                self.buffer = io.BytesIO()
+
+            def write(self, d):
+                import time
+                self.buffer.write(d)
+
+                if self.buffer.tell() > buffer_size:
+                    self._send_buffer()
+
+            def writelines(self, lines):
+                raise NotImplemented()
+            
+            def close(self):
+                import time
+              
+                if self.buffer.tell() > 0:
+                    self._send_buffer()
+
+                thread_upload_queue.join()  # Wait for all of th upload to complete
+         
+                for i in range(num_threads):
+                    thread_upload_queue.put( (None,None,None) )
+ 
+                thread_upload_queue.join()  # Wait for all of the threads to exit
+                             
+                self.mp.complete_upload()
+            
+        return flo()
+     
             
     def find(self,query):
         '''Passes the query to the upstream, if it exists'''

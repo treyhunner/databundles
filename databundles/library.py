@@ -26,9 +26,6 @@ class NullHandler(logging.Handler):
     def emit(self, record):
         pass
 
-logger = logging.getLogger(__name__)
-logger.addHandler(NullHandler())
-
     
 def get_database(config=None):
     """Return a new `LibraryDb`, constructed from a configuration
@@ -257,8 +254,23 @@ class LibraryDb(object):
         elif self.driver == 'sqlite':
             
             import sqlite3
-            conn = sqlite3.connect(self.dbname)
-           
+            
+            dir_ = os.path.dirname(self.dbname)
+            if not os.path.exists(dir_):
+                try:
+                    os.makedirs(dir_) # MUltiple process may try to make, so it could already exist
+                except Exception as e: #@UnusedVariable
+                    pass
+                
+                if not os.path.exists(dir_):
+                    raise Exception("Couldn't create directory "+dir_)
+            
+            try:
+                conn = sqlite3.connect(self.dbname)
+            except:
+                self.logger.error("Failed to open Sqlite database: {}".format(self.dbname))
+                raise
+                
             conn.execute('DROP TABLE IF EXISTS columns')
             conn.execute('DROP TABLE IF EXISTS partitions')
             conn.execute('DROP TABLE IF EXISTS tables')

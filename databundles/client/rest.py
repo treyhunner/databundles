@@ -57,8 +57,42 @@ class Rest(object):
             # Read the damn thing yourself ... 
             return response
             
+    def _put(self, source):
+        '''Put the source to the remote, creating a compressed version if
+        it is not originally compressed'''
+        
+        from databundles.util import bundle_file_type
+        import gzip
+        import os, tempfile, uuid
+        
+        type = bundle_file_type(source)
+        
+        if  type == 'sqlite':
+            # If it is a plain sqlite file, compress it before sending it. 
+            try:
+                cf = os.path.join(tempfile.gettempdir(),str(uuid.uuid4()))
+                f = gzip.open(cf, 'wb')
+                f.writelines(source)
+                f.close()
+             
+             
+                with open(cf) as source:
+                    response =  self.api.datasets.post(source)
+
+            finally:
+                if os.path.exists(cf):
+                    os.remove(cf)
+               
+            return response     
+
+        elif type == 'gzip':
+            # the file is already gziped, so nothing to do. 
+            return self.api.datasets.post(source)
+        else:
+            raise Exception("Bad file")
+
     def put(self,source):
-        '''Put the bundle in soruce to the remote library 
+        '''Put the bundle in source to the remote library 
         Args:
             source. Either the name of the bundle file, or a file-like opbject
         '''
@@ -66,15 +100,11 @@ class Rest(object):
         try:
             # a Filename
             with open(source) as flo:
-                response = self.api.datasets.post(flo)
+                return self._put(flo)
         except:
             # an already open file
-            response = self.api.datasets.post(source)
-        
-        return  response
-    
-
-    
+            return self._put(source)
+   
     def find(self, query):
         '''Find datasets, given a QueryCommand object'''
         

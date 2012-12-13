@@ -6,7 +6,11 @@ Created on Jun 22, 2012
 import unittest
 from  testbundle.bundle import Bundle
 from databundles.identity import * #@UnusedWildImport
-import time
+import time, logging
+import databundles.util
+
+logger = databundles.util.get_logger(__name__)
+
 
 class TestBase(unittest.TestCase):
 
@@ -24,7 +28,7 @@ class TestBase(unittest.TestCase):
         save_dir = bundle.filesystem.build_path()+"-save/"
 
         if not os.path.exists(marker):
-            print "Build dir marker ({}) is missing".format(marker)
+            logger.info( "Build dir marker ({}) is missing".format(marker))
             # There is a good reason to create a seperate instance, 
             # but don't remember what it is ... 
             
@@ -32,7 +36,7 @@ class TestBase(unittest.TestCase):
             
             bundle = Bundle()   
             if not os.path.exists(save_dir):
-                print "Save dir is missing; re-build bundle. "
+                logger.info( "Save dir is missing; re-build bundle. ")
                 bundle.prepare()
                 bundle.build()
                 
@@ -42,6 +46,6 @@ class TestBase(unittest.TestCase):
                 os.system("rm -rf {1}; rsync -arv {0} {1} > /dev/null ".format(build_dir, save_dir))
 
         # Always copy, just to be safe. 
-        print "Copying bundle from {}".format(save_dir)
+        logger.info(  "Copying bundle from {}".format(save_dir))
         os.system("rm -rf {0}; rsync -arv {1} {0}  > /dev/null ".format(build_dir, save_dir))
  

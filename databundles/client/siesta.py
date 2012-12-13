@@ -38,8 +38,6 @@ from urlparse import urlparse
 
 USER_AGENT = "Python-siesta/%s" % __version__
 
-logging.basicConfig(level=0)
-
 class ServerError(Exception):
     pass
 
