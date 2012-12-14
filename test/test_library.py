@@ -297,7 +297,14 @@ class Test(TestBase):
         self.assertTrue(os.path.exists(f1))  
         
     def make_s3_cache(self, root, size=None):
+        '''Build a three state cache, with a to plevel limited cache, a second level
+        compressed cache, and a third level compressed S3  cache. '''
+        
         from databundles.filesystem import  FsCache, FsLimitedCache, FsCompressionCache
+  
+  
+        l1 = self.bundle.filesystem.get_cache('test')
+        return (l1.cache_dir, l1)
   
         l1_repo_dir = os.path.join(root,'s3-repo-l1')
         os.makedirs(l1_repo_dir)
@@ -307,17 +314,16 @@ class Test(TestBase):
    
         # Create a cache with an upstream wrapped in compression
    
-        l4 = self.bundle.filesystem.get_cache('library')
+        l4 = self.bundle.filesystem.get_cache('s3')
         l3 = FsCache(l2_repo_dir, upstream=l4)
         l2 = FsCompressionCache(l3)
         
         if size is None:
-            l1 = FsCache(l1_repo_dir, upstream=l3)
+            l1 = FsCache(l1_repo_dir, upstream=l2)
         else:
-            l1 = FsLimitedCache(l1_repo_dir, upstream=l3, maxsize=size)
+            l1 = FsLimitedCache(l1_repo_dir, upstream=l2, maxsize=size)
         
-        #l1 = self.bundle.filesystem.get_cache('library')
-        
+    
         return (l1_repo_dir, l1)
         
     def test_s3(self):

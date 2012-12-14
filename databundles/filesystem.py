@@ -99,17 +99,15 @@ class Filesystem(object):
         if not config.filesystem:
             raise ConfigurationError("Didn't get filsystem configuration value. "+
                                      " from config files: "+"; ".join(config.loaded))
-    
+
         subconfig = config.filesystem.get(cache_name,False)
+
   
-        if subconfig is False:
+        if not subconfig:
             raise ConfigurationError("Didn't find filesystem.{} configuration value"
                                      .format(cache_name))
                
         cache = self._get_cache(cache_name, subconfig)
-        
-        if subconfig.get('upstream',False):
-            cache.upstream = self._get_cache(cache_name+'.upstream', subconfig.get('upstream'))
         
         return cache
 
@@ -136,11 +134,16 @@ class Filesystem(object):
         else:
             raise ConfigurationError("Can't determine type of cache for key: {}".format(config_name))
         
+        if config.get('upstream',False):
+            up_name = config_name+'.upstream'
+
+            cache.upstream = self._get_cache(up_name, config.get('upstream'))
+        
         if config.get('options',False) and isinstance(config.get('options',False), list):
          
             if 'compress' in config.get('options'):
                 cache = FsCompressionCache(cache)
-                
+
         return cache
         
     @classmethod
@@ -1006,24 +1009,41 @@ class FsCompressionCache(object):
     def repo_id(self):
         return "c"+self.upstream.repo_id()
     
+    @property
+    def cache_dir(self):
+        return self.upstream.cache_dir
+    
     def _rename(self, rel_path):
         return rel_path+".gz"
     
     def get_stream(self, rel_path):
+        from databundles.util import bundle_file_type
         source = self.upstream.get_stream(self._rename(rel_path))
    
         if not source:
             return None
    
-        return gzip.GzipFile(fileobj=source)
-        
+        if bundle_file_type(source) == 'gzip':
+            source = self.upstream.get_stream(self._rename(rel_path))
+            return gzip.GzipFile(fileobj=source)
+        else:
+            source = self.upstream.get_stream(rel_path)
+            return source
+
     def get(self, rel_path):
         raise NotImplementedError("Get() is not implemented. Use get_stream()") 
 
     def put(self, source, rel_path):
-        sink = self.upstream.put_stream(self._rename(rel_path))
-        
-        copy_file_or_flo(source,  gzip.GzipFile(fileobj=sink,  mode='wb'))
+        from databundles.util import bundle_file_type
+
+        # Pass through if the file is already compressed
+    
+        if bundle_file_type(source) == 'gzip':
+            sink = self.upstream.put_stream(rel_path)
+            copy_file_or_flo(source,  sink)
+        else:
+            sink = self.upstream.put_stream(self._rename(rel_path))
+            copy_file_or_flo(source,  gzip.GzipFile(fileobj=sink,  mode='wb'))
       
         sink.close()
     

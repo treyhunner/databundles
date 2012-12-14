@@ -15,7 +15,7 @@ import databundles
 from collections import namedtuple
 from sqlalchemy.exc import IntegrityError
 
-library = None
+libraries = {}
 
 # Setup a default logger. The logger is re-assigned by the
 # bundle when the bundle instantiates the logger. 
@@ -27,7 +27,7 @@ class NullHandler(logging.Handler):
         pass
 
     
-def get_database(config=None):
+def get_database(config=None,name='library'):
     """Return a new `LibraryDb`, constructed from a configuration
     
     :param config: a `RunConfig` object
@@ -44,17 +44,17 @@ def get_database(config=None):
     if not config.library:
         raise ConfigurationError("Didn't get library configuration value")
     
-    db_config = config.library.database
+    db_config = config.database.get(name)
     
     if not db_config:
-        raise ConfigurationError("Didn't get library.cache configuration value")
+        raise ConfigurationError("Didn't get database.{} configuration value".format(name))
     
     database = LibraryDb(**db_config)      
     database.create() # creates if does not exist. 
     
     return database
 
-def get_library(config=None):
+def get_library(config=None, name='library'):
     """Return a new `Library`, constructed from a configuration
     
     :param config: a `RunConfig` object
@@ -65,19 +65,27 @@ def get_library(config=None):
     
     """    
 
-    global library
-    if library is None:
+    global libraries
+    
+    if name not in libraries:
         
         if config is None:
             config = RunConfig()
         
-        filesystem = Filesystem(config)
-        cache = filesystem.get_cache('library', config)
+        sc = config.library.get(name,False)
 
-        library =  Library(cache = cache, 
-                           database = get_database(config))
+        if not sc:
+            raise Exception("Failed to get library.{} config key ".format(name))
+        
+   
+        filesystem = Filesystem(config)
+        cache = filesystem.get_cache(sc.filesystem, config)
+        
+        database = get_database(config, name=sc.database)
+
+        libraries[name] =  Library(cache = cache,  database = database)
     
-    return library
+    return libraries[name]
 
 def copy_stream_to_file(stream, file_path):
     '''Copy an open file-list object to a file

@@ -22,18 +22,21 @@ filesystem:
     s3:
         options: [compress]
         bucket: devtest.clarinova.net
-        prefix: library
+        prefix: s3test
         access_key: AKIAIOKK4KSYYGYXWQJQ
         secret: 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
-    library:
-        dir: /Volumes/DataLibrary/test/library2
+    test:
+        dir: /Volumes/DataLibrary/test/library-l1
         size: 5
         upstream:
-            options: [compress]
-            bucket: devtest.clarinova.net
-            prefix: library
-            access_key: AKIAIOKK4KSYYGYXWQJQ
-            secret: 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
+          dir: /Volumes/DataLibrary/test/library-l2
+          options: [compress]
+          upstream:      
+              bucket: devtest.clarinova.net
+              prefix: library-l3
+              access_key: AKIAIOKK4KSYYGYXWQJQ
+              secret: 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
+            
     downloads:
         dir: /Volumes/DataLibrary/test/downloads
         size: 5
