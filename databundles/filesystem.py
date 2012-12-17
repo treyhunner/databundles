@@ -345,6 +345,9 @@ class BundleFilesystem(Filesystem):
                     abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)   
                     yield abs_path
 
+        except:
+            self.bundle.error("File '{}' can't be unzipped".format(path))
+            raise
         finally:
             self.rm_rf(tmpdir)
             
@@ -418,11 +421,14 @@ class BundleFilesystem(Filesystem):
                     
                     if test_f and not test_f(download_path):
                         raise DownloadFailedError("Download didn't pass test function "+url)
-
+                    
                     out_file = cache.put(resp, file_path)
 
                 break
                 
+            except KeyboardInterrupt:
+                cache.remove(file_path)
+                raise
             except DownloadFailedError as e:
                 self.bundle.error("Failed:  "+str(e))
                 excpt = e
@@ -442,6 +448,7 @@ class BundleFilesystem(Filesystem):
                 
             except Exception as e:
                 self.bundle.error("Unexpected download error '"+str(e)+"' when downloading "+url)
+                cache.remove(file_path)
                 raise 
               
 

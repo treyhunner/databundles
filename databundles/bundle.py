@@ -10,7 +10,7 @@ from databundles.filesystem import  BundleFilesystem
 from databundles.schema import Schema
 from databundles.partition import Partitions
 import os.path
-from databundles.dbexceptions import  ConfigurationError
+from databundles.dbexceptions import  ConfigurationError, ProcessError
 from databundles.run import RunConfig
 import databundles.util
 
@@ -31,6 +31,10 @@ class Bundle(object):
         self._identity = None
 
         self.logger = databundles.util.get_logger(__name__)
+        
+        import logging
+        self.logger.setLevel(logging.INFO) 
+        
         
     @property
     def schema(self):
@@ -273,18 +277,30 @@ class BuildBundle(Bundle):
     ### Prepare is run before building, part of the devel process.  
 
     def pre_prepare(self):
+        if self.database.exists() and self.db_config.process.prepared:
+            raise ProcessError("Bundle has already been prepared")
         return True
 
     def prepare(self):
         return True
     
     def post_prepare(self):
+        self.db_config.set_value('process','prepared',True)
         return True
    
+    
+    def check_prepared(self):
+        '''Throw an exception if the bundle has not been prepared'''
     
     ### Build the final package
 
     def pre_build(self):
+        
+        if not self.database.exists():
+            raise ProcessError("Database does not exist yet. Was the 'prepare' step run?")
+        
+        if not self.db_config.process.prepared:
+            raise ProcessError("Build called before prepare completed")
         return True
         
     def build(self):
@@ -299,7 +315,22 @@ class BuildBundle(Bundle):
     def pre_install(self):
         return True
     
-    def install(self):
+    def install(self, library_name='default'):  
+     
+        import databundles.library
+     
+        library = databundles.library.get_library(name=library_name)
+     
+        self.log("Install bundle")  
+        dest = library.put(self)
+        self.log("Installed to {} ".format(dest[2]))
+        
+        for partition in self.partitions:
+        
+            self.log("Install partition {}".format(partition.name))  
+            dest = library.put(partition)
+            self.log("Installed to {} ".format(dest[2]))
+
         return True
         
     def post_install(self):

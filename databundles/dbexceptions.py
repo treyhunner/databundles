@@ -11,6 +11,8 @@ class BundleError(Exception):
     def __str__(self):
         return repr(self.value)
 
+class ProcessError(BundleError):
+    '''Error in the configuration files'''
 
 class ConfigurationError(BundleError):
     '''Error in the configuration files'''
