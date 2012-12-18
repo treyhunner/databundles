@@ -375,7 +375,9 @@ class BundleFilesystem(Filesystem):
         download_path = os.path.join(tempfile.gettempdir(),file_path+".download")
           
         def test_zip_file(f):
-            import zipfile
+            if not os.path.exists(f):
+                raise Exception("Test zip file does not exist: {} ".format(f))
+            
             try:
                 with zipfile.ZipFile(f) as zf:
                     return zf.testzip() is None
@@ -397,7 +399,7 @@ class BundleFilesystem(Filesystem):
             try:                  
 
                 cached_file = cache.get(file_path)
-                       
+   
                 if cached_file:
                  
                     out_file = cached_file
@@ -405,8 +407,7 @@ class BundleFilesystem(Filesystem):
                     if test_f and not test_f(out_file):
                         cache.remove(file_path, True)
                         raise DownloadFailedError("Cached Download didn't pass test function "+url)
-                   
-                    
+     
                 else:
 
 
@@ -414,15 +415,17 @@ class BundleFilesystem(Filesystem):
                     self.bundle.log("  --> "+file_path)
                     
                     resp = urllib2.urlopen(url)
-                    headers = resp.headers
+                    headers = resp.headers #@UnusedVariable
                     
                     if resp.code != 200:
                         raise DownloadFailedError("Failed to download {}: code: "+format(url, resp.code))
                     
-                    if test_f and not test_f(download_path):
-                        raise DownloadFailedError("Download didn't pass test function "+url)
-                    
+             
                     out_file = cache.put(resp, file_path)
+              
+                    if test_f and not test_f(out_file):
+                        cache.remove(file_path)
+                        raise DownloadFailedError("Download didn't pass test function "+url)
 
                 break
                 
@@ -450,7 +453,7 @@ class BundleFilesystem(Filesystem):
                 self.bundle.error("Unexpected download error '"+str(e)+"' when downloading "+url)
                 cache.remove(file_path)
                 raise 
-              
+    
 
         if download_path and os.path.exists(download_path):
             os.remove(download_path) 
@@ -966,8 +969,8 @@ class FsCache(object):
             def repo_path(self):
                 return repo_path
             
-            def write(self, str):
-                sink.write(str)
+            def write(self, str_):
+                sink.write(str_)
             
             def close(self):
                 sink.close()
@@ -1204,7 +1207,7 @@ class S3Cache(object):
                 self.queue = queue
             
             def run(self):
-                import time
+              
                 while True:
                     mp, part_number, buf = self.queue.get()
                     if mp is None:
@@ -1250,7 +1253,7 @@ class S3Cache(object):
                 self.buffer = io.BytesIO()
 
             def write(self, d):
-                import time
+              
                 self.buffer.write(d)
 
                 if self.buffer.tell() > buffer_size:
@@ -1260,7 +1263,7 @@ class S3Cache(object):
                 raise NotImplemented()
             
             def close(self):
-                import time
+               
               
                 if self.buffer.tell() > 0:
                     self._send_buffer()
@@ -1310,19 +1313,19 @@ class FileChunkIO(io.FileIO):
     """
     A class that allows you reading only a chunk of a file.
     """
-    def __init__(self, name, mode='r', closefd=True, offset=0, bytes=None,
+    def __init__(self, name, mode='r', closefd=True, offset=0, bytes_=None,
         *args, **kwargs):
         """
         Open a file chunk. The mode can only be 'r' for reading. Offset
-        is the amount of bytes that the chunks starts after the real file's
-        first byte. Bytes defines the amount of bytes the chunk has, which you
+        is the amount of bytes_ that the chunks starts after the real file's
+        first byte. Bytes defines the amount of bytes_ the chunk has, which you
         can set to None to include the last byte of the real file.
         """
         if not mode.startswith('r'):
             raise ValueError("Mode string must begin with 'r'")
         self.offset = offset
-        self.bytes = bytes
-        if bytes is None:
+        self.bytes = bytes_
+        if bytes_ is None:
             self.bytes = os.stat(name).st_size - self.offset
         super(FileChunkIO, self).__init__(name, mode, closefd, *args, **kwargs)
         self.seek(0)
@@ -1400,5 +1403,3 @@ def copy_file_or_flo(input_, output):
         if output_opened:
             output.close()
         
-
- 

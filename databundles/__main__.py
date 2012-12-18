@@ -41,9 +41,8 @@ def new_command(args):
     shutil.copy(bundle_file ,name  )
 
 def library_command(args):
-    from library import LocalLibrary
-    l = LocalLibrary()
-
+    import library
+    l = library.get_library()
 
     if args.init:
         print "Initialize Library"
@@ -60,6 +59,12 @@ def library_command(args):
     elif args.rebuild:
         print "Rebuild library"
         l.rebuild()
+        
+    elif args.info:
+        print "Info"
+        print "Library Database: {}".format(l.database.dsn)
+
+        
 
 def test_command(args):
     print 'Testing'
@@ -92,6 +97,7 @@ def main():
     lib_p.add_argument('-d','--drop',  default=False,action="store_true",  help='Drop all of the tables in the library database')  
     lib_p.add_argument('-c','--clean',  default=False,action="store_true",  help='Delete all of the records from the library database')  
     lib_p.add_argument('-r','--rebuild',  default=False,action="store_true",  help='Reload the database from bundles in the library directory')  
+    lib_p.add_argument('-f','--info',  default=False,action="store_true",  help='print information about the library')  
 
 
     args = parser.parse_args()

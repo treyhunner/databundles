@@ -54,7 +54,7 @@ def get_database(config=None,name='library'):
     
     return database
 
-def get_library(config=None, name='library'):
+def get_library(config=None, name='default'):
     """Return a new `Library`, constructed from a configuration
     
     :param config: a `RunConfig` object
@@ -105,11 +105,11 @@ def copy_stream_to_file(stream, file_path):
 class LibraryDb(object):
     '''Represents the Sqlite database that holds metadata for all installed bundles'''
 
-    Dbci = namedtuple('Dbc', 'dsn sql') #Database connection information 
+    Dbci = namedtuple('Dbc', 'dsn_template sql') #Database connection information 
    
     DBCI = {
-            'postgres':Dbci(dsn='postgresql+psycopg2://{user}:{password}@{server}/{name}',sql='support/configuration-pg.sql'), # Stored in the databundles module. 
-            'sqlite':Dbci(dsn='sqlite:///{name}',sql='support/configuration.sql')
+            'postgres':Dbci(dsn_template='postgresql+psycopg2://{user}:{password}@{server}/{name}',sql='support/configuration-pg.sql'), # Stored in the databundles module. 
+            'sqlite':Dbci(dsn_template='sqlite:///{name}',sql='support/configuration.sql')
             }
     
     def __init__(self,  driver=None, server=None, dbname = None, username=None, password=None):
@@ -119,7 +119,8 @@ class LibraryDb(object):
         self.username = username
         self.password = password
    
-        self.dsn = self.DBCI[self.driver].dsn
+        self.dsn_template = self.DBCI[self.driver].dsn_template
+        self.dsn = None
         self.sql = self.DBCI[self.driver].sql
         
         self._session = None
@@ -135,10 +136,10 @@ class LibraryDb(object):
         
         if not self._engine:
           
-            dsn = self.dsn.format(user=self.username, password=self.password, 
+            self.dsn = self.dsn_template.format(user=self.username, password=self.password, 
                             server=self.server, name=self.dbname)
 
-            self._engine = create_engine(dsn, echo=False) 
+            self._engine = create_engine(self.dsn, echo=False) 
             
             from sqlalchemy import event
             event.listen(self._engine, 'connect', _pragma_on_connect)

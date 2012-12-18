@@ -53,8 +53,7 @@ class Bundle(object):
     @property
     def identity(self):
         '''Return an identity object. '''
-        from databundles.run import AttrDict
-        
+  
         if not self._identity:
             
             self._identity =  Identity(**self.config.identity)
@@ -399,7 +398,7 @@ class BundleFileConfig(BundleConfig):
     def rewrite(self):
         '''Re-writes the file from its own data. Reformats it, and updates
         the modification time'''
-        import yaml, copy
+        import yaml
         
         temp = self.local_file+".temp"
         old = self.local_file+".old"

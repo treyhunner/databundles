@@ -10,7 +10,6 @@ from sqlalchemy import * #@UnusedWildImport
 from databundles.run import  RunConfig
 from databundles.library import QueryCommand, get_library
 import logging
-import inspect #@Reimport
 import databundles.util
 
 from test_base import  TestBase
@@ -261,7 +260,7 @@ class Test(TestBase):
 
     def test_compression_cache(self):
         '''Test a two-level cache where the upstream compresses files '''
-        from databundles.filesystem import  FsCache, FsLimitedCache, FsCompressionCache
+        from databundles.filesystem import  FsCache,FsCompressionCache
          
         root =  self.root_dir 
         try: Test.rm_rf(root)
@@ -275,7 +274,7 @@ class Test(TestBase):
         testfile = os.path.join(root,'testfile')
         
         with open(testfile,'w+') as f:
-            for i in range(1024):
+            for i in range(1024): #@UnusedVariable
                 f.write('.'*1023)
                 f.write('\n')
 
