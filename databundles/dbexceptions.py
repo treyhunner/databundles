@@ -1,9 +1,8 @@
-'''
-Created on Jun 19, 2012
+"""Common exception objects
 
-@author: eric
-'''
-
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 class BundleError(Exception):
     
     def __init__(self, value):

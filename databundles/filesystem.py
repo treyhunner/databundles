@@ -1,8 +1,9 @@
-'''
-Created on Jun 23, 2012
+"""Access objects for the file system within a bundle and for filesystem caches
+used by the download processes and the library. 
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 import os
 import io

@@ -1,7 +1,9 @@
-'''
-A Library is a local collection of bundles. It holds a database for the configuration
+"""A Library is a local collection of bundles. It holds a database for the configuration
 of the bundles that have been installed into it. 
-'''
+
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 from databundles.run import  RunConfig
 

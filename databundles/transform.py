@@ -1,8 +1,9 @@
-'''
-Created on Aug 1, 2012
+"""Support functions for transforming rows read from input files before
+writing to databases. 
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 def coerce_int(v):   
     '''Convert to an int, or return if isn't an int'''

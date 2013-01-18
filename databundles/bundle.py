@@ -1,8 +1,9 @@
-'''
-Created on Jun 9, 2012
+"""The Bundle object is the root object for a bundle, which includes acessors 
+for partitions, schema, and the filesystem
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 from databundles.database import Database
 from databundles.identity import Identity 

@@ -1,6 +1,8 @@
-"""
-"""
+"""Extensions to the petl library for manipulating table data in memory.
 
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 import petl
 
 def follow(table, func, **kwargs):

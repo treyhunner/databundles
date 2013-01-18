@@ -1,8 +1,8 @@
-'''
-Created on Aug 15, 2012
+"""Misc support code. 
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 # Stolen from: http://code.activestate.com/recipes/498245-lru-and-lfu-cache-decorators/
 
@@ -17,6 +17,26 @@ from collections import Mapping, OrderedDict, defaultdict
 import os 
 
 logger_init = set()
+
+## {{{ http://code.activestate.com/recipes/52549/ (r3)
+class curry:
+    def __init__(self, fun, *args, **kwargs):
+        self.fun = fun
+        self.pending = args[:]
+        self.kwargs = kwargs.copy()
+
+    def __call__(self, *args, **kwargs):
+        if kwargs and self.kwargs:
+            kw = self.kwargs.copy()
+            kw.update(kwargs)
+        else:
+            kw = kwargs or self.kwargs
+
+        return self.fun(*(self.pending + args), **kw)
+## end of http://code.activestate.com/recipes/52549/ }}}
+
+
+
 
 def get_logger(name):
     

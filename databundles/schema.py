@@ -1,8 +1,8 @@
-'''
-Created on Jun 23, 2012
+"""The schema sub-object provides acessors to the schema for a bundle. 
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 from databundles.dbexceptions import ConfigurationError
 

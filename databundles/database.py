@@ -1,8 +1,9 @@
-'''
-Created on Jun 10, 2012
+"""Base class for Bundle and Partition databases. This module also includes
+interfaces for temporary CSV files and HDF files.
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 import os.path
 import anydbm

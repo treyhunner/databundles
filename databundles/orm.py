@@ -1,8 +1,9 @@
-'''
-Created on Jun 21, 2012
+"""Object-Rlational Mapping classess, based on Sqlalchemy, for representing the
+dataset, partitions, configuration, tables and columns. 
 
-@author: eric
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 from sqlalchemy import orm
 from sqlalchemy import event
 from sqlalchemy import Column as SAColumn, Integer, Boolean

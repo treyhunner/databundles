@@ -6,3 +6,4 @@ nose==1.2.1
 psycopg2==2.4.5
 simplejson==2.6.2
 numpy==1.6.2
+ckanclient

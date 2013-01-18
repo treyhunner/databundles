@@ -1,8 +1,9 @@
-'''
-Main script for the databaundles package, providing support for creating
+"""Main script for the databaundles package, providing support for creating
 new bundles
 
-'''
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
 
 import os.path
