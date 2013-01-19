@@ -18,7 +18,14 @@ Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
 Revised BSD License, included in this distribution as LICENSE.txt
 """
 
+__author__ = "Eric Busboom"
+__copyright__ = "Copyright (c) 2013 Clarinova"
+__credits__ = []
+__license__ = "Revised BSD"
 __version__ = '0.09'
+__maintainer__ = "Eric Busboom"
+__email__ = "eric@clarinova.com"
+__status__ = "Development"
 
 def resolve_id(arg, bundle=None, library=None):
     '''resolve any of the many ways of identifying a partition or

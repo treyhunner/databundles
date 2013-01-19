@@ -157,4 +157,3 @@ for n, c in sys.modules[__name__].__dict__.items():
     if callable(c):
         setattr(FluentWrapper, n, wrap(c)) 
         
-  

@@ -218,7 +218,7 @@ class HD5File(object):
         pass
 
     def table(self, table_name, mode='a', expected=None):
-        import tables
+        import tables #@UnresolvedImport
         from databundles.orm import Column
 
         self._file = tables.openFile(self._path, mode = mode)

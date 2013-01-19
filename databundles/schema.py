@@ -118,8 +118,9 @@ class Schema(object):
         return row
         
     def copy_table(self, source, dest_name):
-        nt = self.add_table(dest_name)
-        
+        #nt = self.add_table(dest_name)
+        pass
+    
     def add_column(self, table, name,**kwargs):
         '''Add a column to the schema'''
     
