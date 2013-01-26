@@ -69,6 +69,9 @@ def get_library(config=None, name='default'):
 
     global libraries
     
+    if name is None:
+        name = 'default'
+    
     if name not in libraries:
         
         if config is None:
@@ -78,14 +81,17 @@ def get_library(config=None, name='default'):
 
         if not sc:
             raise Exception("Failed to get library.{} config key ".format(name))
-        
-   
+     
         filesystem = Filesystem(config)
         cache = filesystem.get_cache(sc.filesystem, config)
         
         database = get_database(config, name=sc.database)
 
-        libraries[name] =  Library(cache = cache,  database = database)
+        remote = sc.get('remote',None)
+
+        libraries[name] =  Library(cache = cache,  
+                                   database = database,
+                                   remote = remote)
     
     return libraries[name]
 
@@ -599,7 +605,7 @@ class LibraryDb(object):
         return query
 
         
-    def add_file(self,path, group, ref):
+    def add_file(self,path, group, ref, state='new'):
         from databundles.orm import  File
         stat = os.stat(path)
       
@@ -607,12 +613,22 @@ class LibraryDb(object):
       
         s.query(File).filter(File.path == path).delete()
       
-        file_ = File(path=path, group=group, ref=ref,
-                    modified=stat.st_mtime, size=stat.st_size)
+        file_ = File(path=path, 
+                     group=group, 
+                     ref=ref,
+                     modified=stat.st_mtime, 
+                     state = state,
+                     size=stat.st_size)
     
         s.add(file_)
         s.commit()
 
+    def get_file_by_state(self, state):
+        """Return all files in the database with the given state"""
+        from databundles.orm import  File
+        s = self.session
+        return s.query(File).filter(File.state == state).all()
+         
 
     def remove_file(self,path):
         pass
@@ -757,7 +773,7 @@ class Library(object):
     # Return value for get()
     Return = collections.namedtuple('Return',['bundle','partition'])
 
-    def __init__(self, cache,database, remote=None):
+    def __init__(self, cache,database, remote=None, sync=False):
         '''
         Libraries are constructed on the root cache name for the library. 
         If the cache does not exist, it will be created. 
@@ -765,20 +781,28 @@ class Library(object):
         Args:
         
             cache: a path name to a directory where bundle files will be stored
-            config: A RunConfig object. If not given, use the default RunConfig
+            database: 
+            remote: URL of a remote library, for fallback for get and put. 
+            sync: If true, put to remote synchronously. Defaults to False. 
+   
         
         '''
-    
+        from  databundles.client.rest import Rest 
+        
         self.cache = cache
         self._database = database
-        self.remote = None
- 
+        self.remote = remote
+        self.sync = sync
+        self.api = None
+      
         if not self.cache:
             raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
 
+        if self.remote:
+            self.api =  Rest(self.remote)
+
         self.logger = logging.getLogger(__name__)
-
-
+    
     @property
     def database(self):
         '''Return databundles.database.Database object'''
@@ -820,20 +844,25 @@ class Library(object):
      
         # Not in the cache, try to get it from the remote library, 
         # if a remote was set. 
-        if not abs_path and self.remote:
-            abs_path = self.remote.get(bp_id)
-            
-            if abs_path:
-                # The remote has put the file into our library, 
-                # (If the remote is configured with the same cache as the main library)
-                # so we need to install the bundle. 
-                d2, p2 = self.database.install_bundle(abs_path) #@UnusedVariable
-                
+        bundle = None
+        if not abs_path and self.api:
+          
+            try:
+                r = self.api.get(bp_id.id_)
+                abs_path = self.cache.put(r,rel_path)
+                bundle = DbBundle(abs_path)
+                self._put(abs_path, bundle, state='pulled')
+            except:
+                pass
+
+         
             
         if not abs_path or not os.path.exists(abs_path):
             return False
        
-        bundle = DbBundle(abs_path)
+        if not bundle:
+            bundle = DbBundle(abs_path)
+            
         bundle.library = self
      
         if partition is not None:
@@ -850,6 +879,24 @@ class Library(object):
         
     def find(self, query_command):
         return self.database.find(query_command)
+        
+    def _put(self, cache_file,  bundle, state='new'):
+        '''Parts of put() that are also used when a bundle is retrieved from 
+        the cache in get()'''
+        
+        from bundle import Bundle
+        
+        self.database.add_file(cache_file, self.cache.repo_id, bundle.identity.id_, state)
+                     
+        # Only install bundles in the database. 
+        if  isinstance(bundle, Bundle):
+            dataset, partition = self.database.install_bundle(bundle)
+        
+            return dataset, partition
+        else:
+            # TODO, get the partition and dataset values from 
+            # somewhere. 
+            return None, None
            
     def put(self, bundle):
         '''Install a bundle or partition file into the library.
@@ -874,17 +921,13 @@ class Library(object):
         rel_path = bundle.identity.path+".db"
      
         dst = self.cache.put(src,rel_path)
-        self.database.add_file(dst, self.cache.repo_id, bundle.identity.id_)
-          
-        # Only install bundles in the database. 
-        if  isinstance(bundle, Bundle):
-            dataset, partition = self.database.install_bundle(bundle)
         
-            return dataset, partition, dst
-        else:
-            # TODO, get the partition and dataset values from 
-            # somewhere. 
-            return None, None, dst
+        if self.api and self.sync:
+            self.api.put(src)
+            
+        dataset, partition = self._put(dst, bundle)
+
+        return dataset, partition, dst
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -932,6 +975,21 @@ class Library(object):
         self.database.commit()
         return bundles
   
+  
+    def push(self):
+        """Push any files marked 'new' to the remote"""
+        
+        if not self.api:
+            raise Exception("Can't push() without defining a remote. ")
+        
+        new_files = self.database.get_file_by_state('new')
+   
+        for nf in new_files:
+            self.api.put(nf.path)
+            nf.state = 'pushed'
+
+        self.database.commit()
+        
 
 class RemoteLibrary(object):
     '''A library that uses a REST Interface to a remote library. 

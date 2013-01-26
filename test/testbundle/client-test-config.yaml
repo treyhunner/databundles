@@ -1,0 +1,22 @@
+# Configuration for a library that is backed by a remote library
+library:
+    client:
+      remote: http://localhost:7979
+      filesystem: client
+      database: client
+
+database:
+    client:
+        dbname: /Volumes/DataLibrary/test/client/library.db
+        driver: sqlite  
+
+filesystem:  
+    client:
+        dir: /Volumes/DataLibrary/test/client/cache-l1
+
+downloads:
+    dir: /Volumes/DataLibrary/test/client/downloads
+
+extracts: 
+    dir: /Volumes/DataLibrary/test/client/extracts
+        

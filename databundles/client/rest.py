@@ -1,12 +1,10 @@
-'''
-Rest interface for accessing a remote library. 
+"""Rest interface for accessing a remote library. 
 
-Created on Aug 31, 2012
+Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
+Revised BSD License, included in this distribution as LICENSE.txt
+"""
 
-@author: eric
-'''
 from databundles.client.siesta  import API 
-from databundles.bundle import DbBundle
 
 class NotFound(Exception):
     pass
@@ -15,8 +13,7 @@ class RestError(Exception):
     pass
 
 class Rest(object):
-    '''
-    classdocs
+    '''Interface class for the Databundles Library REST API
     '''
 
     def __init__(self, url):
@@ -33,6 +30,8 @@ class Rest(object):
         Args:
             id_or_name 
             file_path A string or file object where the bundle data should be stored
+                If not provided, the method returns a remose object, from which the
+                caller mys read the body
         
         return
         
@@ -65,16 +64,15 @@ class Rest(object):
         import gzip
         import os, tempfile, uuid
         
-        type = bundle_file_type(source)
+        type_ = bundle_file_type(source)
         
-        if  type == 'sqlite':
+        if  type_ == 'sqlite':
             # If it is a plain sqlite file, compress it before sending it. 
             try:
                 cf = os.path.join(tempfile.gettempdir(),str(uuid.uuid4()))
                 f = gzip.open(cf, 'wb')
                 f.writelines(source)
                 f.close()
-             
              
                 with open(cf) as source:
                     response =  self.api.datasets.post(source)
@@ -85,7 +83,7 @@ class Rest(object):
                
             return response     
 
-        elif type == 'gzip':
+        elif type_ == 'gzip':
             # the file is already gziped, so nothing to do. 
             return self.api.datasets.post(source)
         else:

@@ -544,6 +544,7 @@ class File(Base, SavableMixin):
     path = SAColumn('f_path',Text, nullable=False)
     source_url = SAColumn('f_source_url',Text)
     process = SAColumn('f_process',Text)
+    state = SAColumn('f_state',Text)
     content_hash = SAColumn('f_hash',Text)
     modified = SAColumn('f_modified',Integer)
     size = SAColumn('f_size',Integer)
@@ -555,6 +556,7 @@ class File(Base, SavableMixin):
         self.path = kwargs.get("path",None)
         self.source_url = kwargs.get("source_url",None) 
         self.process = kwargs.get("process",None) 
+        self.state = kwargs.get("state",None) 
         self.modified = kwargs.get("modified",None) 
         self.size = kwargs.get("size",None)
         self.group = kwargs.get("group",None)
@@ -562,7 +564,7 @@ class File(Base, SavableMixin):
         self.content_hash = kwargs.get("content_hash",None) 
       
     def __repr__(self):
-        return "<files: {}>".format(self.path)
+        return "<file: {}; {}>".format(self.path, self.state)
 
 class Partition(Base):
     __tablename__ = 'partitions'

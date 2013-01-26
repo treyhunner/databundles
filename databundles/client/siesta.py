@@ -31,7 +31,6 @@ import re
 import time
 import urllib
 import httplib
-import logging
 import simplejson as json
 
 from urlparse import urlparse
@@ -70,7 +69,7 @@ class Response(object):
         if resp.status == 202:
             return self.handle_202(resp)
 
-        self.content_type, encoding = self.get_mime_type(resp)
+        self.content_type, encoding = self.get_mime_type(resp) #@UnusedVariable
 
         self.object = self.type_handlers.get(self.content_type, self.type_handlers.get('default'))(self,resp)
     
@@ -123,7 +122,12 @@ class Response(object):
         return self.http_response.read(count)
             
     def get_mime_type(self, resp):
-        m = re.match('^([^;]*)(?:; charset=(.*))?$',resp.getheader('content-type'))
+        content_type  = resp.getheader('content-type')
+        m = None
+        
+        if content_type:
+            m = re.match('^([^;]*)(?:; charset=(.*))?$',content_type)
+            
         if m == None:
             mime, encoding = ('', '')
         else:
@@ -186,7 +190,7 @@ class Resource(object):
         #logging.info("init.uri: %s" % uri)
         self.api = api
         self.uri = uri
-        self.scheme, self.host, self.url, z1, z2 = httplib.urlsplit(self.api.base_url + self.uri)
+        self.scheme, self.host, self.url, z1, z2 = httplib.urlsplit(self.api.base_url + self.uri) #@UnusedVariable
         self.id = None
         self.conn = None
         self.headers = {'User-Agent': USER_AGENT}
@@ -209,12 +213,12 @@ class Resource(object):
                                            api=self.api)
         return self.api.resources[key]
 
-    def __call__(self, id=None):
-        #logging.info("call.id: %s" % id)
+    def __call__(self, id_=None):
+        #logging.info("call.id_: %s" % id_)
         #logging.info("call.self.url: %s" % self.url)
-        if id == None:
+        if id_ == None:
             return self
-        self.id = str(id)
+        self.id = str(id_)
         key = self.uri + '/' + self.id
         self.api.resources[key] = Resource(uri=key,
                                            api=self.api)
@@ -247,7 +251,7 @@ class Resource(object):
     def delete(self, id=None, **kwargs):
         return self.do_method('DELETE', id, None, kwargs)  
 
-    def do_method(self, method, id, data, kwargs):
+    def do_method(self, method, id_, data, kwargs):
         if self.id == None:
             url = self.url
         else:

@@ -42,7 +42,7 @@ class Test(TestBase):
         os.rmdir(d)
         
     def get_library(self):
-        
+        """Clear out the database before the test run"""
         ldb = self.rc.library.database['dbname']
         
         if os.path.exists(ldb):
@@ -152,8 +152,8 @@ class Test(TestBase):
         r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
         self.assertEquals(1, len(r))
        
-        for ds in l.datasets:
-            self.assertIn(ds.identity.name, ['source-dataset-subset-variation-ca0d-r1'])
+        ds_names = [ds.identity.name for ds in l.datasets]
+        self.assertIn('source-dataset-subset-variation-ca0d-r1', ds_names)
 
     def test_cache(self):
         from databundles.filesystem import  FsCache, FsLimitedCache

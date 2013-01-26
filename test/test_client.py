@@ -11,6 +11,7 @@ from  testbundle.bundle import Bundle
 from databundles.run import  RunConfig
 from test_base import  TestBase
 from  databundles.client.rest import Rest #@UnresolvedImport
+from databundles.library import QueryCommand, get_library
 
 server_url = 'http://localhost:7979'
 
@@ -37,6 +38,9 @@ class Test(TestBase):
         
         #databundles.server.bottle.debug()
 
+        #
+        # Wait until the server responds to requests
+        #
         a = API(server_url)
         for i in range(1,10): #@UnusedVariable
             try:
@@ -51,12 +55,23 @@ class Test(TestBase):
 
         self.copy_or_build_bundle()
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')    
-        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))      
+        
         self.bundle = Bundle()  
         self.bundle_dir = self.bundle.bundle_dir
         self.start_server()
-        
 
+    def get_library(self):
+        """Clear out the database before the test run"""
+        
+        rc = RunConfig(os.path.join(self.bundle_dir,'client-test-config.yaml'),  load_all_paths = False)
+        l = get_library(rc, 'client')
+        
+    
+        l.database.clean()
+        
+        l.logger.setLevel(logging.DEBUG) 
+        
+        return l
         
 
     def tearDown(self):
@@ -76,74 +91,44 @@ class Test(TestBase):
             except:
                 break
 
-
-    def test_test(self):
-        from databundles.client.siesta import  API
-        a = API(server_url)
-        
-        # Test echo for get. 
-        r = a.test.echo('foobar').get(bar='baz')
-        
-        self.assertEquals(200,r.status)
-        self.assertIsNone(r.exception)
-        
-        self.assertEquals('foobar',r.object[0])
-        self.assertEquals('baz',r.object[1]['bar'])
-        
-        # Test echo for put. 
-        r = a.test.echo().put(['foobar'],bar='baz')
-        
-        self.assertEquals(200,r.status)
-        self.assertIsNone(r.exception)
-
-        self.assertEquals('foobar',r.object[0][0])
-        self.assertEquals('baz',r.object[1]['bar'])
-        
-        with self.assertRaises(Exception):
-            r = a.test.exception.get()
-
-                  
-
-    def test_put_bundle(self):
-        from databundles.bundle import DbBundle
-        from databundles.library import QueryCommand
-        
-        r = Rest(server_url)
-        
-        bf = self.bundle.database.path
-
-        # With an FLO
-        response =  r.put(open(bf))
-        self.assertEquals(self.bundle.identity.id_, response.object.get('dataset').get('id'))
+    def test_library_install(self):
+        '''Install the bundle and partitions, and check that they are
+        correctly installed. Check that installation is idempotent'''
       
-        # with a path
-        response =  r.put(bf)
-        self.assertEquals(self.bundle.identity.id_, response.object.get('dataset').get('id'))
-
-        for p in self.bundle.partitions.all:
-            response =  r.put(open(p.database.path))
-            self.assertEquals(p.identity.id_, response.object.get('partition').get('id'))
-
-        # Now get the bundles
-        bundle_file = r.get(self.bundle.identity.id_,'/tmp/foo')
-
-        bundle = DbBundle(bundle_file)
-
-        self.assertIsNot(bundle, None)
-        self.assertEquals('a1DxuZ',bundle.identity.id_)
-
-        # Should show up in datasets list. 
-        o = r.datasets()
-      
+        l = self.get_library()
+     
+        l.put(self.bundle)
+        l.put(self.bundle)
         
-        self.assertTrue('a1DxuZ' in o.keys() )
-    
-        o = r.find(QueryCommand().table(name='tone').partition(any=True))
-      
-        self.assertTrue( 'b1DxuZ001' in [i.Partition.id_ for i in o])
-        self.assertTrue( 'a1DxuZ' in [i.Dataset.id_ for i in o])
-      
+        r = l.get(self.bundle.identity)
 
+        self.assertIsNotNone(r.bundle)
+        self.assertTrue(r.bundle is not False)
+        self.assertEquals(self.bundle.identity.id_, r.bundle.identity.id_)
+        
+        print "Stored: ",  r.bundle.identity.name
+        
+        l.remove(self.bundle)
+        print "Removed"
+        r = l.get(self.bundle.identity)
+        #self.assertFalse(r)
+        
+        #
+        # Same story, but push to remote first, so that the removed
+        # bundle will get loaded back rom the remote
+        #
+      
+        l.put(self.bundle)
+        l.push()
+        r = l.get(self.bundle.identity)
+        self.assertIsNotNone(r.bundle)
+        l.remove(self.bundle)
+        
+        r = l.get(self.bundle.identity)
+        self.assertIsNotNone(r.bundle)
+        self.assertTrue(r.bundle is not False)
+        self.assertEquals(self.bundle.identity.id_, r.bundle.identity.id_)
+        
 
 def suite():
     suite = unittest.TestSuite()

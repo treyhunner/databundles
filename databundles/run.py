@@ -25,11 +25,12 @@ class RunConfig(object):
     earlier ones. 
     '''
 
-    def __init__(self, path=None):
+    def __init__(self, path=None, load_all_paths = True):
         '''Create a new RunConfig object
         
         Arguments
         path -- If present, a yaml file to load last, overwriting earlier values
+        load_all_paths if True ( default ) load config files from /etc and the user directory also
         '''
         
         
@@ -41,10 +42,18 @@ class RunConfig(object):
                  os.path.join(os.getcwd(),'databundles.yaml'),
                  path ]
     
+        if not load_all_paths:
+            self.files = [ path ]
+    
+        loaded = False
         for f in self.files:
             if f is not None and os.path.exists(f):
+                loaded = True
                 self.config.loaded.append(f)
                 self.config.update_yaml(f)
+
+        if not loaded:
+            raise Exception("Failed to load any config from: {}".format(self.files))
 
     def __getattr__(self, group):
         '''Fetch a confiration group and return the contents as an 

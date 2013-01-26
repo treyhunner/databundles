@@ -18,10 +18,17 @@ run_config = databundles.run.RunConfig()
 
 logger = databundles.util.get_logger(__name__)
 
-def get_library():
+def get_library_config(name='default'):
+    return run_config.library.get(name)
+    
+def get_library(name='default'):
     '''Return the library. In a function to defer execution, so the
     run_config variable can be altered before it is called. '''
-    return databundles.library.get_library(run_config)
+
+    l = databundles.library.get_library(run_config, name)
+    
+    return l
+    
 
 def make_exception_response(e):
     
@@ -104,7 +111,6 @@ def post_dataset():
     '''
     import uuid # For a random filename. 
     import os, tempfile
-    import databundles.util
     import zlib
    
     r = {
@@ -113,9 +119,9 @@ def post_dataset():
              'partition' : 'none'
         }
    
-    compressed = False
+    compressed = False #@UnusedVariable
     try:
-        compressed  = bool(int(request.query.compressed))
+        compressed  = bool(int(request.query.compressed)) #@UnusedVariable
     except: pass
 
     try:
@@ -127,7 +133,7 @@ def post_dataset():
         # idempotent!
         body = request.body # Property acessor
         
-        # This method can recieve data as compressed or not, and determiens which
+        # This method can recieve data as compressed or not, and determines which
         # from the magic number in the head of the data. 
         data_type = databundles.util.bundle_file_type(body)
         decomp = zlib.decompressobj(16+zlib.MAX_WBITS) # http://stackoverflow.com/a/2424549/1144479
@@ -156,7 +162,7 @@ def post_dataset():
         dataset, partition, library_path = get_library().put(tb)
         
         # if that worked, OK to remove the temporary file. 
-        #os.remove(cf)
+        os.remove(cf)
     
         if partition:
             partition = {'id':partition.identity.id_, 'name':partition.name}
@@ -225,6 +231,7 @@ def get_dataset_identity(did):
     return get_dataset_record(did).identity.to_dict()
 
 @get('/dataset/:did/bundle')
+@CaptureException
 def get_dataset_bundle(did):
     '''Get a bundle database file, given an id or name
     
@@ -235,6 +242,9 @@ def get_dataset_bundle(did):
     '''
     
     bp = get_library().get(did)
+
+    if bp is False:
+        raise Exception("Didn't file dataset for id: {} ".format(did))
 
     return static_file(bp.bundle.database.path, root='/', mimetype="application/octet-stream")
 
@@ -340,17 +350,29 @@ def test_run(config=None):
 
     debug()
 
-    return run(host='localhost', port=7979, reloader=False, server='stoppable')
+    l = get_library()  # fixate library
+    config = get_library_config()
+    port = config.get('port', 7979)
+    host = config.get('host', 'localhost')
+    return run(host=host, port=port, reloader=False, server='stoppable')
 
 def local_run():
     from bottle import run
-    return run(host='0.0.0.0', port=8080, reloader=True)
+    l = get_library()  #@UnusedVariable
+    config = get_library_config()
+    port = config.get('port', 8080)
+    host = config.get('host', '0.0.0.0')
+    return run(host=host, port=port, reloader=True)
     
 def local_debug_run():
     from bottle import run, debug
 
     debug()
-    return run(host='0.0.0.0', port=8080, reloader=True)
+    l = get_library()  #@UnusedVariable
+    config = get_library_config()
+    port = config.get('port', 8080)
+    host = config.get('host', '0.0.0.0')
+    return run(host=host, port=port, reloader=True)
     
 if __name__ == '__main__':
     local_debug_run()

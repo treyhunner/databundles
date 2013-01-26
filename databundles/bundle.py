@@ -277,7 +277,8 @@ class BuildBundle(Bundle):
     ### Prepare is run before building, part of the devel process.  
 
     def pre_prepare(self):
-        if self.database.exists() and self.db_config.process.prepared:
+      
+        if self.database.exists() and self.db_config.get_value('process','prepared'):
             raise ProcessError("Bundle has already been prepared")
         return True
 
@@ -299,7 +300,7 @@ class BuildBundle(Bundle):
         if not self.database.exists():
             raise ProcessError("Database does not exist yet. Was the 'prepare' step run?")
         
-        if not self.db_config.process.prepared:
+        if not self.db_config.get_value('process','prepared'):
             raise ProcessError("Build called before prepare completed")
         return True
         
@@ -316,12 +317,13 @@ class BuildBundle(Bundle):
         return True
     
     def install(self, library_name='default'):  
+        '''Install the bundle and all partitions in the default library'''
      
         import databundles.library
      
         library = databundles.library.get_library(name=library_name)
      
-        self.log("Install bundle")  
+        self.log("Install bundle {}".format(self.identity.name))  
         dest = library.put(self)
         self.log("Installed to {} ".format(dest[2]))
         
@@ -505,7 +507,7 @@ class BundleDbConfig(BundleConfig):
         group = bd.get(group)
         
         if not group:
-            pass
+            return None
         
         
         return group
@@ -528,6 +530,15 @@ class BundleDbConfig(BundleConfig):
                      key=key,d_id=self.dataset.id_,value = value)
         s.add(o)
         s.commit()       
+
+    def get_value(self, group, key):
+        
+        group = self.group(group)
+        
+        if not group:
+            return None
+        
+        return group.__getattr__(key)
 
     def get_dataset(self):
         '''Initialize the identity, creating a dataset record, 
