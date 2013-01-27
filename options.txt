@@ -7,3 +7,6 @@ psycopg2==2.4.5
 simplejson==2.6.2
 numpy==1.6.2
 ckanclient
+python-daemon
+lockfile
+

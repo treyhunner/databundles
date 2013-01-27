@@ -25,26 +25,32 @@ class RunConfig(object):
     earlier ones. 
     '''
 
-    def __init__(self, path=None, load_all_paths = True):
+    def __init__(self, path=None):
         '''Create a new RunConfig object
         
         Arguments
-        path -- If present, a yaml file to load last, overwriting earlier values
-        load_all_paths if True ( default ) load config files from /etc and the user directory also
-        '''
+        path -- If present, a yaml file to load last, overwriting earlier values.
+          If it is an array, load only the files in the array. 
+          
+        If path is not an array, the file is added to an array of files, and
+        each of the files is loaded. These files are: 
         
+            /etc/databundles.yaml
+            ~/.databundles.yaml
+            databundles.yaml
+        '''
         
         self.config = AttrDict()
         self.config['loaded'] = []
     
-        self.files = ['/etc/databundles.yaml', 
-                 os.path.expanduser('~/.databundles.yaml'), 
-                 os.path.join(os.getcwd(),'databundles.yaml'),
-                 path ]
-    
-        if not load_all_paths:
-            self.files = [ path ]
-    
+        if isinstance(path, list):
+            self.files = path
+        else:
+            self.files = ['/etc/databundles.yaml', 
+                     os.path.expanduser('~/.databundles.yaml'), 
+                     os.path.join(os.getcwd(),'databundles.yaml'),
+                     path ]
+
         loaded = False
         for f in self.files:
             if f is not None and os.path.exists(f):

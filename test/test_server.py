@@ -29,7 +29,7 @@ class Test(TestBase):
         
         logger.info("Starting library server")
         # Give the server a new RunCOnfig, so we can use a different library. 
-        rc = RunConfig(os.path.join(self.bundle_dir,'server-test-config.yaml'),  load_all_paths = False)
+        rc = RunConfig([os.path.join(self.bundle_dir,'server-test-config.yaml')])
         server = Thread(target = partial(databundles.server.main.test_run, rc) )
    
         server.setDaemon(True)

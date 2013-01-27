@@ -61,15 +61,14 @@ class Test(TestBase):
         self.bundle = Bundle()  
         self.bundle_dir = self.bundle.bundle_dir
         
-        self.server_rc = RunConfig(os.path.join(self.bundle_dir,'server-test-config.yaml'),  load_all_paths = False)
-        self.client_rc = RunConfig(os.path.join(self.bundle_dir,'client-test-config.yaml'),  load_all_paths = False)
+        self.server_rc = RunConfig([os.path.join(self.bundle_dir,'server-test-config.yaml')])
+        self.client_rc = RunConfig([os.path.join(self.bundle_dir,'client-test-config.yaml')])
         
         root = os.path.join(self.client_rc.filesystem.root_dir,'test')
         
         shutil.rmtree(root)
         
-        
-        self.start_server(self.server_rc)
+        #self.start_server(self.server_rc)
 
     def get_library(self):
         """Clear out the database before the test run"""

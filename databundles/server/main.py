@@ -18,8 +18,17 @@ run_config = databundles.run.RunConfig()
 
 logger = databundles.util.get_logger(__name__)
 
-def get_library_config(name='default'):
-    return run_config.library.get(name)
+def get_library_config(name=None):
+    
+    if name is None:
+        name = 'default'
+    
+    cfg =  run_config.library.get(name)
+    
+    if not cfg:
+        raise Exception("Failed to get exception for name {} ".format(name))
+    
+    return cfg
     
 def get_library(name='default'):
     '''Return the library. In a function to defer execution, so the
@@ -356,13 +365,22 @@ def test_run(config=None):
     host = config.get('host', 'localhost')
     return run(host=host, port=port, reloader=False, server='stoppable')
 
-def local_run():
+def local_run(config=None, name='default', reloader=True):
     from bottle import run
-    l = get_library()  #@UnusedVariable
-    config = get_library_config()
+    
+    global stoppable_wsgi_server_run
+    stoppable_wsgi_server_run = None
+    
+    if config:
+        global run_config
+        run_config = config # If this is called before get_library, will change the lib config
+    
+    l = get_library(name)  #@UnusedVariable
+    config = get_library_config(name)
     port = config.get('port', 8080)
     host = config.get('host', '0.0.0.0')
-    return run(host=host, port=port, reloader=True)
+    
+    return run(host=host, port=port, reloader=reloader)
     
 def local_debug_run():
     from bottle import run, debug

@@ -9,67 +9,85 @@ Revised BSD License, included in this distribution as LICENSE.txt
 import os.path
 import yaml
 import shutil
+from databundles.run import  RunConfig
 
-
-def new_command(args):
+def bundle_command(args, rc):
   
     from databundles.identity import Identity
     from databundles.identity import DatasetNumber
     
-    # Remove the creator code and version. 
-    name = '-'.join(Identity.name_parts(args)[:-2])
-
-    if not os.path.exists(name):
-        os.makedirs(name)
-    elif not os.path.isdir(name):
-        raise IOError("Directory already exists: "+name)
-
-    config ={'identity':{
-         'id': str(DatasetNumber()),
-         'source': args.source,
-         'creator': args.creator,
-         'dataset':args.dataset,
-         'subset': args.subset,
-         'variation': args.variation,
-         'revision': args.revision
-         }}
+    if args.subcommand == 'new':
+        # Remove the creator code and version. 
+        name = '-'.join(Identity.name_parts(args)[:-2])
     
-    file_ = os.path.join(name, 'bundle.yaml')
-    yaml.dump(config, file(file_, 'w'), indent=4, default_flow_style=False)
+        if not os.path.exists(name):
+            os.makedirs(name)
+        elif not os.path.isdir(name):
+            raise IOError("Directory already exists: "+name)
+    
+        config ={'identity':{
+             'id': str(DatasetNumber()),
+             'source': args.source,
+             'creator': args.creator,
+             'dataset':args.dataset,
+             'subset': args.subset,
+             'variation': args.variation,
+             'revision': args.revision
+             }}
+        
+        file_ = os.path.join(name, 'bundle.yaml')
+        yaml.dump(config, file(file_, 'w'), indent=4, default_flow_style=False)
+    
+        bundle_file =  os.path.join(os.path.dirname(__file__),'support','bundle.py')
+    
+        shutil.copy(bundle_file ,name  )
 
-    bundle_file =  os.path.join(os.path.dirname(__file__),'support','bundle.py')
-
-    shutil.copy(bundle_file ,name  )
-
-def library_command(args):
+def library_command(args, rc):
     import library
     l = library.get_library()
 
-    if args.init:
+
+    if args.subcommand == 'init':
         print "Initialize Library"
         l.database.create()
-        
-    elif args.drop:
+
+    elif args.subcommand == 'server':
+        from databundles.server.main import  local_run
+
+        local_run(rc, name = args.name, reloader=False)
+      
+    elif args.subcommand == 'drop':
         print "Drop tables"
         l.database.drop()
 
-    elif args.clean:
+    elif args.subcommand == 'clean':
         print "Clean tables"
         l.database.clean()
         
-    elif args.rebuild:
+    elif args.subcommand == 'rebuild':
         print "Rebuild library"
         l.rebuild()
         
-    elif args.info:
+    elif args.subcommand == 'info':
         print "Info"
         print "Library Database: {}".format(l.database.dsn)
 
-        
+    elif args.subcommand == 'push':
+        print "Push"
 
-def test_command(args):
-    print 'Testing'
-    print args
+    else:
+        print "Unknown subcommand"
+        print args 
+
+def test_command(args,rc):
+    
+    if args.subcommand == 'config':
+        print rc.dump()
+    elif args.subcommand == 'foobar':
+        pass
+    else:
+        print 'Testing'
+        print args
 
 def main():
     import argparse
@@ -78,11 +96,19 @@ def main():
                                      description='Create new bundle soruce packages')
     
     #parser.add_argument('command', nargs=1, help='Create a new bundle') 
-    
+ 
+    parser.add_argument('-c','--config', default=None, action='append', help="Path to a run config file") 
+    parser.add_argument('-v','--verbose', default=None, action='append', help="Be verbose") 
+    parser.add_argument('--single-config', default=False,action="store_true", help="Load only the config file specified")
+
+  
     cmd = parser.add_subparsers(title='commands', help='command help')
     
-    new_p = cmd.add_parser('new', help='Create a new bundle')
-    new_p.set_defaults(command='new')
+    #
+    # Bundle Command
+    #
+    new_p = cmd.add_parser('bundle', help='Create a new bundle')
+    new_p.set_defaults(command='bundle')
     new_p.set_defaults(revision='1') # Needed in Identity.name_parts
     new_p.add_argument('-s','--source', required=True, help='Source, usually a domain name') 
     new_p.add_argument('-d','--dataset',  required=True, help='Name of the dataset') 
@@ -92,27 +118,128 @@ def main():
     new_p.add_argument('-n','--dry-run', default=False, help='Dry run') 
     new_p.add_argument('args', nargs=argparse.REMAINDER) # Get everything else. 
 
+    #
+    # Library Command
+    #
     lib_p = cmd.add_parser('library', help='Manage a library')
     lib_p.set_defaults(command='library')
-    lib_p.add_argument('-i','--init',  default=False,action="store_true",  help='Iniitalize the library specified in the configuration')
-    lib_p.add_argument('-d','--drop',  default=False,action="store_true",  help='Drop all of the tables in the library database')  
-    lib_p.add_argument('-c','--clean',  default=False,action="store_true",  help='Delete all of the records from the library database')  
-    lib_p.add_argument('-r','--rebuild',  default=False,action="store_true",  help='Reload the database from bundles in the library directory')  
-    lib_p.add_argument('-f','--info',  default=False,action="store_true",  help='print information about the library')  
+    asp = lib_p.add_subparsers(title='library commands', help='command help')
+    
+    sp = asp.add_parser('push', help='Push new library files')
+    sp.set_defaults(subcommand='push')
+    sp.add_argument('-w','--watch',  default=False,action="store_true",  help='Check periodically for new files.')
 
+    sp = asp.add_parser('server', help='Run the library server')
+    sp.set_defaults(subcommand='server') 
+    sp.add_argument('-n','--name',  default=None,  help='Select a different name for the library')
+    sp.add_argument('-d','--daemonize', default=False, action="store_true",   help="Run as a daemon") 
+    sp.add_argument('-g','--group', default=None,   help="Set group for daemon operation") 
+    sp.add_argument('-u','--user', default=None,  help="Set user for daemon operation")   
+      
+    sp = asp.add_parser('files', help='Print out files in the library')
+    sp.set_defaults(subcommand='files')
+    sp.add_argument('-n','--new',  default=False,action="store_true",  help='Print new files')
+    sp.add_argument('-p','--pushed',  default=False,action="store_true",  help='Print pushed files')
+    sp.add_argument('-u','--pulled',  default=False,action="store_true",  help='Print pulled files')
+ 
+    sp = asp.add_parser('new', help='Create a new library')
+    sp.set_defaults(subcommand='new')
+    
+    sp = asp.add_parser('drop', help='Print out files in the library')
+    sp.set_defaults(subcommand='drop')    
+    
+    sp = asp.add_parser('clean', help='Remove all entries from the library')
+    sp.set_defaults(subcommand='clean')
+    
+    sp = asp.add_parser('rebuild', help='Rebuild the library database from the files in the library')
+    sp.set_defaults(subcommand='rebuild')
+ 
+    sp = asp.add_parser('info', help='Display information about the library')
+    sp.set_defaults(subcommand='info')   
 
+    #
+    # Test Command
+    #
+    lib_p = cmd.add_parser('test', help='Test and debugging')
+    lib_p.set_defaults(command='test')
+    asp = lib_p.add_subparsers(title='Test commands', help='command help')
+    
+    sp = asp.add_parser('config', help='Dump the configuration')
+    sp.set_defaults(subcommand='config')
+  
+                      
     args = parser.parse_args()
    
+    
+    if args.single_config:
+        if args.config is None or len(args.config) > 1:
+            raise Exception("--single_config can only be specified with one -c")
+        else:
+            rc_path = args.config
+    elif args.config is not None and len(args.config) == 1:
+            rc_path = args.config.pop()
+    else:
+        rc_path = args.config
+        
+    rc = RunConfig(rc_path)
+   
     funcs = {
-        'new':new_command,
+        'bundle': bundle_command,
         'library':library_command,
         'test':test_command
     }
         
-    if not funcs.get(args.command, False):
+    f = funcs.get(args.command, False)
+        
+    if not f:
         print "Error: No command: "+args.command
+    elif args.daemonize:
+        raise Exception("Unimplemented")
     else:
-        funcs[args.command](args)
+        f(args, rc)
     
+def daemonize(f, args,  rc):
+        '''Run a process as a daemon'''
+        import daemon
+        import lockfile
+        import os
+        import grp, pwd
+        
+        lib_dir = '/var/lib/databundles'
+        run_dir = '/var/lib/databundles'
+        log_file = '/var/log/library-server'
+        
+                
+        for dir in [run_dir, lib_dir]:
+            if not os.path.exists(dir):
+                os.makedirs(dir)
+
+        out = open(log_file, "a")
+        ubuf_out =  os.fdopen(out.fileno(), 'w', 0)
+
+        gid =  grp.getgrnam(args.group).gr_gid if args.group is not None else os.getgid()
+        uid =  pwd.getpwnam(args.group).pw_gid if args.user  is not None else os.getuid()  
+
+        context = daemon.DaemonContext(
+            working_directory=lib_dir,
+            umask=0o002,
+            pidfile=lockfile.FileLock(os.path.join(run_dir,'library-server.pid')),
+            stdout = ubuf_out, 
+            stderr = ubuf_out,
+            gid  = gid, 
+            uid = uid
+            )
+
+                
+        # OPen the log file, then fdopen it with a zero buffer sized, to 
+        # ensure the ourput is unbuffered. 
+        context.open()
+        
+        ubuf_out.write("Starting library server as a daemon\n")
+        ubuf_out.flush()
+        #with context:
+        f(args, rc)
+
+
 if __name__ == '__main__':
     main()
