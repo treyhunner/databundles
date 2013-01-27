@@ -93,6 +93,7 @@ class Filesystem(object):
         """
         
         from databundles.dbexceptions import ConfigurationError
+        import tempfile
 
         if config is None:
             config = self.config
@@ -101,6 +102,10 @@ class Filesystem(object):
             raise ConfigurationError("Didn't get filsystem configuration value. "+
                                      " from config files: "+"; ".join(config.loaded))
 
+
+      
+        root_dir = config.filesystem.get('root_dir',tempfile.gettempdir())
+        
         subconfig = config.filesystem.get(cache_name,False)
 
   
@@ -108,22 +113,23 @@ class Filesystem(object):
             raise ConfigurationError("Didn't find filesystem.{} configuration value"
                                      .format(cache_name))
                
-        cache = self._get_cache(cache_name, subconfig)
+        cache = self._get_cache(cache_name, subconfig, root_dir)
         
         return cache
 
-    def _get_cache(self,config_name, config):
+    def _get_cache(self,config_name, config, root_dir):
         
         from databundles.dbexceptions import ConfigurationError
         
         cache = None
         if config.get('dir',False):
 
+            dir = config.get('dir').format(root=root_dir)
+            
             if config.get('size', False):
-                cache =  FsLimitedCache(config.get('dir'), 
-                               maxsize=config.get('size',10000))
+                cache =  FsLimitedCache(dir, maxsize=config.get('size',10000))
             else:
-                cache =  FsCache(config.get('dir'))               
+                cache =  FsCache(dir)               
                 
         elif config.get('bucket',False):
             
@@ -138,7 +144,7 @@ class Filesystem(object):
         if config.get('upstream',False):
             up_name = config_name+'.upstream'
 
-            cache.upstream = self._get_cache(up_name, config.get('upstream'))
+            cache.upstream = self._get_cache(up_name, config.get('upstream'), root_dir)
         
         if config.get('options',False) and isinstance(config.get('options',False), list):
          

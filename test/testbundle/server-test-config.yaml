@@ -6,20 +6,21 @@ library:
         
 database:
     test:
-        dbname: /Volumes/DataLibrary/test/server/library.db
+        dbname: '{root}/test/server/library.db'
         driver: sqlite  
 
 filesystem:  
+    root_dir: /Volumes/DataLibrary/
     test:
-        dir: /Volumes/DataLibrary/test/server/cache-l1
+        dir: '{root}/test/server/cache-l1'
         size: 5
         upstream:
-          dir: /Volumes/DataLibrary/test/server/cache-l2
+          dir: '{root}/test/server/cache-l2'
           options: [compress]
             
 downloads:
-    dir: /Volumes/DataLibrary/test/server/downloads
+    dir: '{root}/test/server/downloads'
 
 extracts: 
-    dir: /Volumes/DataLibrary/test/server/extracts
+    dir: '{root}/test/server/extracts'
         

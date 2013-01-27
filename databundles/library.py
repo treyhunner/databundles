@@ -39,6 +39,7 @@ def get_database(config=None,name='library'):
     constructor. 
     
     """
+    import tempfile 
     
     if config is None:
         config = RunConfig()    
@@ -46,7 +47,10 @@ def get_database(config=None,name='library'):
     if not config.library:
         raise ConfigurationError("Didn't get library configuration value")
     
+    root_dir = config.filesystem.get('root_dir',tempfile.gettempdir())
     db_config = config.database.get(name)
+    
+    db_config.dbname = db_config.dbname.format(root=root_dir)
     
     if not db_config:
         raise ConfigurationError("Didn't get database.{} configuration value".format(name))
@@ -975,21 +979,36 @@ class Library(object):
         self.database.commit()
         return bundles
   
-  
-    def push(self):
-        """Push any files marked 'new' to the remote"""
-        
-        if not self.api:
-            raise Exception("Can't push() without defining a remote. ")
+    @property
+    def new_files(self):
+        '''Generator that returns files that should be pushed to the remote
+        library'''
         
         new_files = self.database.get_file_by_state('new')
    
         for nf in new_files:
-            self.api.put(nf.path)
-            nf.state = 'pushed'
-
-        self.database.commit()
+            yield nf
         
+  
+    def push(self, file_=None):
+        """Push any files marked 'new' to the remote
+        
+        Args:
+            file_: If set, push a single file, obtailed from new_files. If not, push all files. 
+        
+        """
+        
+        if not self.api:
+            raise Exception("Can't push() without defining a remote. ")
+ 
+        if file_ is not None:
+            self.api.put(file_.path)
+            file_.state = 'pushed'
+            self.database.commit()
+        else:
+            for file_ in self.new_files:
+                self.push(file_)
+    
 
 class RemoteLibrary(object):
     '''A library that uses a REST Interface to a remote library. 

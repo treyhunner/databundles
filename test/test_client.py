@@ -20,7 +20,7 @@ logger.setLevel(logging.DEBUG)
 
 class Test(TestBase):
  
-    def start_server(self):
+    def start_server(self, rc):
         '''Run the Bottle server as a thread'''
         from databundles.client.siesta import  API
         import databundles.server.main
@@ -30,7 +30,7 @@ class Test(TestBase):
         
         logger.info("Starting library server")
         # Give the server a new RunCOnfig, so we can use a different library. 
-        rc = RunConfig(os.path.join(self.bundle_dir,'server-test-config.yaml'),  load_all_paths = False)
+      
         server = Thread(target = partial(databundles.server.main.test_run, rc) )
    
         server.setDaemon(True)
@@ -52,20 +52,29 @@ class Test(TestBase):
                 time.sleep(1)
                                
     def setUp(self):
-
+        
+        import shutil,os
+        
         self.copy_or_build_bundle()
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')    
         
         self.bundle = Bundle()  
         self.bundle_dir = self.bundle.bundle_dir
-        self.start_server()
+        
+        self.server_rc = RunConfig(os.path.join(self.bundle_dir,'server-test-config.yaml'),  load_all_paths = False)
+        self.client_rc = RunConfig(os.path.join(self.bundle_dir,'client-test-config.yaml'),  load_all_paths = False)
+        
+        root = os.path.join(self.client_rc.filesystem.root_dir,'test')
+        
+        shutil.rmtree(root)
+        
+        
+        self.start_server(self.server_rc)
 
     def get_library(self):
         """Clear out the database before the test run"""
         
-        rc = RunConfig(os.path.join(self.bundle_dir,'client-test-config.yaml'),  load_all_paths = False)
-        l = get_library(rc, 'client')
-        
+        l = get_library(self.client_rc, 'client')
     
         l.database.clean()
         
@@ -109,9 +118,8 @@ class Test(TestBase):
         print "Stored: ",  r.bundle.identity.name
         
         l.remove(self.bundle)
-        print "Removed"
         r = l.get(self.bundle.identity)
-        #self.assertFalse(r)
+        self.assertFalse(r)
         
         #
         # Same story, but push to remote first, so that the removed
