@@ -153,12 +153,16 @@ class BuildBundle(Bundle):
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
         self.ptick_count = 0;
 
-    def configure_arg_parser(self, argv):
+    def configure_arg_parser(self):
         import argparse
         
         parser = argparse.ArgumentParser(prog='python bundle.py',
                                          description='Run the bunble build process')
         
+        # These are args that Aptana / PyDev adds to runs. 
+        parser.add_argument('--port', default=None, help="Debugger arg") 
+        parser.add_argument('--verbosity', default=None, help="Debugger arg") 
+                
         parser.add_argument('phases', metavar='N', type=str, nargs='*',
                        help='Build phases to run')
         
@@ -178,9 +182,9 @@ class BuildBundle(Bundle):
 
     def parse_args(self,argv):
 
-        parser = self.configure_arg_parser(argv)
+        parser = self.configure_arg_parser()
     
-        args = parser.parse_args()
+        args = parser.parse_args(argv)
         
         if args.build_opt is None:
             args.build_opt = []

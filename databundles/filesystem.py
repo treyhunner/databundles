@@ -571,6 +571,10 @@ class FsLimitedCache(object):
             raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
         
     @property
+    def database_path(self):
+        return  os.path.join(self.cache_dir, 'file_database.db')
+        
+    @property
     def database(self):
         import sqlite3
         
@@ -578,7 +582,7 @@ class FsLimitedCache(object):
             raise Exception("Shoundn't get here")
         
         if not self._database:
-            db_path = os.path.join(self.cache_dir, 'file_database.db')
+            db_path = self.database_path
             
             if not os.path.exists(db_path):
                 create_sql = """
@@ -639,9 +643,15 @@ class FsLimitedCache(object):
     def add_record(self, rel_path, size):
         import time
         c = self.database.cursor()
-        c.execute("insert into files(path, size, time) values (?, ?, ?)", 
-                    (rel_path, size, time.time()))
-        self.database.commit()
+        try:
+            c.execute("insert into files(path, size, time) values (?, ?, ?)", 
+                        (rel_path, size, time.time()))
+            self.database.commit()
+        except Exception as e:
+            import dbexceptions
+            
+            raise dbexceptions.FilesystemError("Failed to write to cache database '{}': {}"
+                                               .format(self.database_path, e.message))
 
     def verify(self):
         '''Check that the database accurately describes the state of the repository'''

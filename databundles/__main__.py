@@ -73,7 +73,19 @@ def library_command(args, rc):
         print "Library Database: {}".format(l.database.dsn)
 
     elif args.subcommand == 'push':
-        print "Push"
+        files_ = l.database.get_file_by_state('new')
+        if len(files_):
+            print "-- Pushing to {}".format(l.remote)
+            for f in files_:
+                print "Pushing: {}".format(f.path)
+                l.push(f)
+
+    elif args.subcommand == 'files':
+        files_ = l.database.get_file_by_state(args.file_state)
+        if len(files_):
+            print "-- Display {} files".format(args.file_state)
+            for f in files_:
+                print f.path
 
     else:
         print "Unknown subcommand"
@@ -138,9 +150,9 @@ def main():
       
     sp = asp.add_parser('files', help='Print out files in the library')
     sp.set_defaults(subcommand='files')
-    sp.add_argument('-n','--new',  default=False,action="store_true",  help='Print new files')
-    sp.add_argument('-p','--pushed',  default=False,action="store_true",  help='Print pushed files')
-    sp.add_argument('-u','--pulled',  default=False,action="store_true",  help='Print pulled files')
+    sp.add_argument('-n','--new',  default=False,action="store_const", const='new',  dest='file_state', help='Print new files')
+    sp.add_argument('-p','--pushed',  default=False,action="store_const", const='pushed', dest='file_state',  help='Print pushed files')
+    sp.add_argument('-u','--pulled',  default=False,action="store_const", const='pulled', dest='file_state',  help='Print pulled files')
  
     sp = asp.add_parser('new', help='Create a new library')
     sp.set_defaults(subcommand='new')
@@ -193,8 +205,6 @@ def main():
         
     if not f:
         print "Error: No command: "+args.command
-    elif args.daemonize:
-        raise Exception("Unimplemented")
     else:
         f(args, rc)
     

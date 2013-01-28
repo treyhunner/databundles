@@ -4,13 +4,18 @@ Created on Jan 17, 2013
 @author: eric
 '''
 import unittest
+from  testbundle.bundle import Bundle
+from databundles.identity import * #@UnusedWildImport
+from test_base import  TestBase
 
-
-class Test(unittest.TestCase):
-
-
+class Test(TestBase):
+ 
     def setUp(self):
-        pass
+
+        self.copy_or_build_bundle()
+
+        self.bundle = Bundle()    
+        self.bundle_dir = self.bundle.bundle_dir
 
 
     def tearDown(self):
@@ -18,43 +23,16 @@ class Test(unittest.TestCase):
 
 
     def test_basic(self):
-        import ckanclient
+        from databundles.client.ckan  import get_client
+        ck = get_client()
         
-        uid = 'foobottom'
+        ckb = ck.update_or_new_bundle(self.bundle)
         
-        # Instantiate the CKAN client.
-        ckan = ckanclient.CkanClient(base_location='http://data.vagrd.cnshost.net/api',
-                                     api_key='33441d7b-45aa-4306-807f-871cb502484a')
-
-        package_list = ckan.package_register_get()
-        print package_list
-
-        package_entity = ckan.package_entity_get(uid)
-     
+        
         import pprint
-        pprint.pprint(package_entity)
+        pprint.pprint(ckb)
 
-        import glob
 
-        for f in glob.glob("/Volumes/DataLibrary/crime/months/*.csv"):
-            parts = f.split('/').pop().strip('.csv').split('-')
-            resource_tag = "{0}-{1:02d}".format(parts[0],int(parts[1]))
-            print "Start ", resource_tag
-
-            url,err = ckan.upload_file(f) #@UnusedVariable
-            print "!!!",url
-
-            r = ckan.add_package_resource(uid, f, 
-                                          resource_type = 'data',
-                                          description=resource_tag, 
-                                          tags = resource_tag,
-                                          author  = 1,
-                                          creator = 2,
-                                          dataset = 3, 
-                                          subset = 4
-                                          )
-            
-            pprint.pprint(r)
            
             
 if __name__ == "__main__":
