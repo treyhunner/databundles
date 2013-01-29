@@ -101,7 +101,27 @@ def run(argv, bundle_class):
         time.sleep(1)
 
     if 'clean' in args.phases:
+        b.log("---- Cleaning ---")
         b.clean()
+        
+    # The Meta phase prepares neta information, such as list of cites
+    # that is doenloaded from a website, or a specificatoin for a schema. 
+    # The meta phase does not require a database, and should write files
+    # that only need to be done once. 
+    if 'meta' in args.phases:
+        if b.pre_meta():
+            b.log("---- Meta ----")
+            if b.meta():
+                b.post_meta()
+                b.log("---- Done Meta ----")
+            else:
+                b.log("---- Meta exited with failure ----")
+                return False
+        else:
+            b.log("---- Skipping Meta ---- ")
+    else:
+        b.log("---- Skipping Meta ---- ") 
+               
         
     if 'prepare' in args.phases:
         if b.pre_prepare():
@@ -152,6 +172,8 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Install ---- ")      
      
+    # Submit puts information about the the bundles into a catalog
+    # and may store extracts of the data in the catalog. 
     if 'submit' in args.phases:
         if b.pre_submit():
             b.log("---- Submit ---")

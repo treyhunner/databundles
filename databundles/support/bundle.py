@@ -13,18 +13,17 @@ class Bundle(BuildBundle):
         self.super_ = super(Bundle, self)
         self.super_.__init__(directory)
 
-    ### Prepare is run before building, part of the devel process.  
+    ### Meta is run before prepare, to load or configure meta information
 
-    def pre_prepare(self):
+    def meta(self):
         return True
+ 
+
+    ### Prepare is run before building, part of the devel process.  
 
     def prepare(self):
         return True
-    
-    def post_prepare(self):
-        return True
-   
-   
+ 
     
     ### Build the final package
 

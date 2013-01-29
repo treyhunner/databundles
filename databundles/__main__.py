@@ -119,16 +119,20 @@ def main():
     #
     # Bundle Command
     #
-    new_p = cmd.add_parser('bundle', help='Create a new bundle')
-    new_p.set_defaults(command='bundle')
-    new_p.set_defaults(revision='1') # Needed in Identity.name_parts
-    new_p.add_argument('-s','--source', required=True, help='Source, usually a domain name') 
-    new_p.add_argument('-d','--dataset',  required=True, help='Name of the dataset') 
-    new_p.add_argument('-b','--subset', nargs='?', default=None, help='Name of the subset') 
-    new_p.add_argument('-v','--variation', default='orig', help='Name of the variation') 
-    new_p.add_argument('-c','--creator',  required=True, help='Id of the creator') 
-    new_p.add_argument('-n','--dry-run', default=False, help='Dry run') 
-    new_p.add_argument('args', nargs=argparse.REMAINDER) # Get everything else. 
+    bundle_p = cmd.add_parser('bundle', help='Create a new bundle')
+    bundle_p.set_defaults(command='bundle')   
+    asp = bundle_p.add_subparsers(title='Bundle commands', help='Commands for maniplulating bundles')
+    
+    sp = asp.add_parser('new', help='Create a new bundle')
+    sp.set_defaults(subcommand='new')
+    sp.set_defaults(revision='1') # Needed in Identity.name_parts
+    sp.add_argument('-s','--source', required=True, help='Source, usually a domain name') 
+    sp.add_argument('-d','--dataset',  required=True, help='Name of the dataset') 
+    sp.add_argument('-b','--subset', nargs='?', default=None, help='Name of the subset') 
+    sp.add_argument('-v','--variation', default='orig', help='Name of the variation') 
+    sp.add_argument('-c','--creator',  required=True, help='Id of the creator') 
+    sp.add_argument('-n','--dry-run', default=False, help='Dry run') 
+    sp.add_argument('args', nargs=argparse.REMAINDER) # Get everything else. 
 
     #
     # Library Command

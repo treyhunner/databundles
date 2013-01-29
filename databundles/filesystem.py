@@ -170,7 +170,8 @@ class Filesystem(object):
 class BundleFilesystem(Filesystem):
     
     BUILD_DIR = 'build'
-
+    META_DIR = 'meta'
+    
     def __init__(self, bundle, root_directory = None):
         
         super(BundleFilesystem, self).__init__(bundle.config._run_config)
@@ -243,6 +244,8 @@ class BundleFilesystem(Filesystem):
 
         return p
 
+    
+
     def build_path(self, *args):
     
         if len(args) > 0 and args[0] == self.BUILD_DIR:
@@ -252,6 +255,14 @@ class BundleFilesystem(Filesystem):
         return self.path(*args)
 
 
+    def meta_path(self, *args):
+    
+        if len(args) > 0 and args[0] == self.META_DIR:
+            raise ValueError("Adding meta to existing meta path "+os.path.join(*args))
+        
+        args = (self.META_DIR,) + args
+        return self.path(*args)
+    
     def directory(self, rel_path):
         '''Resolve a path that is relative to the bundle root into 
         an absoulte path'''

@@ -58,9 +58,10 @@ class Ckan(object):
             group = self.api.group_register_post(group_entity)
         
         return group
+ 
         
     def update_or_new_bundle(self, bundle):
-    
+        '''Create a new package for a bundle.'''
         from ckanclient import CkanApiNotFoundError
         name = bundle.identity.name
             
@@ -84,6 +85,7 @@ class Ckan(object):
             'maintainer_email' : bundle.identity.creator,
             'maintainer': props.get('maintainer',None),            
             'extras': {
+                'bundle/type' : 'bundle',
                 'bundle/source' : bundle.identity.source,
                 'bundle/dataset' : bundle.identity.dataset,
                 'bundle/subset' : bundle.identity.subset,
@@ -104,6 +106,58 @@ class Ckan(object):
         pe = self.api.package_entity_put(package_entity)
 
         return pe
+
+
+    def update_or_new_bundle_extract(self, bundle):        
+
+        '''Create or update a package for a set of files extracted from a bundle
+        '''
+      
+        from ckanclient import CkanApiNotFoundError
+        name = bundle.identity.name
+            
+        group = self.get_or_new_group('bundles')
+   
+        try:
+            pe = self.api.package_entity_get(name)
+           
+        except CkanApiNotFoundError:
+            # Register a minimal package, since we always will update. 
+            package_entity = {'name': name}
+            pe = self.api.package_register_post(package_entity)
+
+        props = bundle.config.group('properties')
+
+        package_entity = {
+            'title':  props.get('title',None),
+            'name': name,
+            'author_email' : bundle.identity.creator,
+            'author': props.get('author',None),
+            'maintainer_email' : bundle.identity.creator,
+            'maintainer': props.get('maintainer',None),            
+            'extras': {
+                'bundle/type' : 'extract',
+                'bundle/source' : bundle.identity.source,
+                'bundle/dataset' : bundle.identity.dataset,
+                'bundle/subset' : bundle.identity.subset,
+                'bundle/variation' : bundle.identity.variation,
+                'bundle/revision' : bundle.identity.revision,
+                'bundle/id' : bundle.identity.id_
+            },
+                          
+            'version':  bundle.identity.revision,
+            'homepage':  props.get('homepage',None),
+            'url':  props.get('url',None),
+            'notes':  props.get('notes',None),
+            'url':  props.get('url',None),
+            'tags':  props.get('tags',None),
+            'groups' : [group['id']]
+        }
+     
+        pe = self.api.package_entity_put(package_entity)
+
+        return pe
+
     
     def submit_bundle(self):
         pass
