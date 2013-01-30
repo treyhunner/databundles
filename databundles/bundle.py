@@ -383,6 +383,96 @@ class BuildBundle(Bundle):
     def post_submit(self):
         return True
     
+    
+    ########################
+    # Support for the submit() process
+    
+    def eval_for_expr(self, astr,debug=False):
+        """Check that an expression is save to evaluate"""
+        import ast
+        try: tree=ast.parse(astr)
+        except SyntaxError: raise ValueError(astr)
+        for node in ast.walk(tree):
+            if isinstance(node,(ast.Module,
+                                ast.Expr,
+                                ast.Dict,
+                                ast.Str,
+                                ast.Attribute,
+                                ast.Num,
+                                ast.Name,
+                                ast.Load,
+                                ast.BinOp,
+                                ast.Compare,
+                                ast.Eq
+                                )): 
+                continue
+            if (isinstance(node,ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == 'datetime'): 
+                continue
+            if debug:
+                attrs=[attr for attr in dir(node) if not attr.startswith('__')]
+                print(node)
+                for attrname in attrs:
+                    print('    {k} ==> {v}'.format(k=attrname,v=getattr(node,attrname)))
+            raise ValueError("Bad node {} in {}".format(node,astr))
+        return True
+        
+    def do_extract(self, package, config, partition):
+        """Extract a CSV file and  upload it to CKAN"""
+        import tempfile
+        import uuid
+        import os
+        import petl.fluent as petlf
+        import databundles.client.ckan
+        
+        p = partition
+        ck = databundles.client.ckan.get_client()
+        
+        f  = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()) )
+    
+        self.log("Extracting and submitting: {} as {}".format(p.identity.name, f))
+            
+        t = petlf.fromsqlite3(p.database.path, config['query'] ).tocsv(f)
+      
+        name = config['name'].format(p=p, ident=p.identity)
+        description = config['description'].format(p=p, ident=p.identity)
+      
+        re = ck.add_file_resource(package, f, name=name,  description=description,
+                                 content_type = "text/csv", format='csv')
+        os.remove(f)
+        
+        return re
+        
+    def generate_extracts(self):
+        if not self.config.group('extracts'):
+            return 
+    
+        for extract in self.config.extracts:
+            p_id = extract.get('partition', False)
+            if not p_id:
+                continue
+            
+            # The 'any' partition means iterate through all of them
+            if p_id == 'any':
+                for_ = extract.get('for', False)
+                for p in self.partitions:
+                    use = False
+                    if for_:
+                        try:
+                            self.eval_for_expr(for_, True)
+                            use = eval(for_)
+                        except Exception as e:
+                            print e
+                            
+                    else:
+                        use = True
+                    if use:
+                        yield extract, p    
+                        
+        return 
+        
+    
 
 class BundleConfig(object):
    

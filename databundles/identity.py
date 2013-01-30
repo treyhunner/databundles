@@ -55,6 +55,11 @@ class Identity(object):
     @property
     def name(self):
         return self.name_str(self)
+   
+    @property
+    def base_name(self):
+        """like name(), but does not include the revision"""
+        return self.name_str(self, use_revision=False)
     
     @property
     def path(self):
@@ -71,12 +76,12 @@ class Identity(object):
         return os.path.join(source, '-'.join(parts) )
     
     @classmethod
-    def name_str(cls,o=None):
+    def name_str(cls,o=None, use_revision=True):
         
-        return '-'.join(cls.name_parts(o))
+        return '-'.join(cls.name_parts(o,use_revision=use_revision))
     
     @staticmethod
-    def name_parts(o=None):
+    def name_parts(o=None, use_revision=True):
         """Return the parts of the name as a list, for additional processing. """
         from databundles.dbexceptions import ConfigurationError
         name_parts = [];
@@ -118,10 +123,11 @@ class Identity(object):
         except Exception as e:
             raise ConfigurationError('Missing identity.creatorcode: '+str(e))
    
-        try: 
-            name_parts.append('r'+str(o.revision))
-        except Exception as e:
-            raise ConfigurationError('Missing identity.revision: '+str(e))  
+        if use_revision:
+            try: 
+                name_parts.append('r'+str(o.revision))
+            except Exception as e:
+                raise ConfigurationError('Missing identity.revision: '+str(e))  
 
         
         import re

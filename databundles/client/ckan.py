@@ -7,6 +7,9 @@ Revised BSD License, included in this distribution as LICENSE.txt
 
 from databundles.run import RunConfig
 import ckanclient
+import databundles.client.exceptions as Exceptions
+import requests
+import json
 
 def get_client(rc=None, name=None):
     from databundles.dbexceptions import ConfigurationError
@@ -40,45 +43,67 @@ class Ckan(object):
 
         if not re.search("/\d$", url): # prefer version 2 of the api
             url += '/2'
+            pass
 
         # Instantiate the CKAN client.
-        self.api = ckanclient.CkanClient(base_location=url,api_key=key)
+        self.url = url
+        self.key = key
+        
+    @property
+    def auth_headers(self):
+        return {'Authorization': self.key,
+                'X-CKAN-API-Key': self.key,
+                'Content-Type': 'application/json; charset=utf-8'
+                 }
+    
+    
+    def translate_name(self,name):
+        return name.lower().replace('.','_')
+        
+    
         
     def get_or_new_group(self,name):
-        from ckanclient import CkanApiNotFoundError
-        
+        url = self.url+'/rest/group/{name}'
+      
         try:
-            group = self.api.group_entity_get(name)
-        except CkanApiNotFoundError:
-            group_entity = {
+            r = requests.get(url.format(name=name))
+            r.raise_for_status()
+            
+        except requests.exceptions.HTTPError:
+            
+            payload = {
                 'name': name,
                 'title': name,
                 'description': name
                 }
-            group = self.api.group_register_post(group_entity)
-        
-        return group
- 
-        
-    def update_or_new_bundle(self, bundle):
-        '''Create a new package for a bundle.'''
-        from ckanclient import CkanApiNotFoundError
-        name = bundle.identity.name
             
-        group = self.get_or_new_group('bundles')
+            r = requests.post(self.url+'/rest/group',
+                              headers =  self.auth_headers,
+                             data=json.dumps(payload))
+            r.raise_for_status()
    
-        try:
-            pe = self.api.package_entity_get(name)
-           
-        except CkanApiNotFoundError:
-            # Register a minimal package, since we always will update. 
-            package_entity = {'name': name}
-            pe = self.api.package_register_post(package_entity)
-
+        return r.json()
+     
+    #
+    # Packages
+    #
+    
+    def list_packages(self):
+        r = requests.get(self.url+'/rest/package')
+        r.raise_for_status()
+        return r.json()    
+    
+    def entity_from_bundle(self, name,  bundle ):
         props = bundle.config.group('properties')
 
-        package_entity = {
-            'title':  props.get('title',None),
+        if not name:
+            name =  bundle.identity.base_name
+
+        import datetime
+        t = str(datetime.datetime.now())
+
+        return  {
+            'title':  (props.get('title',None)),
             'name': name,
             'author_email' : bundle.identity.creator,
             'author': props.get('author',None),
@@ -100,64 +125,226 @@ class Ckan(object):
             'notes':  props.get('notes',None),
             'url':  props.get('url',None),
             'tags':  props.get('tags',None),
-            'groups' : [group['id']]
-        }
-     
-        pe = self.api.package_entity_put(package_entity)
-
-        return pe
-
-
-    def update_or_new_bundle_extract(self, bundle):        
-
-        '''Create or update a package for a set of files extracted from a bundle
-        '''
-      
-        from ckanclient import CkanApiNotFoundError
-        name = bundle.identity.name
             
-        group = self.get_or_new_group('bundles')
-   
+        }       
+    
+    def merge_dict(self,old, new, recurse=True):
+        
+        out = {}
+        
+        old_extras = old.get('extras', {})
+        if len(old_extras): del old['extras'] 
+        new_extras = new.get('extras', {})      
+        if len(new_extras): del new['extras']    
+
+        # Copy over the new items
+        for k,v in new.items():
+            if v is None:
+                pass
+            else:
+                out[k] = v
+        
+        # copy over the old items that don't already exist
+        for k,v in old.items():
+            if v is not None and not out.get(k,False):
+                out[k] = v
+             
+        if recurse:
+            out['extras'] = self.merge_dict(old_extras, new_extras, False)
+                        
+        return out
+    
+    def get_package(self, id_):
+        r = requests.get(self.url+'/rest/package/{id}'.format(id=id_),
+                          headers =  self.auth_headers)
         try:
-            pe = self.api.package_entity_get(name)
-           
-        except CkanApiNotFoundError:
-            # Register a minimal package, since we always will update. 
-            package_entity = {'name': name}
-            pe = self.api.package_register_post(package_entity)
+            r.raise_for_status()
+            return r.json()  
+        except Exception as e:
+            print "ERROR: "+r.content
+            raise e
+    
+    
+    def put_package(self, pe):
+        
+        data = json.dumps(pe)
+        url = self.url+'/rest/package/{id}'.format(id=pe['id'])
+        
+        r = requests.put(url, headers =  self.auth_headers, data = data )
+        try:
+            r.raise_for_status()
+            return r.json()  
+        except Exception as e:
+            print "ERROR: "+r.content
+            raise e  
+    
+    def update_or_new_bundle(self, bundle, type='bundle', group=None, name=None, title=None):
+        '''Create a new package for a bundle.'''
+        import datetime
+        
+        if name is None:
+            name = self.translate_name(bundle.identity.base_name)
+        else:
+            name = self.translate_name(name)
+          
+        if not group:  
+            group = self.get_or_new_group('bundles')
 
-        props = bundle.config.group('properties')
-
-        package_entity = {
-            'title':  props.get('title',None),
-            'name': name,
-            'author_email' : bundle.identity.creator,
-            'author': props.get('author',None),
-            'maintainer_email' : bundle.identity.creator,
-            'maintainer': props.get('maintainer',None),            
-            'extras': {
-                'bundle/type' : 'extract',
-                'bundle/source' : bundle.identity.source,
-                'bundle/dataset' : bundle.identity.dataset,
-                'bundle/subset' : bundle.identity.subset,
-                'bundle/variation' : bundle.identity.variation,
-                'bundle/revision' : bundle.identity.revision,
-                'bundle/id' : bundle.identity.id_
-            },
-                          
-            'version':  bundle.identity.revision,
-            'homepage':  props.get('homepage',None),
-            'url':  props.get('url',None),
-            'notes':  props.get('notes',None),
-            'url':  props.get('url',None),
-            'tags':  props.get('tags',None),
-            'groups' : [group['id']]
-        }
+        try:
+            r = requests.get(self.url+'/rest/package/{name}'.format(name=name))
+            r.raise_for_status()
+            
+        except requests.exceptions.HTTPError:
+            # Create minimal package, since we always update next. 
+            payload = {'name': name}
+            
+            r = requests.post(self.url+'/rest/package',
+                              headers =  self.auth_headers,
+                              data=json.dumps(payload))
+            r.raise_for_status()
+   
+        new_payload = self.entity_from_bundle(name, bundle)
      
-        pe = self.api.package_entity_put(package_entity)
+        payload = self.merge_dict(r.json(), new_payload)
 
-        return pe
+        if title is None:
+            title = bundle.config.properties.title.format(
+                datetime=datetime.datetime.now().isoformat('T'),
+                date=datetime.date.today().isoformat()
+            )
 
+        description = bundle.config.properties.get('description','').format(
+                datetime=datetime.datetime.now().isoformat('T'),
+                date=datetime.date.today().isoformat()
+            )
+
+        payload['description'] = description
+        payload['title'] = title
+        payload['groups'] = [group['id']]
+     
+        r = requests.post(self.url+'/rest/package/{name}'.format(name=name),
+                          headers =  self.auth_headers,
+                          data=json.dumps(payload))
+        r.raise_for_status()
+
+        return r.json()
+
+
+    def update_or_new_bundle_extract(self, bundle, name=None, **kwargs):    
+   
+        if name is None:
+            name = self.translate_name(bundle.identity.base_name+'-extract')
+        else:
+            name = self.translate_name(name)
+        
+       
+        group = self.get_or_new_group('extracts')
+        return self.update_or_new_bundle(bundle, 'extract', group=group, name=name, **kwargs)
+
+    def delete_package(self, id_):
+        
+        url = self.url+'/rest/package/{id}'.format(id=id_)
+
+        r = requests.delete(url,headers =  self.auth_headers)
+                      
+        r.raise_for_status()
+        
+        return
+
+    def upload_file(self,file_path):
+        """Upload a file to the repository and return the URL, or an exception on 
+        errors"""
+        from datetime import datetime
+        import os
+        import urlparse
+        import re
+        
+        # see ckan/public/application.js:makeUploadKey for why the file_key
+        # is derived this way.
+        ts = datetime.isoformat(datetime.now()).replace(':','').split('.')[0]
+        file_base = os.path.basename(file_path)
+        norm_name  = file_base.replace(' ', '-')
+        file_key = os.path.join(ts, norm_name)
+        
+        # Inexplicably, this URL can't have the version number
+        url = re.sub('\/\d$','', self.url)+'/storage/auth/form/{}'.format(file_key.strip('/'))
+
+        r = requests.get(url,headers =  self.auth_headers)
+        url_path = r.json()['action']
+        
+        files = [('file', os.path.basename(file_key), open(file_path).read())]
+        fields = [('key', file_key)]
+        content_type, body = self._encode_multipart_formdata(fields, files)
+
+        headers= self.auth_headers
+        headers['Content-Type'] = content_type
+        headers['Content-Length'] = str(len(body))
+        
+        # And this one not only doesn't have the api version, it also doesn't have
+        # 'api'
+        netloc = urlparse.urlparse(self.url).netloc
+        url = 'http://'+ netloc+ url_path
+   
+        r = requests.post(url,headers = headers,data=body)
+        r.raise_for_status()
+          
+        return '%s/storage/f/%s' % (re.sub('/api\/\d$','', self.url), file_key)
+     
+
+    def md5_for_file(self, file_, block_size=2**20):
+        '''Compute the MD5 for a file without taking up too much memory'''
+        import hashlib
+        md5 = hashlib.md5()
+        with open(file_, 'r') as f:
+            while True:
+                data = f.read(block_size)
+                if not data:
+                    break
+                md5.update(data)
+        return md5.hexdigest()
+
+    def add_file_resource(self, pe, file_path, name, 
+                          resource_type = 'data',
+                          content_type=None,
+                          **kwargs):
+
+        import os
+        import mimetypes
+        
+        server_url = self.upload_file(file_path) #@UnusedVariable
+        
+        md5 = self.md5_for_file(file_path)
+        st = os.stat(file_path)
+
+        package_url = self.url+'/rest/package/{id}'.format(id=pe['id'])
+
+        # Fetch the pe again, in case the one passed in was incomplete. 
+        r = requests.get(package_url,headers =  self.auth_headers)
+        r.raise_for_status()
+
+        pe2 = r.json()
+
+        if content_type is None:
+            content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+
+        resource = dict(name=name,
+                mimetype=content_type,
+                hash=md5,
+                size=st.st_size, 
+                url=server_url)
+        
+        for k,v in kwargs.items():
+            if v is not None:
+                resource[k] = v
+
+        pe2['resources'].append(resource)
+
+        r = requests.put(package_url,
+                  headers =  self.auth_headers,
+                  data=json.dumps(pe2))
+        r.raise_for_status()
+
+        return r.json()
     
     def submit_bundle(self):
         pass
@@ -165,36 +352,42 @@ class Ckan(object):
     def submit_partition(self, bunde_ref):
         pass
     
-    def test_basic(self):
+    def _encode_multipart_formdata(self, fields, files):
+        '''Encode fields and files to be posted as multipart/form-data.
 
-        uid = 'foobottom'
+        Taken from
+        http://code.activestate.com/recipes/146306-http-client-to-post-using-multipartform-data/
+
+        :param fields: a sequence of (name, value) tuples for the regular
+            form fields to be encoded
+        :param files: a sequence of (name, filename, value) tuples for the data
+            to be uploaded as files
+
+        :returns: (content_type, body) ready for httplib.HTTP instance
+
+        '''
+        import mimetypes
+         
         
-        package_list = ckan.package_register_get()
-        print package_list
-
-        package_entity = ckan.package_entity_get(uid)
-     
-        import pprint
-        pprint.pprint(package_entity)
-
-        import glob
-
-        for f in glob.glob("/Volumes/DataLibrary/crime/months/*.csv"):
-            parts = f.split('/').pop().strip('.csv').split('-')
-            resource_tag = "{0}-{1:02d}".format(parts[0],int(parts[1]))
-            print "Start ", resource_tag
-
-            url,err = ckan.upload_file(f) #@UnusedVariable
-            print "!!!",url
-
-            r = ckan.add_package_resource(uid, f, 
-                                          resource_type = 'data',
-                                          description=resource_tag, 
-                                          tags = resource_tag,
-                                          author  = 1,
-                                          creator = 2,
-                                          dataset = 3, 
-                                          subset = 4
-                                          )
+        BOUNDARY = '----------ThIs_Is_tHe_bouNdaRY_$'
+        CRLF = '\r\n'
+        L = []
+        for (key, value) in fields:
+            L.append('--' + BOUNDARY)
+            L.append('Content-Disposition: form-data; name="%s"' % key)
+            L.append('')
+            L.append(value)
+        for (key, filename, value) in files:
             
-            pprint.pprint(r)
+            content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+            
+            L.append('--' + BOUNDARY)
+            L.append('Content-Disposition: form-data; name="%s"; filename="%s"' % (key, filename))
+            L.append('Content-Type: %s' % content_type)
+            L.append('')
+            L.append(value)
+        L.append('--' + BOUNDARY + '--')
+        L.append('')
+        body = CRLF.join(L)
+        content_type = 'multipart/form-data; boundary=%s' % BOUNDARY
+        return content_type, body
