@@ -21,20 +21,14 @@ class Test(TestBase):
     def tearDown(self):
         pass
 
-
     def test_basic(self):
-        from databundles.client.ckan  import get_client
-        ck = get_client()
-        
-        ckb = ck.update_or_new_bundle(self.bundle)
-        
-        
-        import pprint
-        pprint.pprint(ckb)
 
+        repo = self.bundle.repository
 
-           
-            
+        for extract in repo.generate_extracts():
+            print extract
+        
+
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()

@@ -21,12 +21,12 @@ def get_client(rc=None, name=None):
         
     try:
         catalog = rc.group('catalog')
-        cfg = rc.catalog.get(name, False)
+        cfg = rc.catalog.get(name)
         url = cfg.url
         key = cfg.key
-    except:
-        raise ConfigurationError("Failed to get configuration for catalog.{0}.url or"+
-                                 "catalog.{0}.key".format(name))
+    except Exception as e:
+        raise ConfigurationError(("Failed to get configuration for catalog.{0}.url or "+
+                                 "catalog.{0}.key: {1}").format(name, e))
            
     return Ckan(url, key)
            
@@ -208,26 +208,31 @@ class Ckan(object):
         payload = self.merge_dict(r.json(), new_payload)
 
         if title is None:
-            title = bundle.config.properties.title.format(
+            title = bundle.config.about.title.format(
                 datetime=datetime.datetime.now().isoformat('T'),
                 date=datetime.date.today().isoformat()
             )
 
-        description = bundle.config.properties.get('description','').format(
+        description = bundle.config.about.get('description','').format(
                 datetime=datetime.datetime.now().isoformat('T'),
                 date=datetime.date.today().isoformat()
             )
 
-        payload['description'] = description
+        payload['notes'] = description
         payload['title'] = title
         payload['groups'] = [group['id']]
+        payload['license_id'] = bundle.config.about.get('license','other')
      
         r = requests.post(self.url+'/rest/package/{name}'.format(name=name),
                           headers =  self.auth_headers,
                           data=json.dumps(payload))
-        r.raise_for_status()
-
-        return r.json()
+        try:
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            print r.content
+            raise e
+    
 
 
     def update_or_new_bundle_extract(self, bundle, name=None, **kwargs):    
@@ -251,7 +256,7 @@ class Ckan(object):
         
         return
 
-    def upload_file(self,file_path):
+    def upload_file(self,file_path, name=None):
         """Upload a file to the repository and return the URL, or an exception on 
         errors"""
         from datetime import datetime
@@ -262,8 +267,11 @@ class Ckan(object):
         # see ckan/public/application.js:makeUploadKey for why the file_key
         # is derived this way.
         ts = datetime.isoformat(datetime.now()).replace(':','').split('.')[0]
-        file_base = os.path.basename(file_path)
-        norm_name  = file_base.replace(' ', '-')
+
+        if name is None:
+            name = os.path.basename(file_path)
+        
+        norm_name  = name.replace(' ', '-')
         file_key = os.path.join(ts, norm_name)
         
         # Inexplicably, this URL can't have the version number
@@ -311,7 +319,7 @@ class Ckan(object):
         import os
         import mimetypes
         
-        server_url = self.upload_file(file_path) #@UnusedVariable
+        server_url = self.upload_file(file_path, name=name) #@UnusedVariable
         
         md5 = self.md5_for_file(file_path)
         st = os.stat(file_path)
