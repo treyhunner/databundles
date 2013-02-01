@@ -389,9 +389,11 @@ class BuildBundle(Bundle):
     def pre_submit(self):
         return True
     
+    ### Submit the package to the repository
     def submit(self):
+        self.repository.submit()
         return True
-        
+    
     def post_submit(self):
         return True
     

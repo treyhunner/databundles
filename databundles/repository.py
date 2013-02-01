@@ -76,8 +76,8 @@ class Repository(object):
         
         f  = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()) )
     
-        self.bundle.log("Extracting and submitting: {} as {}".format(p.identity.name, f))
-        self.bundle.log("Extract query: {}".format(extract_data['query']))
+        self.bundle.log("Extracting {} with  {}".format(p.identity.name, extract_data['query']))
+        self.bundle.log("  To: {}: {}".format(extract_data['name'], extract_data['title']))
             
         petlf.fromsqlite3(p.database.path, extract_data['query'] ).tocsv(f) #@UndefinedVariable
 
@@ -85,7 +85,7 @@ class Repository(object):
                                   description=extract_data['description'],
                                  content_type = "text/csv", format='csv')
         
-        self.bundle.log("Extracted: {}: {}".format(extract_data['name'], extract_data['title']))
+        self.bundle.log("  Done. {} ".format(re['id']))
         
         os.remove(f)
         
@@ -96,14 +96,24 @@ class Repository(object):
         the values of each and the partition'''
         
         qd = {
-              'p_id' : p.identity.id_,
-              'p_name' : p.identity.name,
-              'p_table' : p.identity.table,
-              'p_space' : p.identity.space,
-              'p_time' : p.identity.time,
-              'p_grain' : p.identity.grain,              
-              }
+            'p_id' : p.identity.id_,
+            'p_name' : p.identity.name,
+         }
         
+        try:
+            # Bundles don't have these      
+            qd_part = {
+                'p_table' : p.identity.table,
+                'p_space' : p.identity.space,
+                'p_time' : p.identity.time,
+                'p_grain' : p.identity.grain,              
+                }
+        except:
+            qd_part = {'p_table' : '','p_space' : '', 'p_time' :'','p_grain' : ''}
+            
+            
+        qd = dict(qd.items()+ qd_part.items())
+
         for k,v in each.items():
             qd[k] = v
         
@@ -123,14 +133,14 @@ class Repository(object):
         
         # Normalize the each group, particular for the case where there is only
         # one dimension
-        
+  
         if not isinstance(each, list):
             raise ConfigurationError("The 'each' key must have a list. Got a {} ".format(type(each)))
         
         elif len(each) == 0:
             each = [[{}]]
         if not isinstance(each[0], list):
-            each = [each[0]]
+            each = [each]
         
 
         # Now the top level arrays of each are dimensions, and we can do a 
@@ -153,12 +163,16 @@ class Repository(object):
         
     def _expand_partitions(self, partition_name='any', for_=None):
         '''Generate a list of partitions to apply the extract process to. '''
-        
+
+
+
         if partition_name == 'any':
-            partitions = self.partitions
+            partitions = [p for p in self.partitions]
         else:
             partition = self.partitions.get(partition_name)
             partitions = [partition]
+            
+        partitions = [self.bundle] + partitions
             
         out = []
          
@@ -166,7 +180,9 @@ class Repository(object):
             for_ = 'True'
          
         for partition in partitions:
+         
             try:
+                self.bundle.log("Testing: {} ".format(partition.identity.name))
                 self.eval_for_expr(for_, True)
                 if eval(for_):  
                     out.append(partition)
@@ -190,8 +206,11 @@ class Repository(object):
             partitions = self._expand_partitions(p_id, for_)
             datasets= self._expand_each(each)
 
+            
+
             for partition in partitions:
                 for data in datasets:     
+                   
                     qe = self._make_ge_dict(partition, extract, data)
         
                     yield qe
