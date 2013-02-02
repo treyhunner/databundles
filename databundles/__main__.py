@@ -9,7 +9,7 @@ Revised BSD License, included in this distribution as LICENSE.txt
 import os.path
 import yaml
 import shutil
-from databundles.run import  RunConfig
+from databundles.run import  get_runconfig
 
 def bundle_command(args, rc):
   
@@ -197,7 +197,7 @@ def main():
     else:
         rc_path = args.config
         
-    rc = RunConfig(rc_path)
+    rc = get_runconfig(rc_path)
    
     funcs = {
         'bundle': bundle_command,

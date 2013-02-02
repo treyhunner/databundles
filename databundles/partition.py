@@ -246,7 +246,6 @@ class Partitions(object):
         Arguments:
         arg    -- a orm.Partition or Partition object. 
         
-        
         '''
         
         from databundles.orm import Partition as OrmPartition
@@ -256,12 +255,11 @@ class Partitions(object):
         elif isinstance(arg, str):
             s = self.bundle.database.session        
             orm_partition = s.query(OrmPartition).filter(OrmPartition.id_==arg ).one
-            
         else:
             raise ValueError("Arg must be a Partition or")
         
         partition_id = orm_partition.identity #@UnusedVariable
-     
+
         return Partition(self.bundle, orm_partition)
 
     @property

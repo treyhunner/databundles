@@ -855,6 +855,18 @@ class FsLimitedCache(object):
         
         raise NotImplementedError() 
 
+    
+    def public_url_f(self):
+        ''' Returns a function that will convert a rel_path into a public URL'''
+
+        if self.upstream:
+            upstream_f = self.upstream.public_url_f()
+            return lambda rel_path: upstream_f(rel_path)
+        else:
+            cache_dir = self.cache_dir
+            return lambda rel_path: 'file://{}'.format(os.path.join(cache_dir, rel_path))     
+    
+
 class FsCache(object):
     '''A cache that transfers files to and from a remote filesystem
     
@@ -1033,6 +1045,15 @@ class FsCache(object):
         raise NotImplementedError() 
 
 
+    def public_url_f(self):
+        ''' Returns a function that will convert a rel_path into a public URL'''
+        if self.upstream:
+            upstream_f = self.upstream.public_url_f()
+            return lambda rel_path: upstream_f(rel_path)
+        else:
+            cache_dir = self.cache_dir
+            return lambda rel_path: 'file://{}'.format(os.path.join(cache_dir, rel_path))            
+
 class FsCompressionCache(object):
     
     '''A Cache Adapter that compresses files before sending  them to
@@ -1051,7 +1072,8 @@ class FsCompressionCache(object):
     def cache_dir(self):
         return self.upstream.cache_dir
     
-    def _rename(self, rel_path):
+    @staticmethod
+    def _rename( rel_path):
         return rel_path+".gz"
     
     def get_stream(self, rel_path):
@@ -1109,6 +1131,17 @@ class FsCompressionCache(object):
         '''get a list of all of the files in the repository'''
         raise NotImplementedError() 
 
+
+    def public_url_f(self):
+        ''' Returns a function that will convert a rel_path into a public URL'''
+        
+        if not self.upstream:
+            raise Exception("CompressionCache must have an upstream")
+        
+        upstream_f = self.upstream.public_url_f()
+        rename_f = self._rename
+        return lambda rel_path: upstream_f(rename_f(rel_path))
+    
 
 class S3Cache(object):
     '''A cache that transfers files to and from an S3 bucket
@@ -1328,6 +1361,24 @@ class S3Cache(object):
         path = path.strip('/')
         
         raise NotImplementedError() 
+
+    def public_url_f(self):
+        ''' Returns a function that will convert a rel_path into a public URL'''
+
+        if self.prefix is not None:
+            prefix = self.prefix
+        else:
+            prefix = ''
+            
+        bucket = self.bucket_name
+
+        def public_url_f_inner(rel_path):
+            key =  prefix.strip('/')+"/"+rel_path.strip('/'); 
+            return "https://s3.amazonaws.com/{}/{}".format(bucket, key)
+        
+        return public_url_f_inner
+        
+    
 
 # Stolen from : https://bitbucket.org/fabian/filechunkio/src/79ba1388ee96/LICENCE?at=default
 

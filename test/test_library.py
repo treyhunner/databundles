@@ -7,7 +7,7 @@ import unittest
 import os.path
 from  testbundle.bundle import Bundle
 from sqlalchemy import * #@UnusedWildImport
-from databundles.run import  RunConfig
+from databundles.run import  get_runconfig
 from databundles.library import QueryCommand, get_library
 import logging
 import databundles.util
@@ -20,20 +20,26 @@ logger.setLevel(logging.DEBUG)
 class Test(TestBase):
  
     def setUp(self):
+        import testbundle.bundle
+        self.bundle_dir = os.path.dirname(testbundle.bundle.__file__)
+        self.rc = get_runconfig([os.path.join(self.bundle_dir,'library-test-config.yaml'),
+                                 os.path.join(self.bundle_dir,'bundle.yaml')]
+                                 )
 
         self.copy_or_build_bundle()
 
         self.bundle = Bundle()    
-        self.bundle_dir = self.bundle.bundle_dir
 
-        self.root_dir = '/tmp/test_library'
-        self.rc = RunConfig(os.path.join(self.bundle_dir,'bundle.yaml'))
         
-        #databundles.util.get_logger('test_base').setLevel(logging.DEBUG) 
-        #databundles.util.get_logger('filesystem').setLevel(logging.DEBUG)  
-              
+        print "Deleting: {}".format(self.rc.filesystem.root_dir)
+        Test.rm_rf(self.rc.filesystem.root_dir)
+          
     @staticmethod
     def rm_rf(d):
+        
+        if not os.path.exists(d):
+            return
+        
         for path in (os.path.join(d,f) for f in os.listdir(d)):
             if os.path.isdir(path):
                 Test.rm_rf(path)
@@ -43,20 +49,35 @@ class Test(TestBase):
         
     def get_library(self):
         """Clear out the database before the test run"""
-        ldb = self.rc.library.database['dbname']
-        
-        if os.path.exists(ldb):
-            os.remove(ldb)
-      
-        return  get_library(self.rc)
+
+        return get_library(self.rc, reset = True)
         
     def tearDown(self):
         pass
 
-    def delete(self):
-        pass
-
-
+    def test_simple_install(self):
+        
+        l = self.get_library()
+     
+        r = l.put(self.bundle)
+        
+        print r
+        
+        for partition in self.bundle.partitions:
+            r = l.put(partition)
+            print r
+            
+    def test_public_url(self):
+        '''Check that the public_url_f works'''
+        cache = self.bundle.filesystem.get_cache('test')
+        print cache.public_url_f()('file')
+        
+        cache = self.bundle.filesystem.get_cache('test2')
+        print cache.public_url_f()('file')    
+        
+        cache = self.bundle.filesystem.get_cache('s3')
+        print cache.public_url_f()('file')      
+            
     def test_resolve(self):
         """Test the resolve_id() function"""
         from databundles import resolve_id
@@ -70,11 +91,8 @@ class Test(TestBase):
             self.assertEquals(partition.identity.id_, resolve_id(partition))
             self.assertEquals(partition.identity.id_, resolve_id(partition.identity))
             self.assertEquals(partition.identity.id_, resolve_id(partition.identity.id_))
-            self.assertEquals(partition.identity.id_, resolve_id(str(partition.identity.id_)))
-
-    def foo(self, **kwargs):
-        print "FOO", kwargs
-
+            self.assertEquals(partition.identity.id_, resolve_id(str(partition.identity.id_)))            
+            
     def test_library_install(self):
         '''Install the bundle and partitions, and check that they are
         correctly installed. Check that installation is idempotent'''
@@ -158,9 +176,7 @@ class Test(TestBase):
     def test_cache(self):
         from databundles.filesystem import  FsCache, FsLimitedCache
      
-        root =  self.root_dir 
-        try: Test.rm_rf(root)
-        except: pass
+        root = self.rc.filesystem.root_dir
       
         l1_repo_dir = os.path.join(root,'repo-l1')
         os.makedirs(l1_repo_dir)
@@ -262,9 +278,7 @@ class Test(TestBase):
         '''Test a two-level cache where the upstream compresses files '''
         from databundles.filesystem import  FsCache,FsCompressionCache
          
-        root =  self.root_dir 
-        try: Test.rm_rf(root)
-        except: pass
+        root = self.rc.filesystem.root_dir
       
         l1_repo_dir = os.path.join(root,'comp-repo-l1')
         os.makedirs(l1_repo_dir)
@@ -295,49 +309,16 @@ class Test(TestBase):
         
         self.assertTrue(os.path.exists(f1))  
         
-    def make_s3_cache(self, root, size=None):
-        '''Build a three state cache, with a to plevel limited cache, a second level
-        compressed cache, and a third level compressed S3  cache. '''
-        
-        from databundles.filesystem import  FsCache, FsLimitedCache, FsCompressionCache
-  
-  
-        l1 = self.bundle.filesystem.get_cache('test')
-        return (l1.cache_dir, l1)
-  
-        l1_repo_dir = os.path.join(root,'s3-repo-l1')
-        os.makedirs(l1_repo_dir)
-        l2_repo_dir = os.path.join(root,'s3-repo-l2')
-        os.makedirs(l2_repo_dir)
-    
-   
-        # Create a cache with an upstream wrapped in compression
-   
-        l4 = self.bundle.filesystem.get_cache('s3')
-        l3 = FsCache(l2_repo_dir, upstream=l4)
-        l2 = FsCompressionCache(l3)
-        
-        if size is None:
-            l1 = FsCache(l1_repo_dir, upstream=l2)
-        else:
-            l1 = FsLimitedCache(l1_repo_dir, upstream=l2, maxsize=size)
-        
-    
-        return (l1_repo_dir, l1)
+
         
     def test_s3(self):
 
-      
         #databundles.util.get_logger('databundles.filesystem').setLevel(logging.DEBUG) 
-  
         # Set up the test directory and make some test files. 
 
-        root =  self.root_dir 
-        try: Test.rm_rf(root)
-        except: pass
+        root = self.rc.filesystem.root_dir
         os.makedirs(root)
                 
-
         testfile = os.path.join(root,'testfile')
         
         with open(testfile,'w+') as f:
@@ -347,32 +328,34 @@ class Test(TestBase):
          
         #fs = self.bundle.filesystem
         #local = fs.get_cache('downloads')
-        repo_dir,local = self.make_s3_cache(root, 5)
         
-        logger.info("repo_dir: {}".format(repo_dir))
+        cache = self.bundle.filesystem.get_cache('s3')
+        repo_dir  = cache.cache_dir
+      
+        print "Repo Dir: {}".format(repo_dir)
       
         for i in range(0,10):
             logger.info("Putting "+str(i))
-            local.put(testfile,'many'+str(i))
+            cache.put(testfile,'many'+str(i))
         
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many1')))   
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many2')))
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many3')))
                 
-        p = local.get('many1')
+        p = cache.get('many1')
         self.assertTrue(p is not None)
                 
         self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many1')))   
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many2')))
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many3')))
         
-        p = local.get('many2')
+        p = cache.get('many2')
         self.assertTrue(p is not None)
                 
         self.assertFalse(os.path.exists(os.path.join(repo_dir, 'many3')))      
         self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many7'))) 
  
-        p = local.get('many3')
+        p = cache.get('many3')
         self.assertTrue(p is not None)
                 
         self.assertTrue(os.path.exists(os.path.join(repo_dir, 'many3')))      

@@ -321,8 +321,9 @@ class AttrDict(OrderedDict):
                 if dst.get(slug) is None:
                     dst[slug] = AttrDict()
                 dst = dst[slug]
-            if v is not None or not isinstance(
-                dst.get(k[-1]), Mapping ): dst[k[-1]] = v
+            if v is not None or not isinstance(dst.get(k[-1]), Mapping ): 
+                dst[k[-1]] = v
+
 
     def update_dict(self, data):
         self.update_flat(self.flatten_dict(data))

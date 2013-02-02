@@ -5,7 +5,7 @@ Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
 Revised BSD License, included in this distribution as LICENSE.txt
 """
 
-from databundles.run import  RunConfig
+from databundles.run import  get_runconfig
 
 import os.path
 
@@ -42,7 +42,7 @@ def get_database(config=None,name='library'):
     import tempfile 
     
     if config is None:
-        config = RunConfig()    
+        config = get_runconfig()    
 
     if not config.library:
         raise ConfigurationError("Didn't get library configuration value")
@@ -60,7 +60,7 @@ def get_database(config=None,name='library'):
     
     return database
 
-def get_library(config=None, name='default'):
+def get_library(config=None, name='default', reset=False):
     """Return a new `Library`, constructed from a configuration
     
     :param config: a `RunConfig` object
@@ -73,13 +73,16 @@ def get_library(config=None, name='default'):
 
     global libraries
     
+    if reset:
+        libraries = {}
+    
     if name is None:
         name = 'default'
     
     if name not in libraries:
         
         if config is None:
-            config = RunConfig()
+            config = get_runconfig()
         
         sc = config.library.get(name,False)
 
@@ -357,8 +360,6 @@ class LibraryDb(object):
     def install_bundle(self, bundle):
         '''Copy the schema and partitions lists into the library database
         
-        The 'bundle' may be either a bundle or a partition. If it is a bundle, 
-        any previous bundle, all of its partitions, are deleted from the database.
         '''
         from databundles.orm import Dataset
         from databundles.bundle import Bundle
@@ -371,7 +372,7 @@ class LibraryDb(object):
         s.commit()
 
         if not isinstance(bundle, Bundle):
-            raise ValueError("Can only install a Partition or Bundle object")
+            raise ValueError("Can only install a  Bundle object")
 
             # The Tables only get installed when the dataset is installed, 
             # not for the partition
@@ -405,7 +406,6 @@ class LibraryDb(object):
 
         s.commit()
         
-        return dataset, partition
            
     def remove_bundle(self, bundle):
         '''remove a bundle from the database'''
@@ -859,8 +859,6 @@ class Library(object):
             except:
                 pass
 
-         
-            
         if not abs_path or not os.path.exists(abs_path):
             return False
        
@@ -894,13 +892,8 @@ class Library(object):
                      
         # Only install bundles in the database. 
         if  isinstance(bundle, Bundle):
-            dataset, partition = self.database.install_bundle(bundle)
+            self.database.install_bundle(bundle)
         
-            return dataset, partition
-        else:
-            # TODO, get the partition and dataset values from 
-            # somewhere. 
-            return None, None
            
     def put(self, bundle):
         '''Install a bundle or partition file into the library.
@@ -929,9 +922,9 @@ class Library(object):
         if self.api and self.sync:
             self.api.put(src)
             
-        dataset, partition = self._put(dst, bundle)
+        self._put(dst, bundle)
 
-        return dataset, partition, dst
+        return dst
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for

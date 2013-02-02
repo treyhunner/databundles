@@ -43,7 +43,7 @@ class ServerError(Exception):
 class Response(object):
     object = None
     is_error = False
-    code = None
+    status = None
     message = None
     headers = None
     content_type = None
@@ -54,7 +54,7 @@ class Response(object):
         return {
                 'object' : self.object,
                 'is_error' : self.is_error,
-                'code' : self.code,
+                'status' : self.status,
                 'message' : self.message,
                 'headers' : self.headers,
                 'content_type' : self.content_type,
@@ -113,6 +113,7 @@ class Response(object):
         if isinstance(args, list) and len(args) > 0:
             args[0] = pre_message + str(args[0])
      
+    
         # Add the trace
         args[0] = args[0] + "\n---- Server Trace --- \n" + self.object['exception']['trace']
     

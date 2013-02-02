@@ -5,7 +5,7 @@ Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
 Revised BSD License, included in this distribution as LICENSE.txt
 """
 
-from databundles.run import RunConfig
+from databundles.run import get_runconfig
 import ckanclient
 import databundles.client.exceptions as Exceptions
 import requests
@@ -14,7 +14,7 @@ import json
 def get_client(rc=None, name=None):
     from databundles.dbexceptions import ConfigurationError
     if rc is None:
-        rc = RunConfig()
+        rc = get_runconfig()
         
     if name is None:
         name = 'default'

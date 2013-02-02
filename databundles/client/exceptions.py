@@ -45,7 +45,6 @@ class InternalError(HttpException):
     def __init__(self, message): 
         super(HttpException, self).__init__(self.http_message+":"+str(message)) 
         
-               
 exceptions = {
     400: BadRequest,
     401: NotAuthorized,
@@ -59,5 +58,8 @@ exceptions = {
     
 def get_exception(code):
     """Return an exception class based on its code"""
-    return exceptions[code]
+    try:
+        return exceptions[int(code)]
+    except:
+        return None
     

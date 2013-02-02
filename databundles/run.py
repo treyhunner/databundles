@@ -7,6 +7,18 @@ Revised BSD License, included in this distribution as LICENSE.txt
 import os.path
 from databundles.util import AttrDict
 
+runconfig = None
+
+def get_runconfig(path=None):
+    global runconfig
+    if not runconfig:
+        runconfig = RunConfig(path)
+        
+    return runconfig
+
+def set_runconfig(rc):
+    global runconfig
+    runconfig = rc
 
 class RunConfig(object):
     '''
@@ -50,6 +62,7 @@ class RunConfig(object):
                      os.path.expanduser('~/.databundles.yaml'), 
                      os.path.join(os.getcwd(),'databundles.yaml'),
                      path ]
+
 
         loaded = False
         for f in self.files:

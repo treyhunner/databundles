@@ -12,7 +12,7 @@ from databundles.schema import Schema
 from databundles.partition import Partitions
 import os.path
 from databundles.dbexceptions import  ConfigurationError, ProcessError
-from databundles.run import RunConfig
+from databundles.run import get_runconfig
 import databundles.util
 
 
@@ -425,7 +425,7 @@ class BundleFileConfig(BundleConfig):
         self.root_dir = root_dir
         self.local_file = os.path.join(self.root_dir,'bundle.yaml')
 
-        self._run_config = RunConfig(self.local_file)
+        self._run_config = get_runconfig(self.local_file)
      
    
         # If there is no id field, create it immediately and

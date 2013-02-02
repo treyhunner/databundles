@@ -8,17 +8,17 @@ library:
 
 database:
     client:
-        dbname: '{root}/test/client/library.db'
+        dbname: '{root}/library.db'
         driver: sqlite  
 
 filesystem:  
-    root_dir: /Volumes/DataLibrary/
+    root_dir: /Volumes/DataLibrary/test/client
     client:
-        dir: '{root}/test/client/cache-l1'
+        dir: '{root}/cache-l1'
 
 downloads:
-    dir: '{root}/test/client/downloads'
+    dir: '{root}/downloads'
 
 extracts: 
-    dir: '{root}/test/client/extracts'
+    dir: '{root}/extracts'
         
