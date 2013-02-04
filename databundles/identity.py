@@ -7,7 +7,24 @@ Revised BSD License, included in this distribution as LICENSE.txt
 
 import os.path
 
+def new_identity(d):
+    """Create a new identity from a dict form """
+    on = ObjectNumber.parse(d.get('id'))
+    
+    if not on: 
+        raise ValueError("parameter was not parsable as an object number: {} ".format(d))
+    
+    if isinstance(on, DatasetNumber):
+        return Identity(**d)
+    elif isinstance(on, PartitionNumber):
+        return PartitionIdentity(**d)
+    else:
+        raise ValueError("parameter was not  dataset nor partition id: {} ".format(d))
+
 class Identity(object):
+
+    is_bundle = True
+    is_partition = False
 
     def __init__(self, *args, **kwargs):
         self.from_dict(kwargs)
@@ -133,7 +150,103 @@ class Identity(object):
         import re
         return [re.sub('[^\w\.]','_',s).lower() for s in name_parts]
        
+       
 
+class PartitionIdentity(Identity):
+    '''Subclass of Identity for partitions'''
+    
+    is_bundle = False
+    is_partition = True
+    
+    time = None
+    space = None
+    table = None
+    grain = None
+    
+    def __init__(self, *args, **kwargs):
+
+        d = {}
+
+        for arg in args:
+            if isinstance(arg, Identity):
+                d = arg.to_dict()
+       
+    
+        d = dict(d.items() + kwargs.items())
+    
+        self.from_dict(d)
+        
+        self.name # Trigger some errors immediately. 
+            
+    def from_dict(self,d):
+        
+        super(PartitionIdentity, self).from_dict(d)
+        
+        self.time = d.get('time',None)
+        self.space = d.get('space',None)
+        self.table = d.get('table',None)
+        self.grain = d.get('grain',None)
+        
+        from identity import ObjectNumber
+        if self.id_ is not None and self.id_[0] != ObjectNumber.TYPE.PARTITION:
+            self.id_ = None
+
+       
+    def to_dict(self):
+        '''Returns the identity as a dict. values that are empty are removed'''
+        
+        d =  super(PartitionIdentity, self).to_dict()
+        
+        d['time'] = self.time
+        d['space'] = self.space
+        d['table'] = self.table
+        d['grain'] = self.grain
+
+        return { k:v for k,v in d.items() if v}
+    
+    
+    @classmethod
+    def path_str(cls,o=None):
+        '''Return the path name for this bundle'''
+        import re
+        
+        id_path = Identity.path_str(o)
+
+        partition_parts = [re.sub('[^\w\.]','_',str(s))
+                         for s in filter(None, [o.time, o.space, o.table, o.grain])]
+    
+       
+        return  os.path.join(id_path ,  *partition_parts )
+        
+    
+    @classmethod
+    def name_str(cls,o=None):
+        
+        return '-'.join(cls.name_parts(o))
+    
+    @classmethod
+    def name_parts(cls,o=None):
+        import re
+       
+        parts = Identity.name_parts(o)
+    
+        rev = parts.pop()
+        
+        partition_component = '.'.join([re.sub('[^\w\.]','_',str(s))
+                         for s in filter(None, [o.time, o.space, o.table, o.grain])])
+        
+        parts.append(partition_component)
+        parts.append(rev)
+        
+        return parts
+    
+    
+    @property
+    def as_dataset(self):
+        """Convert this identity to the identity of the correcsponding dataset. """
+        return  Identity(**self.to_dict())
+    
+    
 class ObjectNumber(object):
     '''
     Static class for holding constants and static methods related 

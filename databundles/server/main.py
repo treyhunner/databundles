@@ -12,11 +12,14 @@ import databundles.run
 import databundles.util
 from databundles.bundle import DbBundle
 import logging
+import os
 
 import databundles.client.exceptions as exc
 
 # This might get changed, as in test_run
 run_config = databundles.run.RunConfig()
+
+library = None
 
 logger = databundles.util.get_logger(__name__)
 logger.setLevel(logging.INFO)
@@ -36,10 +39,12 @@ def get_library_config(name=None):
 def get_library(name='default'):
     '''Return the library. In a function to defer execution, so the
     run_config variable can be altered before it is called. '''
+    global library
 
-    l = databundles.library.get_library(run_config, name)
+    if library is None:
+        library = databundles.library.get_library(run_config, name)
     
-    return l
+    return library
     
 
 def make_exception_response(e):
@@ -118,10 +123,25 @@ def get_datasets():
     indexed by id'''
     return { i.id_ : i.to_dict() for i in get_library().datasets}
    
-
+@get('/datasets/find/<term>')
+def get_datasets_find(term):
+    '''Find a partition or data bundle with a, id or name term '''
+    
+    rel_path, dataset, partition, is_local  = get_library().get_ref(term)
+     
+    if rel_path is False:
+        return False
+     
+    return {
+             'dataset' : dataset.identity.to_dict(),
+             'partition' : partition.identity.to_dict() if partition else None,
+             'is_local' : is_local
+             }
+     
+    
 @post('/datasets/find')
 def post_datasets_find():
-    '''This is the doc'''
+    '''Post a QueryCommand to search the library. '''
     from databundles.library import QueryCommand
    
     q = request.json
@@ -133,9 +153,8 @@ def post_datasets_find():
     out = []
     for r in results:
         if isinstance(r, tuple):
-            e = { 'dataset': {'id_': r.Dataset.id_, 'name': r.Dataset.name} ,
-                  'partition' : {'id_': r.Partition.id_, 'name': r.Partition.name}
-                 
+            e = { 'dataset':  r.Dataset.identity.to_dict(),
+                  'partition': r.Partition.identity.to_dict() if hasattr(r,'Partition') else None
                  }
         else:
             e = { 'dataset': {'id_': r.Dataset.id_, 'name': r.Dataset.name},
@@ -146,40 +165,51 @@ def post_datasets_find():
         
         return out
   
-def get_dataset_record(id_):
-    ds =  get_library().findByIdentity(id_)
+
+
+def _get_dataset_partition_record(did, pid):
+    from databundles.identity import ObjectNumber, DatasetNumber, PartitionNumber
     
-    if len(ds) == 0:
-        return None
-        
-    if len(ds) > 1:
-        raise Exception("Got more than one result")
-
-    return ds.pop()
-
-@put('/datasets/<did>')
-@CaptureException
-def put_dataset(did): 
-    '''Store a bundle, calling put() on the bundle file in the Library.
-    '''
-    import uuid # For a random filename. 
-    import os, tempfile
-    import zlib
+    don = ObjectNumber.parse(did)
+    if not don or not isinstance(don, DatasetNumber):
+        raise exc.BadRequest('Dataset number {} is not valid'.format(did))
   
-    from databundles.identity import ObjectNumber, DatasetNumber
+    pon = ObjectNumber.parse(pid)
+    if not pon or not isinstance(pon, PartitionNumber):
+        raise exc.BadRequest('Partition number {} is not valid'.format(pid))
+    
+    if str(pon.dataset) != str(don):
+        raise exc.BadRequest('Partition number {} does not belong to datset {}'.format(pid, did))
+    
+    gr =  get_library().get(did)
+    
+    # Need to read the file early, otherwise exceptions here
+    # will result in the cilent's ocket disconnecting. 
 
-    compressed = False #@UnusedVariable
-    try:
-        compressed  = bool(int(request.query.compressed)) #@UnusedVariable
-    except: 
-        pass
+    if not gr:
+        raise exc.NotFound('No dataset for id: {}'.format(did))
 
-    cf = os.path.join(tempfile.gettempdir(),'rest-downloads',str(uuid.uuid4()))
-    if not os.path.exists(os.path.dirname(cf)):
-        os.makedirs(os.path.dirname(cf))
-        
+    bundle =  gr.bundle
+
+    partition = bundle.partitions.get(pid)
+
+    return bundle,partition
+
+
+def _read_body(request):
     # Really important to only call request.body once! The property method isn't
     # idempotent!
+    import zlib
+    import uuid # For a random filename. 
+    import tempfile
+            
+    tmp_dir = tempfile.gettempdir()
+    #tmp_dir = '/tmp'
+            
+    file_ = os.path.join(tmp_dir,'rest-downloads',str(uuid.uuid4()))
+    if not os.path.exists(os.path.dirname(file_)):
+        os.makedirs(os.path.dirname(file_))  
+        
     body = request.body # Property acessor
     
     # This method can recieve data as compressed or not, and determines which
@@ -192,7 +222,7 @@ def put_dataset(did):
  
     # Read the file directly from the network, writing it to the temp file,
     # and uncompressing it if it is compressesed. 
-    with open(cf,'w') as f:
+    with open(file_,'w') as f:
 
         chunksize = 8192
         chunk =  body.read(chunksize) #@UndefinedVariable
@@ -201,41 +231,78 @@ def put_dataset(did):
                 f.write(decomp.decompress(chunk))
             else:
                 f.write(chunk)
-            chunk =  body.read(chunksize) #@UndefinedVariable
+            chunk =  body.read(chunksize) #@UndefinedVariable   
+
+    return file_
+
+@put('/datasets/<did>')
+#@CaptureException
+def put_dataset(did): 
+    '''Store a bundle, calling put() on the bundle file in the Library.
     
-    # Now we have the bundle in cf. Stick it in the library. 
+        :param did: A dataset id string. must be parsable as a `DatasetNumber`
+        value
+        :rtype: string
+        
+        :param pid: A partition id string. must be parsable as a `partitionNumber`
+        value
+        :rtype: string
+        
+        :param payload: The bundle database file, which may be compressed. 
+        :rtype: binary
     
-    # We're doing these exceptions here b/c if we don't read the body, the
-    # client will get an error with the socket closes. 
+    '''
+    from databundles.identity import ObjectNumber, DatasetNumber
+    import stat
+
+
     try:
-        on = ObjectNumber.parse(did)
-    except ValueError:
-        raise exc.BadRequest("Unparse dataset id: {}".format(did))
-    
-    if not isinstance(on, DatasetNumber):
-        raise exc.BadRequest("Bad dataset id, not for a dataset: {}".format(did))
-   
-    # Is this a partition or a bundle?
-    tb = DbBundle(cf)
+        cf = _read_body(request)
+        
+        size = os.stat(cf).st_size
+        
+        if size == 0:
+            raise exc.BadRequest("Got a zero size dataset file")
+        
+        if not os.path.exists(cf):
+            raise exc.BadRequest("Non existent file")
  
-    if(tb.db_config.info.type == 'partition'):
-        raise exc.BadRequest("Bad data type: Got a partition")
-   
-    if(tb.identity.id_ != did ):
-        raise exc.BadRequest("""Bad request. Dataset id of URL doesn't
-        match payload. {} != {}""".format(did,tb.identity.id_))
-
-    library_path = get_library().put(tb)
+        # Now we have the bundle in cf. Stick it in the library. 
+        
+        # We're doing these exceptions here b/c if we don't read the body, the
+        # client will get an error with the socket closes. 
+        try:
+            on = ObjectNumber.parse(did)
+        except ValueError:
+            raise exc.BadRequest("Unparse dataset id: {}".format(did))
+        
+        if not isinstance(on, DatasetNumber):
+            raise exc.BadRequest("Bad dataset id, not for a dataset: {}".format(did))
+       
+        # Is this a partition or a bundle?
+        tb = DbBundle(cf)
+     
+        if(tb.db_config.info.type == 'partition'):
+            raise exc.BadRequest("Bad data type: Got a partition")
+       
+        if(tb.identity.id_ != did ):
+            raise exc.BadRequest("""Bad request. Dataset id of URL doesn't
+            match payload. {} != {}""".format(did,tb.identity.id_))
     
-    identity = tb.identity
-    
-    # if that worked, OK to remove the temporary file. 
-    os.remove(cf)
-
-    return {'id':identity.id_, 'name':identity.name, 'ur': 'tbd'}, 
+        library_path, rel_path, url = get_library().put(tb) #@UnusedVariable
+        
+        identity = tb.identity
+        
+        # if that worked, OK to remove the temporary file. 
+    finally :
+        os.remove(cf)
+      
+    r = identity.to_dict()
+    r['url'] = url
+    return r
   
 
-@get('/dataset/<did>')    
+@get('/datasets/<did>')    
 def get_dataset_identity(did):
     '''Get a bundle database file, given an id or name
     
@@ -253,7 +320,7 @@ def get_dataset_identity(did):
     return static_file(bp.bundle.database.path, root='/', mimetype="application/octet-stream")    
 
 
-@get('/dataset/:did/record')
+@get('/datasets/:did/record')
 def get_dataset_bundle(did):
     '''Return a single dataset identity record given an id_ or name.
     Returns only the dataset record, excluding chld objects like partitions, 
@@ -261,34 +328,42 @@ def get_dataset_bundle(did):
     
     '''
 
-    return get_dataset_record(did).identity.to_dict()
+    gr =  get_library().get(did)
+    
+    if not gr:
+        raise exc.NotFound("Failed to find dataset for {}".format(did))
+    
+    
+    return gr.bundle.to_dict()
+    
 
-@get('/dataset/:did/info')
+@get('/datasets/:did/info')
 def get_dataset_info(did):
     '''Return the complete record for a dataset, including
     the schema and all partitions. '''
 
-@get('/dataset/<did>/partitions')
+@get('/datasets/<did>/partitions')
 def get_dataset_partitions_info(did):
     ''' GET    /dataset/:did/partitions''' 
-    ds =  get_library().findByIdentity(did)
-    if len(ds) == 0:
-        return None
-        
-    if len(ds) > 1:
-        raise Exception("Got more than one result")
+    gr =  get_library().get(did)
     
+    if not gr:
+        raise exc.NotFound("Failed to find dataset for {}".format(did))
+   
     out = {}
 
-    for partition in get_dataset_record(did).partitions:
+    for partition in  gr.bundle.partitions:
         out[partition.id_] = partition.to_dict()
         
     return out;
 
-@put('/dataset/<did>/partition/<pid>')
+@get('/datasets/<did>/partitions/<pid>')
 @CaptureException
-def put_dataset_partitions(did, pid):
+def get_dataset_partitions(did, pid):
     '''Return a partition for a dataset'''
+    
+    dataset, partition = _get_dataset_partition_record(did, pid)
+    
     ds =  get_library().findByIdentity(did)
     
     if len(ds) == 0:
@@ -297,22 +372,48 @@ def put_dataset_partitions(did, pid):
     if len(ds) > 1:
         raise exc.Conflict("Got more than one result")
 
-    partition = get_dataset_record(did).partitions.get(pid)
+    bundle, partition = _get_dataset_partition_record(did).partitions.get(pid)
     
     if not partition:
         raise exc.NotFound('No partition in dataset {} for id: {}'.format(did, pid)) 
 
-    return partition.to_dict();
+    return partition.identity.to_dict();
+
+@put('/datasets/<did>/partitions/<pid>')
+@CaptureException
+def put_datasets_partitions(did, pid):
+    '''Return a partition for a dataset
+    
+    :param did: a `RunConfig` object
+    :rtype: a `LibraryDb` object
+    
+    '''
+    
+    try:
+        payload_file = _read_body(request)
+      
+        dataset, partition = _get_dataset_partition_record(did, pid) #@UnusedVariable
+      
+        library_path, rel_path, url = get_library().put_file(partition.identity, payload_file) #@UnusedVariable
+      
+    finally:
+        if os.path.exists(payload_file):
+            os.remove(payload_file)
+
+    r = partition.identity.to_dict()
+    r['url'] = url
+    
+    return r 
 
 #### Test Code
 
 @get('/test/echo/<arg>')
-def get_test(arg):
+def get_test_echo(arg):
     '''just echo the argument'''
     return  (arg, dict(request.query.items()))
 
 @put('/test/echo')
-def put_test():
+def put_test_echo():
     '''just echo the argument'''
     return  (request.json, dict(request.query.items()))
 
@@ -331,17 +432,28 @@ def put_test_exception():
     raise Exception("throws exception")
 
 
-@get('/test/close')
+@get('/test/isdebug')
+def get_test_isdebug():
+    '''eturn true if the server is open and is in debug mode'''
+    global stoppable_wsgi_server_run
+    if stoppable_wsgi_server_run is True:
+        return True
+    else: 
+        return False
+   
+
+@post('/test/close')
+@CaptureException
 def get_test_close():
     '''Close the server'''
     global stoppable_wsgi_server_run
     if stoppable_wsgi_server_run is not None:
         print "SERVER CLOSING"
         stoppable_wsgi_server_run = False
-        return 'should be closed'
+        return True
     
     else:
-        return "not in debug mode. won't close"
+        raise exc.NotAuthorized("Not in debug mode, won't close")
 
 
 class StoppableWSGIRefServer(ServerAdapter):
@@ -363,7 +475,7 @@ class StoppableWSGIRefServer(ServerAdapter):
 
 server_names['stoppable'] = StoppableWSGIRefServer
 
-def test_run(config=None):
+def test_run(config=None, library_name=None):
     '''Run method to be called from unit tests'''
     from bottle import run, debug
   
@@ -375,8 +487,8 @@ def test_run(config=None):
 
     debug()
 
-    l = get_library()  # fixate library
-    config = get_library_config()
+    l = get_library(library_name)  # fixate library
+    config = get_library_config(library_name)
     port = config.get('port', 7979)
     host = config.get('host', 'localhost')
     
@@ -403,6 +515,8 @@ def local_run(config=None, name='default', reloader=True):
     port = config.get('port', 8080)
     host = config.get('host', '0.0.0.0')
     
+    logger.info("starting server  for library '{}' on http://{}:{}".format(name, host, port))
+
     return run(host=host, port=port, reloader=reloader)
     
 def local_debug_run():

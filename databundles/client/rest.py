@@ -40,6 +40,20 @@ class Rest(object):
         # or re-create it every call. 
         return API(self.url)
         
+    def get_ref(self, id_or_name):
+        '''Return a tuple of (rel_path, dataset_identity, partition_identity)
+        for an id or name'''
+
+        response  = self.api.datasets.find(id_or_name)
+  
+        if response.status == 404:
+            raise NotFound("Didn't find a file for {}".format(id_or_name))
+        elif response.status != 200:
+            raise RestError("Error from server: {} {}".format(response.status, response.reason))
+        
+        return response.object
+  
+          
     def get(self, id_or_name, file_path=None):
         '''Get a bundle by name or id and either return a file object, or
         store it in the given file object
@@ -47,13 +61,14 @@ class Rest(object):
         Args:
             id_or_name 
             file_path A string or file object where the bundle data should be stored
-                If not provided, the method returns a remose object, from which the
-                caller mys read the body
+                If not provided, the method returns a response object, from which the
+                caller my read the body. If file_path is True, the method will generate
+                a temporary filename. 
         
         return
         
         '''
-        response  = self.api.dataset(id_or_name).bundle.get()
+        response  = self.api.datasets(id_or_name).get()
   
         if response.status == 404:
             raise NotFound("Didn't find a file for {}".format(id_or_name))
@@ -61,6 +76,14 @@ class Rest(object):
             raise RestError("Error from server: {} {}".format(response.status, response.reason))
   
         if file_path:
+            
+            if file_path is True:
+                    import uuid,tempfile,os
+            
+                    file_path = os.path.join(tempfile.gettempdir(),'rest-downloads',str(uuid.uuid4()))
+                    if not os.path.exists(os.path.dirname(file_path)):
+                        os.makedirs(os.path.dirname(file_path))  
+               
             with open(file_path,'w') as file_:
                 chunksize = 8192
                 chunk =  response.read(chunksize) #@UndefinedVariable
@@ -80,9 +103,18 @@ class Rest(object):
         from databundles.util import bundle_file_type
         import gzip
         import os, tempfile, uuid
+        from databundles.identity import ObjectNumber, DatasetNumber, PartitionNumber
+        
+        on = ObjectNumber.parse(id_)
+ 
+        if not on:
+            raise ValueError("Failed to parse id: '{}'".format(id_))
+ 
+        if not  isinstance(on, (DatasetNumber, PartitionNumber)):
+            raise ValueError("Object number '{}' is neither for a dataset nor partition".format(id_))
  
         type_ = bundle_file_type(source)
-        
+
         if  type_ == 'sqlite':
             # If it is a plain sqlite file, compress it before sending it. 
             try:
@@ -92,7 +124,10 @@ class Rest(object):
                 f.close()
              
                 with open(cf) as source:
-                    response =  self.api.datasets(id_).put(source)
+                    if isinstance(on,DatasetNumber ):
+                        response =  self.api.datasets(id_).put(source)
+                    else:
+                        response =  self.api.datasets(str(on.dataset)).partitions(str(on)).put(source)
 
             finally:
                 if os.path.exists(cf):
@@ -100,9 +135,15 @@ class Rest(object):
        
         elif type_ == 'gzip':
             # the file is already gziped, so nothing to do. 
-            response =  self.api.datasets(id_).put(source)
+
+            if isinstance(on,DatasetNumber ):
+                response =  self.api.datasets(id_).put(source)
+            else:
+                response =  self.api.datasets(str(on.dataset)).partitions(str(on)).put(source)
+            
         else:
-            raise Exception("Bad file")
+            raise Exception("Bad file got type: {} ".format(type_))
+
 
         raise_for_status(response)
         
@@ -125,23 +166,49 @@ class Rest(object):
             
         raise_for_status(r)
         
+        if isinstance(r.object, list):
+            r.object = r.object[0]
+
         return r
             
    
     def find(self, query):
         '''Find datasets, given a QueryCommand object'''
+        from databundles.library import QueryCommand
+        
+
+        if isinstance(query, basestring):
+            response =  self.api.datasets.find(query).get()
+            raise_for_status(response)
+            r = [response.object]
+            
+        elif isinstance(query, dict):
+            # Dict form of  QueryCOmmand
+            response =  self.api.datasets.find.post(query)
+            raise_for_status(response)
+            r = response.object
+            
+        elif isinstance(query, QueryCommand):
+            response =  self.api.datasets.find.post(query.to_dict())
+            raise_for_status(response)
+            r = response.object
+            
+        else:
+            raise ValueError("Unknown input type: {} ".format(type(query)))
+        
+        
+        raise_for_status(response)
+       
+    
+        # Convert the result back to the form we get from the Library query 
         
         from collections import namedtuple
-        Ref = namedtuple('Ref','Dataset Partition')
-        Entry = namedtuple('Entry','id_ name')
+        Ref1= namedtuple('Ref1','Dataset Partition')
+        Ref2= namedtuple('Ref2','Dataset')
+        Entry = namedtuple('Entry','id name source dataset subset variation creator revision')
         
-        response =  self.api.datasets.find.post(query.to_dict())
-        raise_for_status(response)
-        
-        # Convert the result back to the form we get from the Library query 
-        return [ Ref(Entry(i['dataset']['id_'], i['dataset']['name']) ,
-                     Entry(i['partition']['id_'], i['partition']['name'])  if i['partition'] else None) 
-                      for i in response.object ]
+        return [ (Ref1(Entry(**i['dataset']) ,Entry(**i['partition'])) if i['partition'] 
+                else  Ref2(Entry(**i['dataset']))) for i in r  if i is not False]
     
     
     def datasets(self):

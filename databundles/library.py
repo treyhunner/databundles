@@ -11,7 +11,9 @@ import os.path
 
 from databundles.dbexceptions import ConfigurationError
 from databundles.filesystem import  Filesystem
-
+from  databundles.identity import new_identity
+from databundles.bundle import DbBundle
+        
 import databundles
 
 from collections import namedtuple
@@ -79,6 +81,7 @@ def get_library(config=None, name='default', reset=False):
     if name is None:
         name = 'default'
     
+
     if name not in libraries:
         
         if config is None:
@@ -310,51 +313,19 @@ class LibraryDb(object):
         else:
             raise RuntimeError("Unknown database driver: {} ".format(self.driver))
         
-    def _install_partition(self, s,bdbs, bundle):
-        # This looks like a bundle, but is actually a partition, so
-        # we can't get the actual partition.
-        from databundles import resolve_id
-        from databundles.orm import Partition as OrmPartition
-        from databundles.partition import Partition
-            
-        if isinstance(bundle, Partition):
-            q = (bdbs
-              .query(OrmPartition)
-              .filter(OrmPartition.id_ == str(resolve_id(bundle))))
-            
-            partition =  q.one()
-            
-        else: # It looks like a bundle, but is actually a partition
-        
-            # This query is getting the partition name from the partition database. There
-            # should be only one of them. 
-            partitions =  bdbs.query(OrmPartition).all()
-        
-            if len(partitions) > 1:
-                raise IntegrityError('Got more than one partition')
-        
-            partition = partitions.pop()
-        
-        # Merge will combine records using the id, but the name can be
-        # different. If we don't delete any existing with the same name, 
-        # there will be an error. 
-        
-        s.query(OrmPartition).filter(
-            OrmPartition.id_ != str(partition.identity.id_) and 
-            OrmPartition.name == str(partition.identity.name)  
-            ).delete()
-        
-        
-        s.merge(partition)
-        
-        try:
-            s.commit()
-        except IntegrityError as e:
-            self.logger.error("Failed to merge partition for name={}, id={}: {} "
-                              .format(str(bundle.identity.name), str(bundle.identity.id_), str(e)))
-            s.rollback()
-            raise e
 
+    def install_bundle_file(self, identity, bundle_file):
+        """Install a bundle in the database, starting from a file that may
+        be a partition or a bundle"""
+
+        
+        if isinstance(identity , dict):
+            identity = new_identity(identity)
+            
+        if identity.is_bundle:
+            bundle = DbBundle(bundle_file)
+            
+            self.install_bundle(bundle)
         
         
     def install_bundle(self, bundle):
@@ -406,10 +377,8 @@ class LibraryDb(object):
 
         s.commit()
         
-           
     def remove_bundle(self, bundle):
         '''remove a bundle from the database'''
-        
         
         from databundles.orm import Dataset
         
@@ -500,8 +469,18 @@ class LibraryDb(object):
         Args:
             query_command. QueryCommand or Identity
             
+        returns:
+            An SqlAlchemy query that will either return rows with:
+            
+                ( dataset, dataset_id)
+            or
+                ( dataset, partition, dataset_id)
+                
+            The partition for is returned when the QueryCommand includes
+            a 'partition' component
+            
         '''
-        
+      
         from databundles.orm import Dataset
         from databundles.orm import Partition
         from databundles.identity import Identity
@@ -515,8 +494,6 @@ class LibraryDb(object):
                 id_ = d.identity
                 d.path = os.path.join(self.cache,id_.path+'.db')
                 out.append(d)
-            
-            return out
         
         if len(query_command.partition) == 0:
             query = s.query(Dataset, Dataset.id_) # Dataset.id_ is included to ensure result is always a tuple
@@ -689,7 +666,11 @@ class QueryCommand(object):
     
     '''
 
-    def __init__(self, dict_ = {}):
+    def __init__(self, dict_ = None):
+        
+        if dict_ is None:
+            dict_ = {}
+        
         self._dict = dict_
     
     def to_dict(self):
@@ -709,34 +690,8 @@ class QueryCommand(object):
             
         inner = self._dict[group]
         query = self
-        
-        class attrdict(object):
-            def __setattr__(self, key, value):
-                #key = key.strip('_')
-                inner[key] = value
 
-            def __getattr__(self, key):
-                #key = key.strip('_')
-                if key not in inner:
-                    return None
-                
-                return inner[key]
-            
-            def __len__(self):
-                return len(inner)
-            
-            def __iter__(self):
-                return iter(inner)
-            
-            def items(self):
-                return inner.items()
-            
-            def __call__(self, **kwargs):
-                for k,v in kwargs.items():
-                    inner[k] = v
-                return query
-
-        return attrdict()
+        return _qc_attrdict(inner, query)
 
     @property
     def identity(self):
@@ -760,14 +715,49 @@ class QueryCommand(object):
     @property
     def partition(self):
         '''Return an array of terms for partition searches'''
-        return self.getsubdict('partition')   
-
-
+        return self.getsubdict('partition')  
+         
 
     def __str__(self):
         return str(self._dict)
 
 
+
+class _qc_attrdict(object):
+    
+
+    def __init__(self, inner, query):
+        self.__dict__['inner'] = inner
+        self.__dict__['query'] = query
+        
+    def __setattr__(self, key, value):
+        #key = key.strip('_')
+        inner = self.__dict__['inner']
+        inner[key] = value
+
+    def __getattr__(self, key):
+        #key = key.strip('_')
+        inner = self.__dict__['inner']
+        
+        if key not in inner:
+            return None
+        
+        return inner[key]
+    
+    def __len__(self):
+        return len(self.inner)
+    
+    def __iter__(self):
+        return iter(self.inner)
+    
+    def items(self):
+        return self.inner.items()
+    
+    def __call__(self, **kwargs):
+        for k,v in kwargs.items():
+            self.inner[k] = v
+        return self.query
+            
 class Library(object):
     '''
     
@@ -798,7 +788,7 @@ class Library(object):
         self.remote = remote
         self.sync = sync
         self.api = None
-      
+
         if not self.cache:
             raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
 
@@ -806,6 +796,7 @@ class Library(object):
             self.api =  Rest(self.remote)
 
         self.logger = logging.getLogger(__name__)
+
     
     @property
     def database(self):
@@ -821,24 +812,94 @@ class Library(object):
             
             return bp_id.path+".db", dataset, partition
         except AttributeError:
-            dataset, partition = self.database.get(bp_id)
-    
-            if not dataset:
-                return None, None, None
-                
-            if partition:
-                rel_path = partition.identity.path+".db"
-            else:
-                rel_path = dataset.identity.path+".db"
-                
-            return rel_path, dataset, partition
+            pass
         
-    def get(self,bp_id):
-        '''Get a bundle, given an identity or an id string '''
-        from databundles.bundle import DbBundle
+            
+        dataset, partition = self.database.get(bp_id)
 
+        if not dataset:
+            return None, None, None
+            
+        if partition:
+            rel_path = partition.identity.path+".db"
+        else:
+            rel_path = dataset.identity.path+".db"
+            
+        return rel_path, dataset, partition
+        
+    def get_ref(self,bp_id):
+        from databundles.identity import ObjectNumber, DatasetNumber, PartitionNumber, Identity
+                
+        if isinstance(bp_id, Identity):
+            if bp_id.id_:
+                bp_id = bp_id.id_
+            else:
+                bp_id = bp_id.name
+                
         # If dataset is not None, it means the file already is in the cache.
-        rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id) #@UnusedVariable
+        dataset = None
+        is_local = True
+        try:
+            on = ObjectNumber.parse(bp_id)
+
+            if not ( isinstance(on, DatasetNumber) or isinstance(on, PartitionNumber)):
+                raise ValueError("Object number must be for a Dataset or Partition: {} ".format(bp_id))
+            
+            rel_path, dataset, partition  = self._get_bundle_path_from_id(bp_id) #@UnusedVariable
+        except: 
+            pass
+        
+        # Try it as a dataset name
+        if not dataset:
+            r = self.find(QueryCommand().identity(name = bp_id) ).first()
+            
+            if r:
+                rel_path, dataset, partition  = self._get_bundle_path_from_id(r[0].id_) 
+
+        # Try the name as a partition name
+        if not dataset:
+            q = self.find(QueryCommand().partition(name = bp_id) )
+        
+            r = q.first()
+            if r:
+                rel_path, dataset, partition  = self._get_bundle_path_from_id(r[1].id_)         
+
+
+        # No luck so far, so now try to get it from the remote library
+        if not dataset and self.api:
+            from databundles.identity import Identity, PartitionIdentity
+            r = self.api.find(bp_id)
+            
+            
+            if r:
+                r = r[0]
+
+                if hasattr(r, 'Partition') and r.Partition is not None:
+                    identity = PartitionIdentity(**(r.Partition._asdict()))
+                    dataset = r.Dataset
+                    partition = r.Partition
+                else:
+                    identity = Identity(**(r.Dataset._asdict()))
+                    dataset = r.Dataset
+                    partition = None
+                    
+                rel_path = identity.path+".db"
+    
+                is_local = False
+
+
+        if not dataset:
+            return False, False, False, False
+        
+        return  rel_path, dataset, partition, is_local
+
+           
+    def get(self,bp_id):
+        '''Get a bundle, given an id string or a name '''
+
+        # Get a reference to the dataset, partition and relative path
+        # from the local database. 
+        rel_path, dataset, partition, is_local = self.get_ref(bp_id)
 
         # Try to get the file from the cache. 
         if rel_path:
@@ -849,15 +910,23 @@ class Library(object):
         # Not in the cache, try to get it from the remote library, 
         # if a remote was set. 
         bundle = None
-        if not abs_path and self.api:
-          
+        if not abs_path and self.api and is_local is False and dataset is not False:
+            from databundles.identity import Identity, PartitionIdentity
+
+            identity = ( PartitionIdentity(**(partition._asdict())) if partition 
+                         else Identity(**(dataset._asdict())) )
             try:
-                r = self.api.get(bp_id.id_)
+                r = self.api.get(identity.id_)
                 abs_path = self.cache.put(r,rel_path)
                 bundle = DbBundle(abs_path)
-                self._put(abs_path, bundle, state='pulled')
+                self.put_file(identity, abs_path, bundle, state='pulled')
+                
+                self.database.add_file(abs_path, self.cache.repo_id, bundle.identity.id_, 'pulled')
+                     
+                self.database.install_bundle(bundle)
+                
             except:
-                pass
+                raise
 
         if not abs_path or not os.path.exists(abs_path):
             return False
@@ -882,19 +951,27 @@ class Library(object):
     def find(self, query_command):
         return self.database.find(query_command)
         
-    def _put(self, cache_file,  bundle, state='new'):
-        '''Parts of put() that are also used when a bundle is retrieved from 
-        the cache in get()'''
+    def put_file(self, identity, file_path, state='new'):
+        '''Store a dataset or partition file, without having to open the file
+        to determine what it is, by using  seperate identity''' 
         
-        from bundle import Bundle
+        if isinstance(identity , dict):
+            identity = new_identity(identity)
         
-        self.database.add_file(cache_file, self.cache.repo_id, bundle.identity.id_, state)
-                     
-        # Only install bundles in the database. 
-        if  isinstance(bundle, Bundle):
-            self.database.install_bundle(bundle)
+        rel_path = identity.path+".db"
         
-           
+        dst = self.cache.put(file_path,rel_path)
+
+        if self.api and self.sync:
+            self.api.put(file_path)
+
+        self.database.add_file(dst, self.cache.repo_id, identity.id_,  state)
+
+        if identity.is_bundle:
+            self.database.install_bundle_file(identity, file_path)
+
+        return dst, rel_path, self.cache.public_url_f()(rel_path)
+     
     def put(self, bundle):
         '''Install a bundle or partition file into the library.
         
@@ -914,17 +991,9 @@ class Library(object):
         
         bundle.identity.name # throw exception if not right type. 
 
-        src = bundle.database.path
-        rel_path = bundle.identity.path+".db"
-     
-        dst = self.cache.put(src,rel_path)
-        
-        if self.api and self.sync:
-            self.api.put(src)
-            
-        self._put(dst, bundle)
+        dst, rel_path, url = self.put_file(bundle.identity, bundle.database.path)
 
-        return dst
+        return dst, rel_path, url
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -995,115 +1064,13 @@ class Library(object):
             raise Exception("Can't push() without defining a remote. ")
  
         if file_ is not None:
-            self.api.put(file_.path)
+            self.api.put(file_.ref, file_.path)
             file_.state = 'pushed'
-            self.database.commit()
+            #self.database.commit()
         else:
             for file_ in self.new_files:
                 self.push(file_)
     
-
-class RemoteLibrary(object):
-    '''A library that uses a REST Interface to a remote library. 
-    
-    '''
-
-
-    def __init__(self, url, cache):
-        '''
-        Args:
-            url. URL of the REST service
-            cache. An FsCache for storing files that are retrieved. 
-        '''
-        from  databundles.client.rest import Rest
-    
-        r = Rest(url) #@UnusedVariable
-        
-    def get(self,rel_path):
-        '''
-        '''
-
-        
-        return self.upstream.get(rel_path)
-    
-    def put(self, source, rel_path):
-        '''Put the bundle to the remote server. 
-        Does not return the path to teh local file like other caches. 
-        '''
-        
-        # @attention: We're not using rel_path, since the upstream
-        # library will make its own decisions about how to set the name
-        # for a bundle. 
-        
-        r =  self.api.put(source)
-     
-        return r.object
-        
-    
-    def find(self,query):
-        '''Passes the query to the upstream, if it exists'''
-        return self.database.find(query)
-    
-    def remove(self,rel_path, propagate = False):
-        ''''''
-        return self.upstream.remove(rel_path, propagate)
-            
-        
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        return self.upstream.list(path)
-  
-
-class LibraryDbCache(object):
-    '''A cache that implements on the find() method. All others pass through to 
-    the mandatory upstream. '''
-
-
-    def __init__(self, library_db, upstream):
-        '''Init a new FileSystem Cache'''
-
-        self.database = library_db
-        self.upstream = upstream
-   
-        
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        import hashlib
-        m = hashlib.md5()
-        m.update(self.library_db.path)
-
-        return m.hexdigest()
-      
-           
-    def get(self,rel_path):
-        '''Get a dataset or partition by id or name
-        '''
-     
-        return self.upstream.get(rel_path)
-    
-    def put(self, source, rel_path):
-        ''''''
-
-        dst =  self.upstream.put(source, rel_path)
-   
-        
-        return dst
-
-    def find(self,query):
-        '''Find records using a query'''
-        return self.database.find(query)
-    
-    def remove(self,rel_path, propagate = False):
-        ''''''  
-        
-        return self.upstream.remove(rel_path, propagate)
-             
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        return self.upstream.list(path)
-
-
 
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''

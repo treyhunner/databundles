@@ -73,8 +73,22 @@ def bundle_file_type(path_or_file):
         d = path_or_file.read(15)
         path_or_file.seek(loc)
     except:
-        with open(path_or_file) as f:
-            d = f.read(15)
+        d = None
+        
+    if not d:
+        try:
+            with open(path_or_file) as f:
+                d = f.read(15)
+        except:
+            d = None
+            
+    if not d:
+        if path_or_file.endswith('.db'):
+            return 'sqlite'
+        elif path_or_file.endswith('.gz'):
+            return 'gzip'
+        else:
+            raise Exception("Can'y figure out file type")
     
     if d == 'SQLite format 3':
         return 'sqlite'

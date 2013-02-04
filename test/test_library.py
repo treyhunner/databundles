@@ -56,16 +56,35 @@ class Test(TestBase):
         pass
 
     def test_simple_install(self):
+        from databundles.library import QueryCommand
+        import pprint
         
         l = self.get_library()
      
         r = l.put(self.bundle)
-        
-        print r
-        
+
+        r = l.get(self.bundle.identity.name)
+        self.assertEquals(self.bundle.identity.name, r.bundle.identity.name)
+
+        r = l.get('gibberish')
+        self.assertFalse(r)
+
+
         for partition in self.bundle.partitions:
             r = l.put(partition)
-            print r
+
+            # Get the partition with a name
+            r = l.get(partition.identity.name)
+            self.assertTrue(r is not False)
+            self.assertEquals(partition.identity.name, r.partition.identity.name)
+            self.assertEquals(self.bundle.identity.name, r.bundle.identity.name)
+            
+            # Get the partition with an id
+            r = l.get(partition.identity.id_)
+            self.assertTrue(r is not False)
+            self.assertEquals(partition.identity.name, r.partition.identity.name)
+            self.assertEquals(self.bundle.identity.name, r.bundle.identity.name)            
+
             
     def test_public_url(self):
         '''Check that the public_url_f works'''

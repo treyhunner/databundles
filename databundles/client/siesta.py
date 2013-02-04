@@ -137,7 +137,8 @@ class Response(object):
         return mime, encoding
             
     def handle_json_object(self, resp):
-        o = json.loads(resp.read())
+        body = resp.read()
+        o = json.loads(body)
         resp.close()
         return o
     

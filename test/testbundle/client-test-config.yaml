@@ -1,20 +1,29 @@
 # Configuration for a library that is backed by a remote library
 
 library:
-    client:
-      remote: http://localhost:7979
-      filesystem: client
-      database: client
+  default:
+    remote: http://localhost:7979
+    filesystem: client
+    database: client
+  clean: # Clean library to test downloading from remove
+    remote: http://localhost:7979
+    filesystem: clean
+    database: clean
 
 database:
     client:
         dbname: '{root}/library.db'
         driver: sqlite  
-
+    clean: # A clean library to test the remote. 
+        dbname: '{root}/library-clean.db'
+        driver: sqlite  
+    
 filesystem:  
-    root_dir: /Volumes/DataLibrary/test/client
+    root_dir: /tmp/client-test
     client:
         dir: '{root}/cache-l1'
+    clean:
+        dir: '{root}/cache-clean' 
 
 downloads:
     dir: '{root}/downloads'

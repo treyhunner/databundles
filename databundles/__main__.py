@@ -44,7 +44,8 @@ def bundle_command(args, rc):
 
 def library_command(args, rc):
     import library
-    l = library.get_library()
+
+    l = library.get_library(name=args.name)
 
 
     if args.subcommand == 'init':
@@ -69,9 +70,11 @@ def library_command(args, rc):
         l.rebuild()
         
     elif args.subcommand == 'info':
-        print "Info"
-        print "Library Database: {}".format(l.database.dsn)
-
+        print "Library Info"
+        print "Database: {}".format(l.database.dsn)
+        print "Remote: {}".format(l.remote)
+        print "Cache: {}".format(l.cache.cache_dir)
+        
     elif args.subcommand == 'push':
         files_ = l.database.get_file_by_state('new')
         if len(files_):
@@ -140,14 +143,14 @@ def main():
     lib_p = cmd.add_parser('library', help='Manage a library')
     lib_p.set_defaults(command='library')
     asp = lib_p.add_subparsers(title='library commands', help='command help')
-    
+    lib_p.add_argument('-n','--name',  default='default',  help='Select a different name for the library')
+        
     sp = asp.add_parser('push', help='Push new library files')
     sp.set_defaults(subcommand='push')
     sp.add_argument('-w','--watch',  default=False,action="store_true",  help='Check periodically for new files.')
 
     sp = asp.add_parser('server', help='Run the library server')
     sp.set_defaults(subcommand='server') 
-    sp.add_argument('-n','--name',  default=None,  help='Select a different name for the library')
     sp.add_argument('-d','--daemonize', default=False, action="store_true",   help="Run as a daemon") 
     sp.add_argument('-g','--group', default=None,   help="Set group for daemon operation") 
     sp.add_argument('-u','--user', default=None,  help="Set user for daemon operation")   
