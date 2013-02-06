@@ -89,6 +89,19 @@ def library_command(args, rc):
             print "-- Display {} files".format(args.file_state)
             for f in files_:
                 print f.path
+                
+    elif args.subcommand == 'get':
+     
+        rel_path, dataset, partition, is_local = l.get_ref(args.term)
+        
+        if not rel_path:
+            print "{}: Not found".format(args.term)
+        else:
+            print "Path:      ",rel_path
+            print "Dataset:   ",dataset
+            print "Partition: ",partition
+            print "Is Local:  ",is_local
+        
 
     else:
         print "Unknown subcommand"
@@ -175,6 +188,12 @@ def main():
  
     sp = asp.add_parser('info', help='Display information about the library')
     sp.set_defaults(subcommand='info')   
+    
+    sp = asp.add_parser('get', help='Search for the argument as a bundle or partition name or id')
+    sp.set_defaults(subcommand='get')   
+    sp.add_argument('term', type=str,help='Query term')
+    
+    
 
     #
     # Test Command

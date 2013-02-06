@@ -113,6 +113,11 @@ def run(argv, bundle_class):
         import time
         time.sleep(1)
 
+    if 'info' in args.phases:
+        b.log("----Info ---")
+        b.log("Name: "+b.identity.name)
+        
+
     if 'clean' in args.phases:
         b.log("---- Cleaning ---")
         b.clean()

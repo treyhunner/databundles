@@ -279,6 +279,10 @@ class Partitions(object):
         
             tr = self.bundle.schema.table(table)
             
+            if not tr:
+                return None
+                #raise ValueError("Didn't find table named {} ".format(table))
+            
             q = q.filter(OrmPartition.t_id==tr.id_)
 
         try:

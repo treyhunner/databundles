@@ -273,7 +273,7 @@ class Schema(object):
         last_table = None
         line_no = 1; # Accounts for file header. Data starts on line 2
         for row in reader:
-          
+
             # If the spreadsheet gets downloaded rom Google Spreadsheets, it is
             # in UTF-8
             

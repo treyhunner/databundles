@@ -868,24 +868,30 @@ class Library(object):
         # No luck so far, so now try to get it from the remote library
         if not dataset and self.api:
             from databundles.identity import Identity, PartitionIdentity
-            r = self.api.find(bp_id)
+            import socket
             
-            
-            if r:
-                r = r[0]
-
-                if hasattr(r, 'Partition') and r.Partition is not None:
-                    identity = PartitionIdentity(**(r.Partition._asdict()))
-                    dataset = r.Dataset
-                    partition = r.Partition
-                else:
-                    identity = Identity(**(r.Dataset._asdict()))
-                    dataset = r.Dataset
-                    partition = None
-                    
-                rel_path = identity.path+".db"
+            try:
+                r = self.api.find(bp_id)
+                
+                
+                if r:
+                    r = r[0]
     
-                is_local = False
+                    if hasattr(r, 'Partition') and r.Partition is not None:
+                        identity = PartitionIdentity(**(r.Partition._asdict()))
+                        dataset = r.Dataset
+                        partition = r.Partition
+                    else:
+                        identity = Identity(**(r.Dataset._asdict()))
+                        dataset = r.Dataset
+                        partition = None
+                        
+                    rel_path = identity.path+".db"
+        
+                    is_local = False
+            except socket.error:
+                self.logger.error("COnnection to remote {} failed".format(self.remote))
+                
 
 
         if not dataset:

@@ -1,0 +1,40 @@
+build:
+    geoheaderFile: meta/geoschema.csv
+identity:
+    creator: creator
+    dataset: dataset
+    id: a1DxuZ
+    revision: 1
+    source: source
+    subset: subset
+    variation: variation
+about:
+    title: This is the Title
+    maintainer: Mark Aintainer
+    author: Albert Uthor
+    homepage: http://homepage.com
+    url: http://theurl.com
+    license: other-open
+    tags: [one,two,three]
+extracts:
+  - partition: any
+    query: 'select * from  {p_table}'
+    title: 'Extract for table: {p_table}, a={dima}, b={dimb} and c={dimc}'
+    description: > 
+      This is a multi-line description for the extract
+      of {p_name}, with the table named {p_table}
+    name: 'extract-{p_table}.csv'
+    for: "True "
+    each:
+      -
+        - { dima: 1 }
+        - { dima: 2 }
+        - { dima: 3 }
+      -
+        - { dimb: x }
+        - { dimb: y }
+        - { dimb: z }
+      -
+        - { dimc: a }
+        - { dimc: b }
+        - { dimc: c }        

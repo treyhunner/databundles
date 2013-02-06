@@ -126,7 +126,7 @@ class DbBundle(Bundle):
             query = "select * from {} ".format(query)
  
         
-        return petl.fromsqlite3(self.database.path, query)
+        return petl.fromsqlite3(self.database.path, query) #@UndefinedVariable
         
 class BuildBundle(Bundle):
     '''A bundle class for building bundle files. Uses the bundle.yaml file for
