@@ -175,7 +175,10 @@ class Schema(object):
             # Try it with just the name
             q =  (s.query(Table).filter(Table.name==name_or_id))
              
-            table = q.one()
+            try:
+                table = q.one()
+            except sqlalchemy.orm.exc.NoResultFound: #@UndefinedVariable
+                raise ValueError("No table found for name {}".format(name_or_id))
         
         at = SATable(table.name, metadata)
  
@@ -268,7 +271,7 @@ class Schema(object):
               'INTEGER64':Column.DATATYPE_INTEGER,
               'REAL':Column.DATATYPE_REAL,
               }
-
+        
         new_table = True
         last_table = None
         line_no = 1; # Accounts for file header. Data starts on line 2

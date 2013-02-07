@@ -129,7 +129,7 @@ class Partition(object):
         elif self.table:
             self.database.copy_table_from(self.bundle.database,self.table.name)
             tables = [self.table.name]
-        
+     
         for t in tables:
             if not t in self.database.inspector.get_table_names():
                 t_meta, table = self.bundle.schema.get_table_meta(t) #@UnusedVariable

@@ -10,7 +10,8 @@ import anydbm
 
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''
-    def __init__(self, bundle, table, db, cache_size=50000, text_factory = None):
+    def __init__(self, bundle, table, db, cache_size=50000, text_factory = None, replace=True):
+        import string 
         self.bundle = bundle
         self.table = table
         self.db = db
@@ -21,6 +22,11 @@ class ValueInserter(object):
         self.header = [c.name for c in self.table.columns]
         self.transaction = None
         self.cache_size = cache_size
+
+        if replace:
+            self.ins = self.ins.prefix_with('OR REPLACE')
+            
+        print self.ins
 
         if text_factory:
             print self.db.engine.raw_connection()
@@ -37,7 +43,7 @@ class ValueInserter(object):
             self.cache.append(d)
          
             if len(self.cache) >= self.cache_size:
-
+                
                 self.connection.execute(self.ins, self.cache)
                 self.cache = []
                 
@@ -739,7 +745,7 @@ class Database(object):
         
         q = """ATTACH DATABASE '{}' AS '{}' """.format(path, name)
     
-
+        print q
     
         self.connection.execute(q)
            
