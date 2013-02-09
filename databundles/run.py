@@ -117,6 +117,9 @@ def run(argv, bundle_class):
         b.log("----Info ---")
         b.log("Name: "+b.identity.name)
         
+        for partition in b.partitions:
+            b.log("Partition: "+partition.name)
+        
 
     if 'clean' in args.phases:
         b.log("---- Cleaning ---")

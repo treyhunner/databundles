@@ -37,16 +37,6 @@ class Bundle(BuildBundle):
         return True
     
         
-    ### Submit the package to the repository
- 
-    def pre_submit(self):
-        return True
-    
-    def submit(self):
-        return True
-        
-    def post_submit(self):
-        return True
     
 import sys
 

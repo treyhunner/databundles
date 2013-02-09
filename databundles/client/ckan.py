@@ -97,7 +97,7 @@ class Ckan(object):
         props = bundle.config.group('properties')
 
         if not name:
-            name =  bundle.identity.base_name
+            name =  bundle.identity.name
 
         import datetime
         t = str(datetime.datetime.now())
@@ -183,7 +183,7 @@ class Ckan(object):
         import datetime
         
         if name is None:
-            name = self.translate_name(bundle.identity.base_name)
+            name = self.translate_name(bundle.identity.name)
         else:
             name = self.translate_name(name)
           
@@ -238,7 +238,7 @@ class Ckan(object):
     def update_or_new_bundle_extract(self, bundle, name=None, **kwargs):    
    
         if name is None:
-            name = self.translate_name(bundle.identity.base_name+'-extract')
+            name = self.translate_name(bundle.identity.name+'-extract')
         else:
             name = self.translate_name(name)
         

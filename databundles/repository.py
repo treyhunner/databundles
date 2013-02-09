@@ -4,6 +4,7 @@ Copyright (c) 2013 Clarinova. This file is licensed under the terms of the
 Revised BSD License, included in this distribution as LICENSE.txt
 """
 from databundles.dbexceptions import ConfigurationError
+import petl.fluent as petlf
 
 class Repository(object):
     '''Interface to the CKAN data repository, for uploading bundle records and 
@@ -69,11 +70,10 @@ class Repository(object):
         import tempfile
         import uuid
         import os
-        import petl.fluent as petlf
 
         p = extract_data['partition']
      
-        
+     
         f  = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()) )
     
         self.bundle.log("Extracting {} with  {}".format(p.identity.name, extract_data['query']))
@@ -168,11 +168,12 @@ class Repository(object):
 
         if partition_name == 'any':
             partitions = [p for p in self.partitions]
+            partitions = [self.bundle] + partitions
         else:
             partition = self.partitions.get(partition_name)
             partitions = [partition]
             
-        partitions = [self.bundle] + partitions
+        
             
         out = []
          
@@ -191,13 +192,13 @@ class Repository(object):
           
         return out
             
-    def generate_extracts(self,):
+    def generate_extracts(self):
         """Generate dicts that have the data for an extract, along with the 
         partition, query, title and description """
         ext_config = self.extracts
 
         for extract in ext_config:
-            for_ = extract.get('for', False)
+            for_ = extract.get('for', "'True'")
             each = extract.get('each', [])
             p_id = extract.get('partition', False)
             if not p_id:
@@ -205,8 +206,6 @@ class Repository(object):
 
             partitions = self._expand_partitions(p_id, for_)
             datasets= self._expand_each(each)
-
-            
 
             for partition in partitions:
                 for data in datasets:     
@@ -216,7 +215,8 @@ class Repository(object):
                     yield qe
                     
     def submit(self): 
-
+        """Create a dataset for the bundle, then add a resource for each of the
+        extracts listed in the bundle.yaml file"""
         ckb = self.api.update_or_new_bundle_extract(self.bundle)
         
         # Clear out existing resources. 

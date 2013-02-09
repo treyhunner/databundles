@@ -99,7 +99,7 @@ class Test(TestBase):
         self.assertEqual('variation', self.bundle.identity.variation)
         self.assertEqual('creator', self.bundle.identity.creator)
         self.assertEqual(1, int(self.bundle.identity.revision))
-        self.assertEqual('source-dataset-subset-variation-ca0d-r1', 
+        self.assertEqual('source-dataset-subset-variation-ca0d', 
                          self.bundle.identity.name)
 
     def test_db_bundle(self):
@@ -110,17 +110,20 @@ class Test(TestBase):
         b.clean()
         
         self.assertTrue(b.identity.id_ is not None)
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1', b.identity.name)
-
+        self.assertEquals('source-dataset-subset-variation-ca0d', b.identity.name)
+        self.assertEquals('source-dataset-subset-variation-ca0d-r1', b.identity.vname)
+        
         b.database.create()
         
         db_path =  b.database.path
         
         dbb = DbBundle(db_path)
         
-        self.assertEqual("source-dataset-subset-variation-ca0d-r1", dbb.identity.name)
-        self.assertEqual("source-dataset-subset-variation-ca0d-r1", dbb.config.identity.name)
-        
+        self.assertEqual("source-dataset-subset-variation-ca0d", dbb.identity.name)
+        self.assertEqual("source-dataset-subset-variation-ca0d-r1", dbb.identity.vname)
+        self.assertEqual("source-dataset-subset-variation-ca0d", dbb.config.identity.name)
+
+                
     def test_schema_direct(self):
         '''Test adding tables directly to the schema'''
         
@@ -343,6 +346,10 @@ class Test(TestBase):
        
         s.commit()
         p.database.create()
+        
+        p = self.bundle.partitions.find('source-dataset-subset-variation-ca0d-3')
+        self.assertTrue(p is not None)
+        self.assertEquals(pid3.name, p.identity.name)
         
         
     def x_test_tempfile(self):

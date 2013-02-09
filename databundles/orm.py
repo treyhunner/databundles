@@ -174,10 +174,27 @@ class Column(Base):
     DATATYPE_INTEGER ='integer' 
     DATATYPE_INTEGER64 ='integer64' 
     DATATYPE_REAL = 'real'
+    DATATYPE_REAL = 'float'
     DATATYPE_NUMERIC = 'numeric'
     DATATYPE_DATE = 'date'
     DATATYPE_TIME = 'time'
     DATATYPE_TIMESTAMP = 'timestamp'
+    DATATYPE_POINT = 'point' # Spatalite, sqlite extensions for geo
+    DATATYPE_CHAR = 'text'
+    DATATYPE_VARCHAR = 'text'
+    DATATYPE_POINT = 'point'
+    
+    types = [
+                DATATYPE_TEXT,
+                DATATYPE_INTEGER,
+                DATATYPE_INTEGER64,
+                DATATYPE_REAL,
+                DATATYPE_NUMERIC,
+                DATATYPE_DATE,
+                DATATYPE_TIME,
+                DATATYPE_TIMESTAMP,
+                DATATYPE_POINT
+             ]
 
     def __init__(self,**kwargs):
      
@@ -264,7 +281,6 @@ class Table(Base):
     data = SAColumn('t_data',MutationDict.as_mutable(JSONEncodedDict))
     
     columns = relationship(Column, backref='table', cascade="all, delete-orphan")
-
 
     def __init__(self,**kwargs):
         self.id_ = kwargs.get("id",None) 

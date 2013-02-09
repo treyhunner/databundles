@@ -10,7 +10,7 @@ import anydbm
 
 class ValueInserter(object):
     '''Inserts arrays of values into  database table'''
-    def __init__(self, bundle, table, db, cache_size=50000, text_factory = None, replace=True):
+    def __init__(self, bundle, table, db, cache_size=50000, text_factory = None, replace=False):
         import string 
         self.bundle = bundle
         self.table = table
@@ -25,8 +25,6 @@ class ValueInserter(object):
 
         if replace:
             self.ins = self.ins.prefix_with('OR REPLACE')
-            
-        print self.ins
 
         if text_factory:
             print self.db.engine.raw_connection()

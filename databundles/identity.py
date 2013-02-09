@@ -71,12 +71,13 @@ class Identity(object):
            
     @property
     def name(self):
-        return self.name_str(self)
-   
-    @property
-    def base_name(self):
-        """like name(), but does not include the revision"""
+        """The name of the bundle, excluding the revision"""
         return self.name_str(self, use_revision=False)
+ 
+    @property
+    def vname(self):
+        """The name of the bundle, including the revision"""
+        return self.name_str(self, use_revision=True)
     
     @property
     def path(self):
@@ -93,7 +94,7 @@ class Identity(object):
         return os.path.join(source, '-'.join(parts) )
     
     @classmethod
-    def name_str(cls,o=None, use_revision=True):
+    def name_str(cls,o=None, use_revision=False):
         
         return '-'.join(cls.name_parts(o,use_revision=use_revision))
     
@@ -220,12 +221,12 @@ class PartitionIdentity(Identity):
         
     
     @classmethod
-    def name_str(cls,o=None):
+    def name_str(cls,o=None, use_revision=False):
         
-        return '-'.join(cls.name_parts(o))
+        return '-'.join(cls.name_parts(o, use_revision))
     
     @classmethod
-    def name_parts(cls,o=None):
+    def name_parts(cls,o=None, use_revision=False):
         import re
        
         parts = Identity.name_parts(o)
@@ -236,7 +237,9 @@ class PartitionIdentity(Identity):
                          for s in filter(None, [o.time, o.space, o.table, o.grain])])
         
         parts.append(partition_component)
-        parts.append(rev)
+        
+        if use_revision:
+            parts.append(rev)
         
         return parts
     

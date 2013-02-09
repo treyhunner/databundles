@@ -9,4 +9,5 @@ numpy==1.6.2
 ckanclient
 python-daemon
 lockfile
+shapefile
 

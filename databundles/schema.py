@@ -5,6 +5,7 @@ Revised BSD License, included in this distribution as LICENSE.txt
 """
 
 from databundles.dbexceptions import ConfigurationError
+from databundles.orm import Column
 
 def _clean_flag( in_flag):
     
@@ -45,6 +46,7 @@ class Schema(object):
       
         self.table_sequence = len(self.tables)+1
         self.col_sequence = 1 
+
 
     def clean(self):
         from databundles.orm import Table, Column, Partition
@@ -156,6 +158,8 @@ class Schema(object):
         Column.DATATYPE_DATE: sqlalchemy.types.Date,
         Column.DATATYPE_TIME:sqlalchemy.types.Time,
         Column.DATATYPE_TIMESTAMP:sqlalchemy.types.DateTime,
+        Column.DATATYPE_POINT:sqlalchemy.types.Text,
+        'varchar':sqlalchemy.types.Text,
         }
     
         def translate_type(column):
