@@ -238,6 +238,13 @@ class BuildBundle(Bundle):
     def db_config(self):
         return BundleDbConfig(self.database)
 
+    def update_configuration(self):
+
+        self.config.rewrite(
+                         identity=self.identity.to_dict(),
+                         partitions=[p.identity.name for p in self.partitions]
+                         )
+        
     @classmethod
     def rm_rf(cls, d):
         
@@ -450,7 +457,7 @@ class BundleFileConfig(BundleConfig):
     def path(self):
         return os.path.join(self.cache, BundleFileConfig.BUNDLE_CONFIG_FILE)
 
-    def rewrite(self):
+    def rewrite(self, **kwargs):
         '''Re-writes the file from its own data. Reformats it, and updates
         the modification time'''
         import yaml
@@ -458,16 +465,15 @@ class BundleFileConfig(BundleConfig):
         temp = self.local_file+".temp"
         old = self.local_file+".old"
         
-
-        full_config =  dict(self._run_config.config.items())
-
-        data = {}
-        data['identity'] = dict(full_config['identity'].items())
-      
-        data['build'] = dict(full_config['build'].items())
+        config = AttrDict()
+    
+        config.update_yaml(self.local_file)
         
+        for k,v in kwargs.items():
+            config[k] = v
+   
         with open(temp, 'w') as f:
-            yaml.safe_dump( dict(data), f, default_flow_style=False, indent=4, encoding='utf-8' )
+            config.dump(f)
     
         if os.path.exists(temp):
             os.rename(self.local_file, old)

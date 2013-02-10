@@ -116,7 +116,8 @@ class Ckan(object):
                 'bundle/subset' : bundle.identity.subset,
                 'bundle/variation' : bundle.identity.variation,
                 'bundle/revision' : bundle.identity.revision,
-                'bundle/id' : bundle.identity.id_
+                'bundle/id' : bundle.identity.id_,
+                'bundle/name' : bundle.identity.name
             },
                           
             'version':  bundle.identity.revision,
@@ -354,6 +355,38 @@ class Ckan(object):
 
         return r.json()
     
+    def add_url_resource(self, pe, url, name, **kwargs):
+
+        import os
+        import mimetypes
+
+        r = requests.head(url)
+        size = r.headers.get('content-length',None)
+        content_type = r.headers.get('content-type',None)
+
+        # Fetch the pe again, in case the one passed in was incomplete. 
+        package_url = self.url+'/rest/package/{id}'.format(id=pe['id'])
+        r = requests.get(package_url,headers =  self.auth_headers)
+        r.raise_for_status()
+        pe2 = r.json()
+
+        resource = dict(name=name,
+                mimetype=content_type,
+                size=size, 
+                url=url)
+        
+        for k,v in kwargs.items():
+            if v is not None:
+                resource[k] = v
+
+        pe2['resources'].append(resource)
+
+        r = requests.put(package_url,
+                  headers =  self.auth_headers,
+                  data=json.dumps(pe2))
+        r.raise_for_status()
+
+        return r.json()    
     def submit_bundle(self):
         pass
     

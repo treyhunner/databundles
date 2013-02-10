@@ -107,6 +107,41 @@ def library_command(args, rc):
         print "Unknown subcommand"
         print args 
 
+def ckan_command(args,rc):
+    from databundles.dbexceptions import ConfigurationError
+    import databundles.client.ckan
+    import requests
+    
+    repo_name = args.name
+    
+    repo_group = rc.group('repository')
+    if not repo_group.get(repo_name): 
+        raise ConfigurationError("'repository' group in configure either nonexistent"+
+                                 " or missing {} sub-group ".format(repo_name))
+    
+    repo_config = repo_group.get(repo_name)
+    
+    api = databundles.client.ckan.Ckan( repo_config.url, repo_config.key)   
+    
+    if args.subcommand == 'package':
+        try:
+            pkg = api.get_package(args.term)
+        except requests.exceptions.HTTPError:
+            return
+        
+        if args.use_json:
+            import json
+            print  json.dumps(pkg, sort_keys=True, indent=4, separators=(',', ': '))
+        else:
+            import yaml
+            yaml.dump(args, indent=4, default_flow_style=False)
+        
+        
+        
+    else:
+        print 'Testing'
+        print args
+
 def test_command(args,rc):
     
     if args.subcommand == 'config':
@@ -193,8 +228,22 @@ def main():
     sp.set_defaults(subcommand='get')   
     sp.add_argument('term', type=str,help='Query term')
     
+ 
+    #
+    # ckan Command
+    #
+    lib_p = cmd.add_parser('ckan', help='Access a CKAN repository')
+    lib_p.set_defaults(command='ckan')
+    lib_p.add_argument('-n','--name',  default='default',  help='Select the configuration name for the repository')
+    asp = lib_p.add_subparsers(title='CKAN commands', help='Access a CKAN repository')
     
-
+    sp = asp.add_parser('package', help='Dump a package by name, as json or yaml')
+    sp.set_defaults(subcommand='package')   
+    sp.add_argument('term', type=str,help='Query term')
+    group = sp.add_mutually_exclusive_group()
+    group.add_argument('-y', '--yaml',  default=True, dest='use_json',  action='store_false')
+    group.add_argument('-j', '--json',  default=True, dest='use_json',  action='store_true')
+    
     #
     # Test Command
     #
@@ -224,7 +273,8 @@ def main():
     funcs = {
         'bundle': bundle_command,
         'library':library_command,
-        'test':test_command
+        'test':test_command,
+        'ckan':ckan_command
     }
         
     f = funcs.get(args.command, False)

@@ -282,12 +282,18 @@ class Partitions(object):
     def all(self): #@ReservedAssignment
         '''Return an iterator of all partitions'''
         from databundles.orm import Partition as OrmPartition
-        s = self.bundle.database.session      
-        return [self.partition(op) for op in s.query(OrmPartition).all()]
-
+        import sqlalchemy.exc
+        try:
+            s = self.bundle.database.session      
+            return [self.partition(op) for op in s.query(OrmPartition).all()]
+        except sqlalchemy.exc.OperationalError:
+            return []
+            
+        
     def __iter__(self):
         return iter(self.all)
 
+            
     @property
     def query(self):
         from databundles.orm import Partition as OrmPartition

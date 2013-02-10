@@ -327,6 +327,21 @@ class AttrDict(OrderedDict):
     def flatten(self, path=tuple()):
         return self.flatten_dict(self, path=path)
 
+
+    def to_dict(self):
+        root  = {}
+        val = self.flatten()
+        for k,v in val:
+            dst = root
+            for slug in k[:-1]:
+                if dst.get(slug) is None:
+                    dst[slug] = dict()
+                dst = dst[slug]
+            if v is not None or not isinstance(dst.get(k[-1]), Mapping ): 
+                dst[k[-1]] = v
+
+        return  root
+
     def update_flat(self, val):
         if isinstance(val, AttrDict): val = val.flatten()
         for k,v in val:
@@ -337,10 +352,6 @@ class AttrDict(OrderedDict):
                 dst = dst[slug]
             if v is not None or not isinstance(dst.get(k[-1]), Mapping ): 
                 dst[k[-1]] = v
-
-
-    def update_dict(self, data):
-        self.update_flat(self.flatten_dict(data))
 
     def update_yaml(self, path): 
         self.update_flat(self.from_yaml(path))
@@ -367,8 +378,6 @@ class AttrDict(OrderedDict):
             set, yaml.representer.SafeRepresenter.represent_list )
         yaml.safe_dump( self, stream,
             default_flow_style=False, indent=4, encoding='utf-8' )
-
-
 
 def configure_logging(cfg, custom_level=None):
     '''Don't know what this is for .... '''

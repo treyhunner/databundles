@@ -66,6 +66,39 @@ class Repository(object):
 
         
     def _do_extract(self, package,  extract_data):
+        if extract_data.get('query',False):
+            self._do_query_extract(package, extract_data)
+        elif extract_data.get('function',False):
+            self._do_function_extract(package, extract_data)
+        else:
+            from databundles.dbexceptions import ConfigurationError
+            raise ConfigurationError("Bad Extract config: {}".format(extract_data))
+        
+    def _do_function_extract(self, package, extract_data):
+        '''Run a function on the build that produces a file to upload'''
+        import mimetypes
+        import os.path
+        
+        f_name = extract_data['function']
+        
+        f = getattr(self.bundle, f_name)
+    
+        
+        file_ = f()
+        
+        base, ext = os.path.splitext(file_)
+        mimetypes.init()
+        
+
+        re = self.api.add_file_resource(package, file_, 
+                                name=os.path.basename(file_),
+                                description=extract_data['description'],
+                                content_type = mimetypes.types_map[ext]
+                                )
+        
+        self.bundle.log("  Done. {} ".format(re['id']))
+               
+    def _do_query_extract(self, package, extract_data):
         """Extract a CSV file and  upload it to CKAN"""
         import tempfile
         import uuid
@@ -89,7 +122,7 @@ class Repository(object):
         
         os.remove(f)
         
-        return re
+        return re       
         
     def _make_ge_dict(self, p, extract, each):
         '''Return a dict that includes the fields from the extract expanded for
@@ -199,8 +232,13 @@ class Repository(object):
 
         for extract in ext_config:
             for_ = extract.get('for', "'True'")
+            function = extract.get('function', False)
             each = extract.get('each', [])
             p_id = extract.get('partition', False)
+            
+            if function:
+                yield extract
+            
             if not p_id:
                 continue
 
@@ -213,16 +251,33 @@ class Repository(object):
                     qe = self._make_ge_dict(partition, extract, data)
         
                     yield qe
+              
+    def store_document(self, package, config):
+        import re, string
+
+        id =  re.sub('[\W_]+', '-',config['title'])
+        
+        re = self.api.add_url_resource(package, 
+                                        config['url'], 
+                                        config['title'],
+                                        description=config['description']
+                                        )
                     
     def submit(self): 
         """Create a dataset for the bundle, then add a resource for each of the
         extracts listed in the bundle.yaml file"""
+        
+        self.bundle.update_configuration()
+    
         ckb = self.api.update_or_new_bundle_extract(self.bundle)
         
         # Clear out existing resources. 
         ckb['resources'] = []      
         self.api.put_package(ckb)
         
+        for doc in self.bundle.config.group('about').get('documents',[]):
+            self.store_document(ckb, doc)
+
         for extract_data in self.generate_extracts():
             self._do_extract(ckb,  extract_data)
         

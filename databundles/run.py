@@ -120,6 +120,9 @@ def run(argv, bundle_class):
         for partition in b.partitions:
             b.log("Partition: "+partition.name)
         
+    if 'updateconfig' in args.phases:
+        b.log("Update Config")
+        b.update_configuration()
 
     if 'clean' in args.phases:
         b.log("---- Cleaning ---")
