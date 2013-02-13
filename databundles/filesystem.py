@@ -339,7 +339,8 @@ class BundleFilesystem(Filesystem):
                     for name in zf.namelist():
                         if regex.match(name):
                             abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)   
-                            break
+                            break 
+                        
 
                 return abs_path
         finally:
@@ -347,7 +348,7 @@ class BundleFilesystem(Filesystem):
             
         return None
 
-    def unzip_dir(self,path,  cache=True):
+    def unzip_dir(self,path,   regex=None):
         '''Context manager to extract a single file from a zip archive, and delete
         it when finished'''
         import tempfile, uuid
@@ -360,9 +361,9 @@ class BundleFilesystem(Filesystem):
             with zipfile.ZipFile(path) as zf:
                 abs_path = None 
                 for name in zf.namelist():
-                    abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)   
-                    yield abs_path
-
+                    abs_path = self._get_unzip_file(cache, tmpdir, zf, path, name)  
+                    if regex and regex.match(name) or not regex:
+                        yield abs_path
         except:
             self.bundle.error("File '{}' can't be unzipped".format(path))
             raise

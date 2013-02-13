@@ -196,6 +196,19 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Install ---- ")      
      
+    if 'extract' in args.phases:
+        if b.pre_extract():
+            b.log("---- Extract ---")
+            if b.extract():
+                b.post_extract()
+                b.log("---- Done Extracting ---")
+            else:
+                b.log("---- Extract exited with failure ---")
+        else:
+            b.log("---- Skipping Extract ---- ")
+    else:
+        b.log("---- Skipping Extract ---- ")        
+     
     # Submit puts information about the the bundles into a catalog
     # and may store extracts of the data in the catalog. 
     if 'submit' in args.phases:

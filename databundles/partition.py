@@ -8,6 +8,7 @@ import os
 
 from databundles.identity import PartitionIdentity
 from sqlalchemy.orm.exc import NoResultFound
+from collections import namedtuple
         
 class Partition(object):
     '''Represents a bundle partition, part of the bundle data broken out in 
@@ -141,6 +142,34 @@ class Partition(object):
         self.create_with_tables(tables=self.identity.table)
 
 
+    BoundingBox = namedtuple('BoundingBox', ['min_x', 'min_y','max_x', 'max_y'])
+
+    @property
+    def extents(self, where=None):
+        '''Return the bounding box for the dataset. The partition must specify 
+        a table
+        
+        '''
+        # Find the extents of the data and figure out the offsets for the array. 
+        e=self.database.connection.execute
+        table = self.table.name
+        
+        if where:
+            where = "WHERE "+where
+        else:
+            where = ''
+        
+        r = e("""SELECT min(_db_lon) as min_x, min(_db_lat) as min_y, 
+                max(_db_lon) as max_x, max(_db_lat) as max_y from street_lights {}"""
+                .format(where)
+            ).first()
+              
+        # Convert to a regular tuple 
+        o = self.BoundingBox(r[0], r[1],r[2],r[3])
+        
+        return o
+
+
     def __repr__(self):
         return "<partition: {}>".format(self.name)
 
@@ -150,12 +179,18 @@ class GeoPartition(Partition):
 
     def __init__(self, bundle, record):
         super(GeoPartition, self).__init__(bundle, record)
-             
-       
 
     def convert(self, table_name, progress_f=None):
         """Convert a spatialite geopartition to a regular partition
-        by extracting the geometry and re-projecting it to WGS84"""
+        by extracting the geometry and re-projecting it to WGS84
+        
+        :param config: a `RunConfig` object
+        :rtype: a `LibraryDb` object
+        
+        :param config: a `RunConfig` object
+        :rtype: a `LibraryDb` object
+                
+        """
         import subprocess, csv
         from databundles.orm import Column
         from databundles.dbexceptions import ConfigurationError

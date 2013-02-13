@@ -403,6 +403,18 @@ class BuildBundle(Bundle):
     
     def post_submit(self):
         return True
+
+    ### Submit the package to the repository
+ 
+    def pre_extract(self):
+        return True
+    
+    ### Submit the package to the repository
+    def extract(self):
+        return True
+    
+    def post_extract(self):
+        return True
     
     
     ########################
