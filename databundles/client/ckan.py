@@ -66,21 +66,26 @@ class Ckan(object):
         url = self.url+'/rest/group/{name}'
       
         try:
-            r = requests.get(url.format(name=name))
+            r = requests.get(url.format(name=name.lower()))
             r.raise_for_status()
             
         except requests.exceptions.HTTPError:
             
             payload = {
-                'name': name,
+                'name': name.lower(),
                 'title': name,
                 'description': name
                 }
             
+        
             r = requests.post(self.url+'/rest/group',
                               headers =  self.auth_headers,
                              data=json.dumps(payload))
-            r.raise_for_status()
+            try:
+                r.raise_for_status()
+            except Exception as e:
+                print r.content
+                raise
    
         return r.json()
      
@@ -179,7 +184,8 @@ class Ckan(object):
             print "ERROR: "+r.content
             raise e  
     
-    def update_or_new_bundle(self, bundle, type='bundle', group=None, name=None, title=None):
+    def update_or_new_bundle(self, bundle, type='bundle',  name=None, 
+                             title=None, group_names=None,):
         '''Create a new package for a bundle.'''
         import datetime
         
@@ -187,9 +193,11 @@ class Ckan(object):
             name = self.translate_name(bundle.identity.name)
         else:
             name = self.translate_name(name)
-          
-        if not group:  
-            group = self.get_or_new_group('bundles')
+
+        if not group_names:  
+            group_names = ['bundles']
+
+        groups = [self.get_or_new_group(group_name) for group_name in group_names]
 
         try:
             r = requests.get(self.url+'/rest/package/{name}'.format(name=name))
@@ -221,8 +229,9 @@ class Ckan(object):
 
         payload['notes'] = description
         payload['title'] = title
-        payload['groups'] = [group['id']]
+        payload['groups'] = [group['id'] for group in groups]
         payload['license_id'] = bundle.config.about.get('license','other')
+   
      
         r = requests.post(self.url+'/rest/package/{name}'.format(name=name),
                           headers =  self.auth_headers,
@@ -237,15 +246,19 @@ class Ckan(object):
 
 
     def update_or_new_bundle_extract(self, bundle, name=None, **kwargs):    
-   
+
         if name is None:
             name = self.translate_name(bundle.identity.name+'-extract')
         else:
             name = self.translate_name(name)
         
+        group_names = kwargs.get('group_names',[])
+        group_names.append('extracts')
        
-        group = self.get_or_new_group('extracts')
-        return self.update_or_new_bundle(bundle, 'extract', group=group, name=name, **kwargs)
+        for group_name in bundle.config.group('about').get('groups',[]):
+            group_names.append(group_name)
+       
+        return self.update_or_new_bundle(bundle,  name=name,  group_names=group_names, **kwargs)
 
     def delete_package(self, id_):
         
@@ -295,7 +308,12 @@ class Ckan(object):
         url = 'http://'+ netloc+ url_path
    
         r = requests.post(url,headers = headers,data=body)
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except:
+            print 'ERROR for url: {}'.format(url)
+            print r.content
+            raise
           
         return '%s/storage/f/%s' % (re.sub('/api\/\d$','', self.url), file_key)
      

@@ -1,12 +1,14 @@
 # Optional package requirements. 
-boto==2.6.0 # Required for the library server
-gevent==0.13.8
-greenlet==0.4.0
-nose==1.2.1
-psycopg2==2.4.5
-simplejson==2.6.2
-numpy==1.6.2
+boto # Required for the library server
+gevent
+greenlet
+nose
+psycopg2
+simplejson
+numpy
 gdal
+pysal # Spatial analysis library
+h5py # HDF5 dat file library
 ckanclient
 python-daemon
 lockfile

@@ -33,7 +33,7 @@ class Repository(object):
 
         
    
-    def eval_for_expr(self, astr,debug=False):
+    def _validate_for_expr(self, astr,debug=False):
         """Check that an expression is save to evaluate"""
         import ast
         try: tree=ast.parse(astr)
@@ -64,67 +64,86 @@ class Repository(object):
             raise ValueError("Bad node {} in {}".format(node,astr))
         return True
 
-        
-    def _do_extract(self, package,  extract_data):
-        if extract_data.get('query',False):
-            self._do_query_extract(package, extract_data)
-        elif extract_data.get('function',False):
-            self._do_function_extract(package, extract_data)
+    def _do_extract(self, extract_data):
+
+        done_if = extract_data.get('done_if',False)
+        if done_if and self._validate_for_expr(done_if, True):
+            if eval(done_if):  
+                return True
+
+        if extract_data.get('function',False):
+            file_ = self._do_function_extract(extract_data)
+        elif extract_data.get('query',False):
+            file_ = self._do_query_extract(extract_data)
         else:
             from databundles.dbexceptions import ConfigurationError
             raise ConfigurationError("Bad Extract config: {}".format(extract_data))
+
+        return file_
         
-    def _do_function_extract(self, package, extract_data):
+    def _do_function_extract(self, extract_data):
         '''Run a function on the build that produces a file to upload'''
-        import mimetypes
         import os.path
         
         f_name = extract_data['function']
         
         f = getattr(self.bundle, f_name)
     
-        
-        file_ = f()
-        
-        base, ext = os.path.splitext(file_)
-        mimetypes.init()
-        
+        file_ = f(extract_data,file_name=extract_data.get('name', f_name))        
 
-        re = self.api.add_file_resource(package, file_, 
-                                name=os.path.basename(file_),
-                                description=extract_data['description'],
-                                content_type = mimetypes.types_map[ext]
-                                )
-        
-        self.bundle.log("  Done. {} ".format(re['id']))
-               
-    def _do_query_extract(self, package, extract_data):
+        return file_
+
+                       
+    def _do_query_extract(self,  extract_data):
         """Extract a CSV file and  upload it to CKAN"""
         import tempfile
         import uuid
         import os
 
-        p = extract_data['partition']
+        p = extract_data['_partition'] # Set in _make_partition_dict
      
-     
-        f  = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()) )
-    
-        self.bundle.log("Extracting {} with  {}".format(p.identity.name, extract_data['query']))
-        self.bundle.log("  To: {}: {}".format(extract_data['name'], extract_data['title']))
-            
-        petlf.fromsqlite3(p.database.path, extract_data['query'] ).tocsv(f) #@UndefinedVariable
+        file_name = extract_data.get('name', None)
+        
+        if file_name:
+            file_ = self.bundle.filesystem.path('extracts', file_name)
+        else:
+            file_ =  os.path.join(tempfile.gettempdir(), str(uuid.uuid4()) )
 
-        re = self.api.add_file_resource(package, f, name= extract_data['name'],  
-                                  description=extract_data['description'],
-                                 content_type = "text/csv", format='csv')
+    
+        self.bundle.log("Extracting {} to {}".format(extract_data['title'],file_))
+        #self.bundle.log("  Dict: {}".format(extract_data))  
+          
+        petlf.fromsqlite3(p.database.path, extract_data['query'] ).tocsv(file_) #@UndefinedVariable
+  
+        return file_       
+    
+    def _send(self, package, extract_data, file_):
+        import os
+        import mimetypes
         
-        self.bundle.log("  Done. {} ".format(re['id']))
+        _, ext = os.path.splitext(file_)
+        mimetypes.init()
+        content_type = mimetypes.types_map.get(ext,None)  #@UndefinedVariable
         
-        os.remove(f)
+        try:
+            _,format = content_type.split('/')
+        except:
+            format = None
         
-        return re       
+        name = extract_data.get('name', os.path.basename(file_))
         
-    def _make_ge_dict(self, p, extract, each):
+        
+        r = self.api.add_file_resource(package, file_, 
+                            name=name,
+                            description=extract_data['description'],
+                            content_type = content_type, 
+                            format=format
+                            )
+        
+        
+        return r
+        
+    def _make_partition_dict(self, p):
         '''Return a dict that includes the fields from the extract expanded for
         the values of each and the partition'''
         
@@ -144,21 +163,10 @@ class Repository(object):
         except:
             qd_part = {'p_table' : '','p_space' : '', 'p_time' :'','p_grain' : ''}
             
-            
-        qd = dict(qd.items()+ qd_part.items())
+        qd =  dict(qd.items()+ qd_part.items())
+        qd['_partition'] = p
 
-        for k,v in each.items():
-            qd[k] = v
-        
-        r = qd
-        
-        r['partition'] = p
-        r['query'] = extract.get('query','').format(**qd)
-        r['title'] = extract.get('title','').format(**qd)
-        r['description'] = extract.get('description','').format(**qd)
-        r['name'] = extract.get('name','').format(**qd)
-        
-        return r
+        return qd
     
     def _expand_each(self, each):
         '''Generate a set of dicts from the cross product of each of the
@@ -180,7 +188,6 @@ class Repository(object):
         # multi dimensional iteration over them. 
         # This is essentially a cross-product, where out <- out X dim(i)
 
-        import pprint
         out = []
         for i,dim in enumerate(each):
             if i == 0:
@@ -194,10 +201,10 @@ class Repository(object):
 
         return out
         
+
+        
     def _expand_partitions(self, partition_name='any', for_=None):
         '''Generate a list of partitions to apply the extract process to. '''
-
-
 
         if partition_name == 'any':
             partitions = [p for p in self.partitions]
@@ -205,9 +212,7 @@ class Repository(object):
         else:
             partition = self.partitions.get(partition_name)
             partitions = [partition]
-            
-        
-            
+
         out = []
          
         if not for_:
@@ -217,59 +222,100 @@ class Repository(object):
          
             try:
                 self.bundle.log("Testing: {} ".format(partition.identity.name))
-                self.eval_for_expr(for_, True)
-                if eval(for_):  
-                    out.append(partition)
+                if self._validate_for_expr(for_, True):
+                    if eval(for_):  
+                        out.append(partition)
             except Exception as e:
                 self.bundle.error("Error in evaluting for '{}' : {} ".format(for_, e))
           
         return out
+         
+    def _sub(self, dict):
+        dict['query'] = dict.get('query','').format(**dict)
+        dict['title'] = dict.get('title','').format(**dict)
+        dict['description'] = dict.get('description','').format(**dict)
+        dict['name'] = dict.get('name','').format(**dict)
+        
+        return dict
+
+ 
             
     def generate_extracts(self):
         """Generate dicts that have the data for an extract, along with the 
         partition, query, title and description """
+        import collections
+        from databundles.util import toposort
+        
         ext_config = self.extracts
 
-        for extract in ext_config:
+        # Order the extracts to satisfy dependencies. 
+        graph = {}
+        for key,extract in ext_config.items():
+            graph[key] = set(extract.get('depends',[]))
+     
+        exec_list = []
+        for group in toposort(graph):
+            exec_list.extend(group)
+            
+
+        # now can iterate over the list. 
+        for key in exec_list:
+            extract = ext_config[key]
+            extract['_name'] = key
             for_ = extract.get('for', "'True'")
             function = extract.get('function', False)
             each = extract.get('each', [])
             p_id = extract.get('partition', False)
-            
+            eaches = self._expand_each(each)
+  
+            # This part is a awful hack and should be refactored
             if function:
-                yield extract
-            
-            if not p_id:
-                continue
+                for data in eaches:  
+                    yield self._sub(dict(extract.items() + data.items()))
 
-            partitions = self._expand_partitions(p_id, for_)
-            datasets= self._expand_each(each)
-
-            for partition in partitions:
-                for data in datasets:     
-                   
-                    qe = self._make_ge_dict(partition, extract, data)
-        
-                    yield qe
+            elif p_id:       
+                partitions = self._expand_partitions(p_id, for_)
+    
+                for partition in partitions:
+                    p_dict = self._make_partition_dict(partition)
+                    for data in eaches:     
+                        yield self._sub(dict(p_dict.items()+extract.items() + 
+                                             data.items() ))
               
     def store_document(self, package, config):
         import re, string
 
         id =  re.sub('[\W_]+', '-',config['title'])
         
-        re = self.api.add_url_resource(package, 
+        r = self.api.add_url_resource(package, 
                                         config['url'], 
                                         config['title'],
-                                        description=config['description']
-                                        )
+                                        description=config['description'])
+        
+        return r
+          
+    def extract(self):
+        import os
+        
+        for extract_data in self.generate_extracts():
+            file_ = self._do_extract(extract_data)
+            if file_ and os.path.exists(file_):
+                self.bundle.log("Extracted: {}".format(file_))
+            else:
+                self.bundle.error("Extracted file {} does not exist".format(file_))
+       
+        return True
                     
     def submit(self): 
         """Create a dataset for the bundle, then add a resource for each of the
         extracts listed in the bundle.yaml file"""
         
         self.bundle.update_configuration()
+        from os.path import  basename
     
         ckb = self.api.update_or_new_bundle_extract(self.bundle)
+        
+        sent = set()
         
         # Clear out existing resources. 
         ckb['resources'] = []      
@@ -279,6 +325,14 @@ class Repository(object):
             self.store_document(ckb, doc)
 
         for extract_data in self.generate_extracts():
-            self._do_extract(ckb,  extract_data)
+
+            file_ = self._do_extract(extract_data)
+            if file_ not in sent:
+                r = self._send(ckb, extract_data,file_)
+                sent.add(file_)
+                url = r['ckan_url']
+                self.bundle.log("Submitted {} to {}".format(basename(file_), url))
+            else:
+                self.bundle.log("Already processed {}, not sending.".format(basename(file_)))
         
         return True

@@ -8,7 +8,7 @@ import os
 
 from databundles.identity import PartitionIdentity
 from sqlalchemy.orm.exc import NoResultFound
-from collections import namedtuple
+
         
 class Partition(object):
     '''Represents a bundle partition, part of the bundle data broken out in 
@@ -19,6 +19,7 @@ class Partition(object):
         self.record = record
         
         self._database =  None
+        self._hd5file = None
         self._tempfile_cache = {}
      
     def init(self):
@@ -85,6 +86,13 @@ class Partition(object):
             self._tempfile_cache[ckey] = tf
             return tf
       
+    @property
+    def hdf5file(self):
+        from  databundles.hdf5 import Hdf5File
+        if self._hd5file is None:
+            self._hd5file = Hdf5File(self)
+            
+        return self._hd5file
 
     @property
     def data(self):
@@ -142,33 +150,15 @@ class Partition(object):
         self.create_with_tables(tables=self.identity.table)
 
 
-    BoundingBox = namedtuple('BoundingBox', ['min_x', 'min_y','max_x', 'max_y'])
-
     @property
     def extents(self, where=None):
         '''Return the bounding box for the dataset. The partition must specify 
         a table
         
         '''
-        # Find the extents of the data and figure out the offsets for the array. 
-        e=self.database.connection.execute
-        table = self.table.name
+        import geo.util
+        return geo.util.extents(self.database,self.table.name, where=where)
         
-        if where:
-            where = "WHERE "+where
-        else:
-            where = ''
-        
-        r = e("""SELECT min(_db_lon) as min_x, min(_db_lat) as min_y, 
-                max(_db_lon) as max_x, max(_db_lat) as max_y from street_lights {}"""
-                .format(where)
-            ).first()
-              
-        # Convert to a regular tuple 
-        o = self.BoundingBox(r[0], r[1],r[2],r[3])
-        
-        return o
-
 
     def __repr__(self):
         return "<partition: {}>".format(self.name)
@@ -414,6 +404,7 @@ class Partitions(object):
             space = kwargs.get('space', None)
             table = kwargs.get('table', None)
             grain = kwargs.get('grain', None)
+            name = kwargs.get('name', None)
         elif isinstance(pid, Identity):
             time = pid.time
             space = pid.space

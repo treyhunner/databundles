@@ -103,6 +103,7 @@ class Identity(object):
         """Return the parts of the name as a list, for additional processing. """
         from databundles.dbexceptions import ConfigurationError
         name_parts = [];
+    
      
         if o is None:
             raise ConfigurationError('name_parts must be given an object')  
@@ -117,19 +118,19 @@ class Identity(object):
         try: 
             if o.dataset is None:
                 raise ConfigurationError('Dataset is None ')  
-            name_parts.append(o.dataset)
+            name_parts.append(str(o.dataset))
         except Exception as e:
             raise ConfigurationError('Missing identity.dataset: '+str(e))  
         
         try: 
             if o.subset is not None:
-                name_parts.append(o.subset)
+                name_parts.append(str(o.subset))
         except Exception as e:
             pass
         
         try: 
             if o.variation is not None:
-                name_parts.append(o.variation)
+                name_parts.append(str(o.variation))
         except Exception as e:
             pass
         

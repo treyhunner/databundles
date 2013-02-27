@@ -1,5 +1,5 @@
-PyYAML==3.10
-SQLAlchemy==0.7.9
-beautifulsoup4==4.1.3
-petl==0.11.1
+PyYAML
+SQLAlchemy
+beautifulsoup4
+petl
 decorator

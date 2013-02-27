@@ -144,8 +144,9 @@ class LibraryDb(object):
         self._session = None
         self._engine = None
         
-        self.logger = logging.getLogger(__name__)
-        
+        self.logger = databundles.util.get_logger(__name__)
+        import logging
+        self.logger.setLevel(logging.INFO) 
         
     @property
     def engine(self):
@@ -788,6 +789,7 @@ class Library(object):
         self.remote = remote
         self.sync = sync
         self.api = None
+        self.bundle = None # Set externally in bundle.library()
 
         if not self.cache:
             raise ConfigurationError("Must specify library.cache for the library in bundles.yaml")
@@ -957,6 +959,30 @@ class Library(object):
     def find(self, query_command):
         return self.database.find(query_command)
         
+    def dep(self,name):
+        """"Bundle version of get(), which uses a key in the 
+        bundles configuration group 'dependencies' to resolve to a name"""
+        
+        deps = self.bundle.config.group('dependencies')
+        
+        if not deps:
+            raise ConfigurationError("Configuration has no 'dependencies' group")
+        
+        bundle_name = deps.get(name, False)
+        
+        if not bundle_name:
+            raise ConfigurationError("No dependency names '{}'".format(name))
+        
+        b = self.get(bundle_name)
+        
+        if not b:
+            self.bundle.error("Failed to get key={}, id={}".format(name, bundle_name))
+            return False
+        
+        return b
+
+
+        
     def put_file(self, identity, file_path, state='new'):
         '''Store a dataset or partition file, without having to open the file
         to determine what it is, by using  seperate identity''' 
@@ -1020,30 +1046,35 @@ class Library(object):
     def rebuild(self):
         '''Rebuild the database from the bundles that are already installed
         in the repositry cache'''
-    
+  
         from databundles.bundle import DbBundle
    
         bundles = []
-        for r,d,f in os.walk(self.cache): #@UnusedVariable
+        for r,d,f in os.walk(self.cache.cache_dir): #@UnusedVariable
             for file_ in f:
-                if file.endswith(".db"):
-                    b = DbBundle(os.path.join(r,file_))
-                    # This is a fragile hack -- there should be a flag in the database
-                    # that diferentiates a partition from a bundle. 
-                    f = os.path.splitext(file_)[0]
-
-                    if b.identity.name.endswith(f):
-                        bundles.append(b)
+                
+                if file_.endswith(".db"):
+                    try:
+                        b = DbBundle(os.path.join(r,file_))
+                        # This is a fragile hack -- there should be a flag in the database
+                        # that diferentiates a partition from a bundle. 
+                        f = os.path.splitext(file_)[0]
+    
+                        if b.db_config.get_value('info','type') == 'bundle':
+                            self.logger.info("Queing: {} from {}".format(b.identity.name, file_))
+                            bundles.append(b)
+                            
+                    except Exception as e:
+                        self.logger.error('Failed to process {} : {} '.format(file_, e))
 
         self.database.clean()
         
         for bundle in bundles:
+            self.logger.info('Installing: {} '.format(bundle.identity.name))
             self.database.install_bundle(bundle)
             
-            for partition in bundle.partitions.all:
-                partition.library = self
-                self.database.install_bundle(partition)
-            
+    
+        
         self.database.commit()
         return bundles
   

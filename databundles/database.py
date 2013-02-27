@@ -206,54 +206,6 @@ class TempFile(object):
                 del self.db._tempfiles[hk]
   
 
-class HD5File(object):
-    
-    def __init__(self, bundle, db, suffix=None):
-
-        self.bundle = bundle
-
-        self.file = None
-        self.suffix = suffix
-
-        self._path = str(db.path).replace('.db','.h5')
-        self._file = None
-
-    def create_table(self):
-        pass
-
-    def table(self, table_name, mode='a', expected=None):
-        import tables #@UnresolvedImport
-        from databundles.orm import Column
-
-        self._file = tables.openFile(self._path, mode = mode)
-        
-        try:
-            return self._file.root._f_getChild(table_name)
-        except tables.NoSuchNodeError:
-
-            tdef = self.bundle.schema.table(table_name)
-            descr = {}
-            for i, col in enumerate(tdef.columns):
-                if col.datatype == Column.DATATYPE_INTEGER64:
-                    descr[str(col.name)] = tables.Int64Col(pos=i) #@UndefinedVariable
-                    
-                elif col.datatype == Column.DATATYPE_INTEGER:
-                    descr[str(col.name)] = tables.Int32Col(pos=i) #@UndefinedVariable
-                    
-                elif col.datatype == Column.DATATYPE_REAL:
-                    descr[str(col.name)] = tables.Float32Col(pos=i) #@UndefinedVariable
-                    
-                elif col.datatype == Column.DATATYPE_TEXT:
-                    descr[str(col.name)] = tables.StringCol(pos=i, itemsize= col.width if col.width else 50) #@UndefinedVariable
-                else:
-                    raise ValueError('Unknown datatype: '+col.datatype)
-
- 
-            table = self._file.createTable(self._file.root, table_name, descr, expectedrows=expected)
-        
-            return table
-        
-
 class DbmFile(object):
     
     def __init__(self, bundle, db, table=None, suffix=None):
@@ -314,7 +266,8 @@ class DbmFile(object):
         #print key,'<-',val
         self._file[str(key)] =  str(val)
     
-  
+
+ 
 class Database(object):
     '''Represents a Sqlite database'''
 
@@ -363,7 +316,6 @@ class Database(object):
         
         self._tempfiles = {}
         self._dbmfiles = {}
-        self._hd5file = None
        
     @property
     def name(self):
@@ -443,12 +395,7 @@ class Database(object):
         return self._tempfiles[hk]
 
 
-    def hd5file(self):
-        
-        if self._hd5file is None:
-            self._hd5file = HD5File(self.bundle, self)
-            
-        return self._hd5file
+
     
     def dbm(self,table=None, suffix=None):
         
@@ -815,6 +762,11 @@ class Database(object):
         self.connection.execute(q)
   
 
+    def characterize(self, table, column):
+        '''Return information about a column in a table'''
+        raise NotImplemented
+        q = '''select count(type) as count, type from incidents group by type order by count desc'''
+
 class PartitionDb(Database):
     '''a database for a partition file. Partition databases don't have a full schema
     and can load tables as they are referenced, by copying them from the prototype. '''
@@ -887,6 +839,9 @@ class BundleDb(Database):
     def __init__(self, path):
       
         super(BundleDb, self).__init__(None, path)  
+
+
+
 
 def _pragma_on_connect(dbapi_con, con_record):
     '''ISSUE some Sqlite pragmas when the connection is created'''

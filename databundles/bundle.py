@@ -88,7 +88,7 @@ class Bundle(object):
             
         l.logger = self.logger
         l.database.logger = self.logger
-        
+        l.bundle = self
         return l
 
     @library.setter
@@ -339,6 +339,10 @@ class BuildBundle(Bundle):
         return True
 
     def prepare(self):
+        
+        if not self.database.exists():
+            self.database.create()
+        
         return True
     
     def post_prepare(self):
@@ -411,6 +415,7 @@ class BuildBundle(Bundle):
     
     ### Submit the package to the repository
     def extract(self):
+        self.repository.extract()
         return True
     
     def post_extract(self):

@@ -482,6 +482,25 @@ class BundleFilesystem(Filesystem):
 
         return out_file
 
+    def download_shapefile(self, url):
+        """Downloads a shapefile, unzips it, and returns the .shp file path"""
+        import os
+        import re
+                
+        zip_file = self.download(url)
+        
+        if not zip_file or not os.path.exists(zip_file):
+            raise Exception("Failed to download: {} ".format(url))
+            
+        for file_ in self.unzip_dir(zip_file, 
+                                regex=re.compile('.*\.shp$')): pass # Should only be one
+        
+        if not file_ or not os.path.exists(file_):
+            raise Exception("Failed to unzip {} and get .shp file ".format(zip_file))
+        
+        return file_
+        
+
     def get_url(self,source_url, create=False):
         '''Return a database record for a file'''
     

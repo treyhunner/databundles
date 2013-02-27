@@ -97,7 +97,8 @@ def library_command(args, rc):
         if not rel_path:
             print "{}: Not found".format(args.term)
         else:
-            print "Path:      ",rel_path
+            print "Rel Path:  ",rel_path
+            print "Abs Path:  ",os.path.join(l.cache.cache_dir, rel_path)
             print "Dataset:   ",dataset
             print "Partition: ",partition
             print "Is Local:  ",is_local
