@@ -94,6 +94,7 @@ def library_command(args, rc):
      
         rel_path, dataset, partition, is_local = l.get_ref(args.term)
         
+     
         if not rel_path:
             print "{}: Not found".format(args.term)
         else:
@@ -103,6 +104,12 @@ def library_command(args, rc):
             print "Partition: ",partition
             print "Is Local:  ",is_local
         
+
+        if args.open:
+            abs_path = os.path.join(l.cache.cache_dir, rel_path)
+            print "\nOpening: {}\n".format(abs_path)
+
+            os.execlp('sqlite3','sqlite3',abs_path )
 
     else:
         print "Unknown subcommand"
@@ -228,7 +235,8 @@ def main():
     sp = asp.add_parser('get', help='Search for the argument as a bundle or partition name or id')
     sp.set_defaults(subcommand='get')   
     sp.add_argument('term', type=str,help='Query term')
-    
+    sp.add_argument('-o','--open',  default=False, action="store_true",  help='Open the database with sqlites')
+
  
     #
     # ckan Command

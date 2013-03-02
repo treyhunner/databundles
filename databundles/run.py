@@ -103,9 +103,26 @@ class RunConfig(object):
 
 def run(argv, bundle_class):
 
+    
     b = bundle_class()
-    args = b.parse_args(argv)
-   
+    args =  b.parse_args(argv)
+
+    if hasattr(args,'clean') and args.clean:
+        # If the clean arg is set, then we need to run  clean, and all of the
+        # earlerier build phases. 
+        ph = {
+              'meta': ['clean'],
+              'prepare': ['clean'],
+              'build' : ['clean', 'prepare'],
+              'install' : ['clean', 'prepare', 'build'],
+              'submit' : ['clean', 'prepare', 'build'],
+              'extract' : ['clean', 'prepare', 'build']
+              }
+
+        phases = ph.get(args.command,[]) + [args.command]
+    else:
+        phases = args.command
+
     if args.test:
         print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
         print "!!!!!! In Test Mode !!!!!!!!!!"
@@ -113,18 +130,18 @@ def run(argv, bundle_class):
         import time
         time.sleep(1)
 
-    if 'info' in args.phases:
+    if 'info' in phases:
         b.log("----Info ---")
         b.log("Name: "+b.identity.name)
         
         for partition in b.partitions:
             b.log("Partition: "+partition.name)
         
-    if 'updateconfig' in args.phases:
+    if 'updateconfig' in phases:
         b.log("Update Config")
         b.update_configuration()
 
-    if 'clean' in args.phases:
+    if 'clean' in phases:
         b.log("---- Cleaning ---")
         b.clean()
         
@@ -132,7 +149,7 @@ def run(argv, bundle_class):
     # that is doenloaded from a website, or a specificatoin for a schema. 
     # The meta phase does not require a database, and should write files
     # that only need to be done once. 
-    if 'meta' in args.phases:
+    if 'meta' in phases:
         if b.pre_meta():
             b.log("---- Meta ----")
             if b.meta():
@@ -147,7 +164,7 @@ def run(argv, bundle_class):
         b.log("---- Skipping Meta ---- ") 
                
         
-    if 'prepare' in args.phases:
+    if 'prepare' in phases:
         if b.pre_prepare():
             b.log("---- Preparing ----")
             if b.prepare():
@@ -161,7 +178,7 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping prepare ---- ") 
         
-    if 'build' in args.phases:
+    if 'build' in phases:
         
         if b.run_args.test:
             print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -183,7 +200,7 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Build ---- ") 
     
-    if 'install' in args.phases:
+    if 'install' in phases:
         if b.pre_install():
             b.log("---- Install ---")
             if b.install():
@@ -196,7 +213,7 @@ def run(argv, bundle_class):
     else:
         b.log("---- Skipping Install ---- ")      
      
-    if 'extract' in args.phases:
+    if 'extract' in phases:
         if b.pre_extract():
             b.log("---- Extract ---")
             if b.extract():
@@ -211,7 +228,7 @@ def run(argv, bundle_class):
      
     # Submit puts information about the the bundles into a catalog
     # and may store extracts of the data in the catalog. 
-    if 'submit' in args.phases:
+    if 'submit' in phases:
         if b.pre_submit():
             b.log("---- Submit ---")
             if b.submit():
@@ -223,20 +240,34 @@ def run(argv, bundle_class):
             b.log("---- Skipping Submit ---- ")
     else:
         b.log("---- Skipping Submit ---- ")            
-                
-    if 'test' in args.phases:
+      
+    if 'run' in phases:
+        #
+        # Run a method on the bundle. Can be used for testing and development. 
+        try:
+            f = getattr(b,str(args.method))
+        except AttributeError as e:
+            b.error("Could not find method named '{}': {} ".format(args.method, e))
+            b.error("Available methods : {} ".format(dir(b)))
+      
+            return
+            
+        f()
+
+
+    if 'test' in phases:
         ''' Run the unit tests'''
         import nose, unittest, sys
 
-        dir = b.filesystem.path('test') #@ReservedAssignment
+        dir_ = b.filesystem.path('test') #@ReservedAssignment
                          
                    
         loader = nose.loader.TestLoader()
-        tests =loader.loadTestsFromDir(dir)
+        tests =loader.loadTestsFromDir(dir_)
         
         result = unittest.TextTestResult(sys.stdout, True, 1) #@UnusedVariable
         
-        print "Loading tests from ",dir
+        print "Loading tests from ",dir_
         for test in tests:
             print "Running ", test
             test.context.bundle = b

@@ -7,6 +7,7 @@ Revised BSD License, included in this distribution as LICENSE.txt
 
 import h5py
 import os.path
+from numpy import * 
 
 class Hdf5File(h5py.File):
     
@@ -22,20 +23,65 @@ class Hdf5File(h5py.File):
         
         self._path = os.path.join(self.partition.bundle.database.root_path, *partition_path)+ '.h5'
 
+
+    def open(self):
+        dir_ = os.path.dirname(self._path)
+        if not os.path.exists(dir_):
+            os.makedirs(dir_)
+
         super(Hdf5File, self).__init__(self._path)  
+        
+    def exists(self):
+        import os.path
+        
+        return os.path.exists(self._path)
+        
+    @property
+    def path(self):
+        return self._path
 
+    def put_geo(self,name, a, aa):
+        ''''''
+        import json
 
-    def geo(self,name):
-        '''Return a dataset that can be used as a geo referenced raster'''
+        group = self.require_group("geo")
+        
+        if name in group:
+            del group[name]
+        
+        ds = group.create_dataset(name, data=a, compression=9)
+        
+        ds.attrs['analysis-area'] = json.dumps(aa.__dict__)
+     
+        try:
+            if a.mask is not ma.nomask:
+                ds.attrs['nodata'] = a.fill_value
+        except:
+            pass
+
+    def get_geo(self, name):
+        import json
+        from databundles.geo.analysisarea import AnalysisArea
+
+        group = self.require_group("geo")
+        
+        ds = group[name]
+        
+        aa = AnalysisArea(**(json.loads(ds.attrs['analysis-area'])))
+        
+        return ds,aa
+
+    def list_geo(self):
+        return self.require_group("geo").keys()
 
     def table(self, table_name, mode='a', expected=None):
         import tables #@UnresolvedImport
         from databundles.orm import Column
 
-        self._file = tables.openFile(self._path, mode = mode)
-        
+        raise NotImplemented()
+
         try:
-            return self._file.root._f_getChild(table_name)
+            return self.file.root._f_getChild(table_name)
         except tables.NoSuchNodeError:
 
             tdef = self.bundle.schema.table(table_name)
@@ -56,7 +102,7 @@ class Hdf5File(h5py.File):
                     raise ValueError('Unknown datatype: '+col.datatype)
 
  
-            table = self._file.createTable(self._file.root, table_name, descr, expectedrows=expected)
+            table = self._file.createTable(self.file.root, table_name, descr, expectedrows=expected)
         
             return table
         

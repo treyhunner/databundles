@@ -167,58 +167,138 @@ class BuildBundle(Bundle):
         self.logid = base64.urlsafe_b64encode(os.urandom(6)) 
         self.ptick_count = 0;
 
-    def configure_arg_parser(self):
-        import argparse
-        
-        parser = argparse.ArgumentParser(prog='python bundle.py',
-                                         description='Run the bunble build process')
-        
-        # These are args that Aptana / PyDev adds to runs. 
-        parser.add_argument('--port', default=None, help="Debugger arg") 
-        parser.add_argument('--verbosity', default=None, help="Debugger arg") 
-                
-        parser.add_argument('phases', metavar='N', type=str, nargs='*',
-                       help='Build phases to run')
-        
-        parser.add_argument('-r','--reset',  default=False, action="store_true",  
-                            help='')
-        
-        parser.add_argument('-t','--test',  default=False, action="store",  
-                            nargs='?', type = int, help='Enable bundle-specific test behaviour')
-    
-        
-        parser.add_argument('-b','--build_opt', action='append', help='Set options for the build phase')
-        
-        parser.add_argument('-m','--multi', default=False, action="store",  
-                            nargs='?', type = int, help='Run the build process on multiple processors')
-        
-        return parser
+
 
     def parse_args(self,argv):
 
-        parser = self.configure_arg_parser()
+        self.run_args = self.args_parser.parse_args(argv)
+            
+        return self.run_args
     
-        args = parser.parse_args(argv)
+    @property
+    def args_parser(self):
+    
+        import argparse
+        import multiprocessing
         
-        if args.build_opt is None:
-            args.build_opt = []
-            
+        parser = argparse.ArgumentParser(prog='dbundle',
+                                         description='Manage a DataBundle')
         
-        if len(args.phases) ==  0 or (len(args.phases) == 1 and args.phases[0] == 'all'):    
-            args.phases = ['prepare','build']
-      
-            
-        if args.test is None: # If not specified, is False. If specified with not value, is None
-            args.test = 1
-            
+        # Commands: meta, prepare, build, install, extract, submit, 
+        
+        #parser.add_argument('command', nargs=1, help='Create a new bundle') 
+     
+        parser.add_argument('-c','--config', default=None, action='append', help="Path to a run config file") 
+        parser.add_argument('-v','--verbose', default=None, action='append', help="Be verbose") 
+        parser.add_argument('-r','--reset',  default=False, action="store_true",  help='')
+        parser.add_argument('-t','--test',  default=False, action="store_true", help='Enable bundle-specific test behaviour')
+        parser.add_argument('--single-config', default=False,action="store_true", help="Load only the config file specified")
+    
+        # These are args that Aptana / PyDev adds to runs. 
+        parser.add_argument('--port', default=None, help="PyDev Debugger arg") 
+        parser.add_argument('--verbosity', default=None, help="PyDev Debugger arg") 
+    
+        cmd = parser.add_subparsers(title='commands', help='command help')
+        
+        #
+        # Example Command
+        #
+#        command_p = cmd.add_parser('example', help='Example for the code for a complete command')
+#        command_p.set_defaults(command='example')   
+#        
+#        command_p.add_argument('-a','--aaa', help='First example argument') 
+#        command_p.add_argument('-b','--bbb', help='Second example argument') 
+#       
+#        asp = command_p.add_subparsers(title='example sub-commands', help='Commands for exampling examples')
+#    
+#        sp = asp.add_parser('subcommand', help='Example subcommand')
+#        sp.set_defaults(subcommand='subcommand')
+#     
+#        sp.add_argument('-a','--aaa', help='First sub-example argument') 
+#        sp.add_argument('-b','--bbb', help='Second sub-example argument') 
+       
+ 
+        command_p = cmd.add_parser('config', help='Operations on the bundle configuration file')
+        command_p.set_defaults(command='config')
+           
+        asp = command_p.add_subparsers(title='Config subcommands', help='Subcommand for operations on a bundl file')
+    
+        sp = asp.add_parser('rewrite', help='Re-write the bundle file, updating the formatting')     
+       
+        #
+        # Clean Command
+        #
+        command_p = cmd.add_parser('clean', help='Return bundle to state before build, prepare and extracts')
+        command_p.set_defaults(command='clean')   
+       
+        #
+        # Meta Command
+        #
+        command_p = cmd.add_parser('meta', help='Build or install metadata')
+        command_p.set_defaults(command='meta')   
+        
+        command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')     
+        
+        #action='append_const', const='meta', dest='command', 
+                                   
+        
+        #
+        # Prepare Command
+        #
+        command_p = cmd.add_parser('prepare', help='Prepare by creating the database and schemas')
+        command_p.set_defaults(command='prepare')   
+        
+        command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')
+        
+        #
+        # Build Command
+        #
+        command_p = cmd.add_parser('build', help='Build the data bundle and partitions')
+        command_p.set_defaults(command='build')   
+        command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')
+        
+        command_p.add_argument('-o','--opt', action='append', help='Set options for the build phase')
 
-        if args.multi is None: # If not specified, is False. If specified with not value, is None
-            import multiprocessing
-            args.multi = multiprocessing.cpu_count()
-
-        self.run_args = args
+        
+        command_p.add_argument('-m','--multi',  type = int,  nargs = '?',
+                            default = None,
+                            const = multiprocessing.cpu_count(),
+                            help='Run the build process on multiple processors, if the build method supports it')
+        
+        #
+        # Extract Command
+        #
+        command_p = cmd.add_parser('extract', help='Extract data into CSV and TIFF files. ')
+        command_p.set_defaults(command='extract')   
+        command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')
+        
+        #
+        # Submit Command
+        #
+        command_p = cmd.add_parser('submit', help='Submit extracts to the repository ')
+        command_p.set_defaults(command='submit')    
+        command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')   
+        command_p.add_argument('-r','--repo',  help='Name of the repository, defined in the config file')
             
-        return args
+        #
+        # Install Command
+        #
+        command_p = cmd.add_parser('install', help='Install bundles and partitions to the library')
+        command_p.set_defaults(command='install')  
+        command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')
+        command_p.add_argument('-l','--library',  help='Name of the library, defined in the config file')
+             
+        
+        #
+        # run Command
+        #
+        command_p = cmd.add_parser('run', help='Run a method on the bundle')
+        command_p.set_defaults(command='run')               
+        command_p.add_argument('method', metavar='Method', type=str, 
+                       help='Name of the mathod to run')    
+               
+               
+        return parser
 
     @property
     def database(self):

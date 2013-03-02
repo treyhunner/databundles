@@ -11,7 +11,7 @@ BoundingBox = namedtuple('BoundingBox', ['min_x', 'min_y','max_x', 'max_y'])
 
 def extents(database, table_name, where=None, lat_col='_db_lat', lon_col='_db_lon'):
 
-    '''Return the bounding box for the dataset. The partition must specify 
+    '''Return the bounding box for a table in the database. The partition must specify 
     a table
     
     '''
