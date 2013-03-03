@@ -11,7 +11,6 @@ class Repository(object):
     data extracts. classdocs
     '''
 
-
     def __init__(self, bundle, repo_name='default'):
         '''Create a new repository interface
         '''  
@@ -21,23 +20,39 @@ class Repository(object):
         self.bundle = bundle 
         self.extracts = self.bundle.config.group('extracts')
         self.partitions = self.bundle.partitions   
-        
+        self.repo_name = repo_name
+        self._api = None
+   
+    @property
+    def api(self):
+        if not self._api:
+            self.set_api()
+            
+        return self._api
+
+    def set_api(self): 
+        import databundles.client.ckan
         repo_group = self.bundle.config.group('repository')
-        if not repo_group.get(repo_name): 
-            raise ConfigurationError("'repository' group in configure either nonexistent"+
-                                     " or missing {} sub-group ".format(repo_name))
-
-        repo_config = repo_group.get(repo_name)
         
-        self.api = databundles.client.ckan.Ckan( repo_config.url, repo_config.key)   
-
+        if not repo_group.get(self.repo_name): 
+            raise ConfigurationError("'repository' group in configure either nonexistent"+
+                                     " or missing {} sub-group ".format(self.repo_name))
+        
+        repo_config = repo_group.get(self.repo_name)
+        
+        self._api =  databundles.client.ckan.Ckan( repo_config.url, repo_config.key)   
+        
+        return self.api
         
    
     def _validate_for_expr(self, astr,debug=False):
         """Check that an expression is save to evaluate"""
+        import os
         import ast
         try: tree=ast.parse(astr)
-        except SyntaxError: raise ValueError(astr)
+        except SyntaxError: raise ValueError(
+                    "Could not parse code expression : \"{}\" ".format(astr)+
+                    " ")
         for node in ast.walk(tree):
             if isinstance(node,(ast.Module,
                                 ast.Expr,
@@ -49,7 +64,10 @@ class Repository(object):
                                 ast.Load,
                                 ast.BinOp,
                                 ast.Compare,
-                                ast.Eq
+                                ast.Eq,
+                                ast.Import,
+                                ast.alias,
+                                ast.Call
                                 )): 
                 continue
             if (isinstance(node,ast.Call)
@@ -61,15 +79,19 @@ class Repository(object):
                 print(node)
                 for attrname in attrs:
                     print('    {k} ==> {v}'.format(k=attrname,v=getattr(node,attrname)))
-            raise ValueError("Bad node {} in {}".format(node,astr))
+            raise ValueError("Bad node {} in {}. This code is not allowed to execute".format(node,astr))
         return True
 
-    def _do_extract(self, extract_data):
-
+    def _do_extract(self, extract_data, force=False):
+        import os # For the eval @UnusedImport
+        
         done_if = extract_data.get('done_if',False)
-        if done_if and self._validate_for_expr(done_if, True):
-            if eval(done_if):  
-                return True
+ 
+        if not force and done_if and self._validate_for_expr(done_if, True):
+            if eval(done_if): 
+                self.bundle.log("For extract {}, done_if ( {} ) evaluated true"
+                         .format(extract_data['_name'], done_if)) 
+                return extract_data['path']
 
         if extract_data.get('function',False):
             file_ = self._do_function_extract(extract_data)
@@ -89,7 +111,7 @@ class Repository(object):
         
         f = getattr(self.bundle, f_name)
     
-        file_ = f(extract_data,file_name=extract_data.get('name', f_name))        
+        file_ = f(extract_data)        
 
         return file_
 
@@ -230,19 +252,49 @@ class Repository(object):
           
         return out
          
-    def _sub(self, dict):
-        dict['query'] = dict.get('query','').format(**dict)
-        dict['title'] = dict.get('title','').format(**dict)
-        dict['description'] = dict.get('description','').format(**dict)
-        dict['name'] = dict.get('name','').format(**dict)
+    def _sub(self, data):
+        data['query'] = data.get('query','').format(**data)
+        data['title'] = data.get('title','').format(**data)
+        data['description'] = data.get('description','').format(**data)
+        data['name'] = data.get('name','').format(**data)
+        data['path'] = self.bundle.filesystem.path('extracts',format(data['name']))
+        data['done_if'] = data.get('done_if','').format(**data)
         
-        return dict
+        return data
 
  
+    
+    def dep_tree(self, root):
+        """Return the tree of dependencies rooted in the given nod name, 
+        excluding all other nodes"""
+        
+        graph = {}
+        for key,extract in self.extracts.items():
+            graph[key] = set(extract.get('depends',[]))
             
-    def generate_extracts(self):
+        def _recurse(node):
+            l = set([node])
+            for n in graph[node]:
+                l = l | _recurse(n)
+            
+            return l
+            
+        return  _recurse(root)
+            
+            
+    def generate_extracts(self, root=None):
         """Generate dicts that have the data for an extract, along with the 
-        partition, query, title and description """
+        partition, query, title and description
+        
+        :param root: The name of an extract group to use as the root of
+        the dependency tree
+        :type root: string
+        
+        If `root` is specified, it is a name of an extract group from the configuration,
+        and the only extracts performed will be the named extracts and any of its
+        dependencies. 
+    
+         """
         import collections
         from databundles.util import toposort
         
@@ -257,7 +309,11 @@ class Repository(object):
         for group in toposort(graph):
             exec_list.extend(group)
             
-
+        if root:
+            deps = self.dep_tree(root)
+            exec_list = [ n for n in exec_list if n in deps]
+         
+       
         # now can iterate over the list. 
         for key in exec_list:
             extract = ext_config[key]
@@ -294,21 +350,28 @@ class Repository(object):
         
         return r
           
-    def extract(self):
+    def extract(self, root=None, force=False):
         import os
-        
-        for extract_data in self.generate_extracts():
-            file_ = self._do_extract(extract_data)
-            if file_ and os.path.exists(file_):
+
+        for extract_data in self.generate_extracts(root=root):
+            file_ = self._do_extract(extract_data, force=force)
+            if file_ is True:
+                #self.bundle.log("Extract {} marked as done".format(extract_data['_name']))
+                pass
+            elif file_ and os.path.exists(file_):
                 self.bundle.log("Extracted: {}".format(file_))
             else:
                 self.bundle.error("Extracted file {} does not exist".format(file_))
        
         return True
                     
-    def submit(self): 
+    def submit(self,  root=None, force=False, repo=None): 
         """Create a dataset for the bundle, then add a resource for each of the
         extracts listed in the bundle.yaml file"""
+        
+        if repo:
+            self.repo_name = repo
+            self.set_api()
         
         self.bundle.update_configuration()
         from os.path import  basename
@@ -324,9 +387,9 @@ class Repository(object):
         for doc in self.bundle.config.group('about').get('documents',[]):
             self.store_document(ckb, doc)
 
-        for extract_data in self.generate_extracts():
+        for extract_data in self.generate_extracts(root=root):
 
-            file_ = self._do_extract(extract_data)
+            file_ = self._do_extract(extract_data, force=force)
             if file_ not in sent:
                 r = self._send(ckb, extract_data,file_)
                 sent.add(file_)

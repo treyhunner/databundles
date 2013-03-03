@@ -41,12 +41,17 @@ def unity_norm(a):
     return o
 
 def statistics(a):
+    
+    from numpy import sum as asum
+    
     r =  ("Min, Max: {},{}\n".format(amin(a), amax(a)) +
             "Range    : {}\n".format(ptp(a)) +
             "Average  : {}\n".format(average(a))+
             "Mean     : {}\n".format(mean(a))+
             "Median   : {}\n".format(median(a))+
-            "StdDev   : {}\n".format(std(a)))
+            "StdDev   : {}\n".format(std(a))+
+            "Sum      : {}\n".format(asum(a))
+            )
     
     try:
         # Try the method for masked arrays. The other method will not
@@ -80,11 +85,9 @@ def apply_copy(kernel, a, func=add, nodata=None, mult=True):
         z = izip(indx[0],indx[1])
         
     else:
-        indx = indices(a.shape)
-        z = izip(indx[0].ravel(), indx[1].ravel())
+        z = ndindex(a.shape)
         
     for row, col in z:
-        print row, col
         kernel.apply(o,Point(col,row), func, a[row,col])
         
     return o

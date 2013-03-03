@@ -283,7 +283,7 @@ class AnalysisArea(object):
         datasource.Destroy()
 
     
-    def write_geotiff(self, file_,  a, type_=GDT_Int16):
+    def write_geotiff(self, file_,  a, type_=GDT_Int16, nodata=0):
         """
         Args:
             file_: Name of file to write to
@@ -313,7 +313,7 @@ class AnalysisArea(object):
         
         out.SetProjection( self.srs.ExportToWkt() )
      
-        out.GetRasterBand(1).SetNoDataValue(0)
+        out.GetRasterBand(1).SetNoDataValue(nodata)
         out.GetRasterBand(1).WriteArray(a)
       
         return file_

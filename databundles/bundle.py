@@ -224,7 +224,7 @@ class BuildBundle(Bundle):
         asp = command_p.add_subparsers(title='Config subcommands', help='Subcommand for operations on a bundl file')
     
         sp = asp.add_parser('rewrite', help='Re-write the bundle file, updating the formatting')     
-       
+        sp.set_defaults(subcommand='rewrite')
         #
         # Clean Command
         #
@@ -271,15 +271,20 @@ class BuildBundle(Bundle):
         command_p = cmd.add_parser('extract', help='Extract data into CSV and TIFF files. ')
         command_p.set_defaults(command='extract')   
         command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')
-        
+        command_p.add_argument('-n','--name', default=None,action="store", help='Run only the named extract, and its dependencies')
+        command_p.add_argument('-f','--force', default=False,action="store_true", help='Ignore done_if clauses; force all extracts')
+
+
         #
         # Submit Command
         #
         command_p = cmd.add_parser('submit', help='Submit extracts to the repository ')
         command_p.set_defaults(command='submit')    
         command_p.add_argument('-c','--clean', default=False,action="store_true", help='Clean first')   
-        command_p.add_argument('-r','--repo',  help='Name of the repository, defined in the config file')
-            
+        command_p.add_argument('-r','--repo',  default=None, help='Name of the repository, defined in the config file')
+        command_p.add_argument('-n','--name', default=None,action="store", help='Run only the named extract, and its dependencies')
+        command_p.add_argument('-f','--force', default=False,action="store_true", help='Ignore done_if clauses; force all extracts')
+    
         #
         # Install Command
         #
@@ -482,7 +487,9 @@ class BuildBundle(Bundle):
     
     ### Submit the package to the repository
     def submit(self):
-        self.repository.submit()
+    
+        self.repository.submit(root=self.run_args.name, force=self.run_args.force, 
+                               repo=self.run_args.repo)
         return True
     
     def post_submit(self):
@@ -495,7 +502,7 @@ class BuildBundle(Bundle):
     
     ### Submit the package to the repository
     def extract(self):
-        self.repository.extract()
+        self.repository.extract(root=self.run_args.name, force=self.run_args.force)
         return True
     
     def post_extract(self):

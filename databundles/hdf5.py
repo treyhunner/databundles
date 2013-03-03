@@ -65,7 +65,10 @@ class Hdf5File(h5py.File):
 
         group = self.require_group("geo")
         
-        ds = group[name]
+        try:
+            ds = group[name]
+        except KeyError:
+            raise KeyError("Geo group doesn't have dataset named '{}'".format(name))
         
         aa = AnalysisArea(**(json.loads(ds.attrs['analysis-area'])))
         

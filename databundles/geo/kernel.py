@@ -68,7 +68,7 @@ class Kernel(object):
         
         print s
       
-    def apply(self,a, point, f, v):
+    def apply(self,a, point, f, v=None):
         """Apply the values in the kernel onto an array, centered at a point. 
         
         :param a: The array to apply to 
@@ -130,8 +130,14 @@ class ConstantKernel(Kernel):
         if size == 1:
             # Faster version for case of size  =1
             def _apply(a, point, f):  
-                v = a[point.y][point.x]
-                a[point.y][point.x] = f(v,self.value )
+                index_errors = 0
+                try:
+                    v = a[point.y][point.x]
+                    a[point.y][point.x] = f(v,self.value )
+                except IndexError:
+                    index_errors += 1
+                    
+                return index_errors
                 
             self.apply  = _apply
             
@@ -147,6 +153,7 @@ class GaussianKernel(Kernel):
         m = self.makeGaussian(size, fwhm)
 
         m /= sum(m) # Normalize the sum of all cells in the matrix to 1
+        
 
         self.offset = (m.shape[0] - 1) / 2 
         self.matrix = m

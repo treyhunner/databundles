@@ -100,12 +100,21 @@ class RunConfig(object):
         else:
             return stream
         
+def config_command(b, args):
+
+    if args.subcommand == 'rewrite':
+        b.log("Rewriting the config file")
+        b.update_configuration()
 
 def run(argv, bundle_class):
 
     
     b = bundle_class()
     args =  b.parse_args(argv)
+
+    if args.command == 'config':
+        config_command(b,args)
+        return
 
     if hasattr(args,'clean') and args.clean:
         # If the clean arg is set, then we need to run  clean, and all of the
@@ -136,10 +145,7 @@ def run(argv, bundle_class):
         
         for partition in b.partitions:
             b.log("Partition: "+partition.name)
-        
-    if 'updateconfig' in phases:
-        b.log("Update Config")
-        b.update_configuration()
+    
 
     if 'clean' in phases:
         b.log("---- Cleaning ---")
