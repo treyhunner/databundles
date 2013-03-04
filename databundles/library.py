@@ -62,6 +62,33 @@ def get_database(config=None,name='library'):
     
     return database
 
+
+def _get_library(config=None, name='default'):
+    
+    if name is None:
+        name = 'default'
+    
+    if config is None:
+        config = get_runconfig()
+    
+    sc = config.library.get(name,False)
+    
+    if not sc:
+        raise Exception("Failed to get library.{} config key ".format(name))
+    
+    filesystem = Filesystem(config)
+    cache = filesystem.get_cache(sc.filesystem, config)
+    
+    database = get_database(config, name=sc.database)
+    
+    remote = sc.get('remote',None)
+    
+    l =  Library(cache = cache,  
+                               database = database,
+                               remote = remote)
+    
+    return l
+    
 def get_library(config=None, name='default', reset=False):
     """Return a new `Library`, constructed from a configuration
     
@@ -80,28 +107,10 @@ def get_library(config=None, name='default', reset=False):
     
     if name is None:
         name = 'default'
-    
 
     if name not in libraries:
-        
-        if config is None:
-            config = get_runconfig()
-        
-        sc = config.library.get(name,False)
-
-        if not sc:
-            raise Exception("Failed to get library.{} config key ".format(name))
-     
-        filesystem = Filesystem(config)
-        cache = filesystem.get_cache(sc.filesystem, config)
-        
-        database = get_database(config, name=sc.database)
-
-        remote = sc.get('remote',None)
-
-        libraries[name] =  Library(cache = cache,  
-                                   database = database,
-                                   remote = remote)
+  
+        libraries[name] = _get_library(config, name)
     
     return libraries[name]
 
@@ -609,8 +618,10 @@ class LibraryDb(object):
         """Return all files in the database with the given state"""
         from databundles.orm import  File
         s = self.session
-        return s.query(File).filter(File.state == state).all()
-         
+        if state == 'all':
+            return s.query(File).all()
+        else:
+            return s.query(File).filter(File.state == state).all()
 
     def remove_file(self,path):
         pass
@@ -1103,7 +1114,7 @@ class Library(object):
         if file_ is not None:
             self.api.put(file_.ref, file_.path)
             file_.state = 'pushed'
-            #self.database.commit()
+            self.database.commit()
         else:
             for file_ in self.new_files:
                 self.push(file_)

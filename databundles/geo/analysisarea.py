@@ -35,7 +35,7 @@ def get_analysis_area(library, **kwargs):
     if not row:
         raise Exception("Failed to get analysis area record")
 
-    return AnalysisArea( row[6]+'/'+row.geoid , # 'name' is used twice, pick the first. 
+    return AnalysisArea( row[6],row.geoid , # 'name' is used twice, pick the first. 
                       row.eastmin, 
                       row.eastmax, 
                       row.northmin, 
@@ -102,7 +102,7 @@ class AnalysisArea(object):
     SCALE = 20
     MAJOR_GRID = 100 # All domensions must be even moduloo this. 
     
-    def __init__(self, name, 
+    def __init__(self, name, geoid,
                  eastmin, eastmax, northmin, northmax, 
                  lonmin, lonmax, latmin, latmax, 
                  srid, srswkt, scale=SCALE, **kwargs):
@@ -114,6 +114,7 @@ class AnalysisArea(object):
         
         """
         self.name = name
+        self.geoid = geoid
         self.eastmin = eastmin
         self.eastmax = eastmax
         self.northmin = northmin

@@ -133,8 +133,7 @@ class Repository(object):
 
     
         self.bundle.log("Extracting {} to {}".format(extract_data['title'],file_))
-        #self.bundle.log("  Dict: {}".format(extract_data))  
-          
+
         petlf.fromsqlite3(p.database.path, extract_data['query'] ).tocsv(file_) #@UndefinedVariable
   
         return file_       
@@ -253,16 +252,27 @@ class Repository(object):
         return out
          
     def _sub(self, data):
+        
+        if data.get('aa', False):
+            from databundles.geo.analysisarea import get_analysis_area
+
+            aa = get_analysis_area(self.bundle.library, **data['aa'])    
+        
+            aa_d  = dict(aa.__dict__)
+            aa_d['aa_name'] = aa_d['name']
+            del  aa_d['name']
+            
+            data = dict(data.items() + aa_d.items())
+
         data['query'] = data.get('query','').format(**data)
         data['title'] = data.get('title','').format(**data)
         data['description'] = data.get('description','').format(**data)
         data['name'] = data.get('name','').format(**data)
         data['path'] = self.bundle.filesystem.path('extracts',format(data['name']))
         data['done_if'] = data.get('done_if','').format(**data)
-        
+  
         return data
 
- 
     
     def dep_tree(self, root):
         """Return the tree of dependencies rooted in the given nod name, 
@@ -305,9 +315,13 @@ class Repository(object):
         for key,extract in ext_config.items():
             graph[key] = set(extract.get('depends',[]))
      
-        exec_list = []
-        for group in toposort(graph):
-            exec_list.extend(group)
+
+        if graph:
+            exec_list = []
+            for group in toposort(graph):
+                exec_list.extend(group)
+        else:
+            exec_list = ext_config.keys()
             
         if root:
             deps = self.dep_tree(root)

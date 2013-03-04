@@ -10,6 +10,7 @@ import os.path
 import yaml
 import shutil
 from databundles.run import  get_runconfig
+from databundles import __version__
 
 def bundle_command(args, rc):
   
@@ -47,15 +48,21 @@ def library_command(args, rc):
 
     l = library.get_library(name=args.name)
 
-
     if args.subcommand == 'init':
         print "Initialize Library"
         l.database.create()
 
     elif args.subcommand == 'server':
-        from databundles.server.main import  local_run
+        from databundles.server.main import production_run
 
-        local_run(rc, name = args.name, reloader=False)
+        def run_server(args, rc):
+            production_run(rc, name = args.name)
+        
+        if args.daemonize:
+            daemonize(run_server, args,  rc)
+        else:
+            production_run(rc, name = args.name)
+        
       
     elif args.subcommand == 'drop':
         print "Drop tables"
@@ -76,7 +83,13 @@ def library_command(args, rc):
         print "Cache: {}".format(l.cache.cache_dir)
         
     elif args.subcommand == 'push':
-        files_ = l.database.get_file_by_state('new')
+        
+        if args.force:
+            state = 'all'
+        else:
+            state = 'new'
+        
+        files_ = l.database.get_file_by_state(state)
         if len(files_):
             print "-- Pushing to {}".format(l.remote)
             for f in files_:
@@ -84,11 +97,12 @@ def library_command(args, rc):
                 l.push(f)
 
     elif args.subcommand == 'files':
+
         files_ = l.database.get_file_by_state(args.file_state)
         if len(files_):
             print "-- Display {} files".format(args.file_state)
             for f in files_:
-                print f.path
+                print "{0:6s} {1:4s} {2}".format(f.ref,f.state,f.path)
                 
     elif args.subcommand == 'get':
      
@@ -164,7 +178,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(prog='python -mdatabundles',
-                                     description='Create new bundle soruce packages')
+                                     description='Databundles {}. Management interface for databundles, libraries and repositories. '.format(__version__))
     
     #parser.add_argument('command', nargs=1, help='Create a new bundle') 
  
@@ -204,15 +218,18 @@ def main():
     sp = asp.add_parser('push', help='Push new library files')
     sp.set_defaults(subcommand='push')
     sp.add_argument('-w','--watch',  default=False,action="store_true",  help='Check periodically for new files.')
-
+    sp.add_argument('-f','--force',  default=False,action="store_true",  help='Push all files')
+    
     sp = asp.add_parser('server', help='Run the library server')
     sp.set_defaults(subcommand='server') 
     sp.add_argument('-d','--daemonize', default=False, action="store_true",   help="Run as a daemon") 
+    sp.add_argument('-k','--kill', default=False, action="store_true",   help="With --daemonize, kill the running daemon process") 
     sp.add_argument('-g','--group', default=None,   help="Set group for daemon operation") 
     sp.add_argument('-u','--user', default=None,  help="Set user for daemon operation")   
       
     sp = asp.add_parser('files', help='Print out files in the library')
     sp.set_defaults(subcommand='files')
+    sp.add_argument('-a','--all',  default='all',action="store_const", const='all', dest='file_state',  help='Print all files')
     sp.add_argument('-n','--new',  default=False,action="store_const", const='new',  dest='file_state', help='Print new files')
     sp.add_argument('-p','--pushed',  default=False,action="store_const", const='pushed', dest='file_state',  help='Print pushed files')
     sp.add_argument('-u','--pulled',  default=False,action="store_const", const='pulled', dest='file_state',  help='Print pulled files')
@@ -262,11 +279,10 @@ def main():
     
     sp = asp.add_parser('config', help='Dump the configuration')
     sp.set_defaults(subcommand='config')
-  
-                      
+    group.add_argument('-v', '--version',  default=False, action='store_true', help='Display module version')
+                 
     args = parser.parse_args()
-   
-    
+
     if args.single_config:
         if args.config is None or len(args.config) > 1:
             raise Exception("--single_config can only be specified with one -c")
@@ -292,47 +308,62 @@ def main():
         print "Error: No command: "+args.command
     else:
         f(args, rc)
-    
+        
+
+       
 def daemonize(f, args,  rc):
         '''Run a process as a daemon'''
         import daemon
-        import lockfile
-        import os
+        import lockfile 
+        import os, sys
         import grp, pwd
+        import setproctitle
+        
+        proc_name = 'databundle-library'
+        
+        if args.kill:
+            # Not portable, but works in most of our environments. 
+            import os
+            print "Killing ... "
+            os.system("pkill -f '{}'".format(proc_name))
+            return
         
         lib_dir = '/var/lib/databundles'
-        run_dir = '/var/lib/databundles'
-        log_file = '/var/log/library-server'
+        run_dir = '/var/run/databundles'
+        log_dir = '/var/log/databundles'
+        log_file = os.path.join(log_dir,'library-server.stdout')
+        pid_file = lockfile.FileLock(os.path.join(run_dir,'library-server.pid'))
         
-                
-        for dir in [run_dir, lib_dir]:
+        for dir in [run_dir, lib_dir, log_dir]:
             if not os.path.exists(dir):
                 os.makedirs(dir)
 
-        out = open(log_file, "a")
-        ubuf_out =  os.fdopen(out.fileno(), 'w', 0)
-
         gid =  grp.getgrnam(args.group).gr_gid if args.group is not None else os.getgid()
-        uid =  pwd.getpwnam(args.group).pw_gid if args.user  is not None else os.getuid()  
+        uid =  pwd.getpwnam(args.user).pw_gid if args.user  is not None else os.getuid()  
 
         context = daemon.DaemonContext(
             working_directory=lib_dir,
             umask=0o002,
-            pidfile=lockfile.FileLock(os.path.join(run_dir,'library-server.pid')),
-            stdout = ubuf_out, 
-            stderr = ubuf_out,
+            pidfile=pid_file,
             gid  = gid, 
-            uid = uid
-            )
+            uid = uid,
 
-                
-        # OPen the log file, then fdopen it with a zero buffer sized, to 
-        # ensure the ourput is unbuffered. 
-        context.open()
+            )
         
-        ubuf_out.write("Starting library server as a daemon\n")
-        ubuf_out.flush()
+        # Ooen the log file, then fdopen it with a zero buffer sized, to 
+        # ensure the ourput is unbuffered. 
+    
+        context.stderr = context.stdout = open(log_file, "a",0)
+        context.stdout.write('Starting\n')
+      
+        os.chown(log_file, uid, gid);
+        
+        setproctitle.setproctitle(proc_name)
+                
+        context.open()
+
         #with context:
+
         f(args, rc)
 
 

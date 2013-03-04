@@ -19,8 +19,6 @@ import databundles.client.exceptions as exc
 # This might get changed, as in test_run
 run_config = databundles.run.RunConfig()
 
-library = None
-
 logger = databundles.util.get_logger(__name__)
 logger.setLevel(logging.INFO)
     
@@ -39,13 +37,13 @@ def get_library_config(name=None):
 def get_library(name='default'):
     '''Return the library. In a function to defer execution, so the
     run_config variable can be altered before it is called. '''
-    global library
-
-    if library is None:
-        library = databundles.library.get_library(run_config, name)
     
-    return library
-    
+    # Originally, we were caching the library, but the library
+    # holds open a sqlite database, and that isn't multi-threaded, so then
+    # we can use a multi-threaded server. 
+    # Of course, then you have concurrency problems with sqlite .... 
+    return databundles.library._get_library(run_config, name)
+ 
 
 def make_exception_response(e):
     
@@ -137,7 +135,7 @@ def get_datasets_find(term):
              'partition' : partition.identity.to_dict() if partition else None,
              'is_local' : is_local
              }
-     
+
     
 @post('/datasets/find')
 def post_datasets_find():
@@ -528,6 +526,22 @@ def local_debug_run():
     port = config.get('port', 8080)
     host = config.get('host', '0.0.0.0')
     return run(host=host, port=port, reloader=True)
+
+def production_run(config=None, name='default', reloader=True):
+    from bottle import run
+
+    if config:
+        global run_config
+        run_config = config # If this is called before get_library, will change the lib config
+
+    l = get_library(name)  #@UnusedVariable
+    config = get_library_config(name)
+    port = config.get('port', 80)
+    host = config.get('host', '0.0.0.0')
+    
+    logger.info("starting server  for library '{}' on http://{}:{}".format(name, host, port))
+
+    return run(host=host, port=port, reloader=False, server='paste')
     
 if __name__ == '__main__':
     local_debug_run()
