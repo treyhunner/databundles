@@ -1,0 +1,28 @@
+repository:
+    default:
+        url: <ckan-api-url>
+        key: <ckan-key>           
+
+library:
+    default:
+        remote: ''
+        filesystem: library-default
+        database: library-default
+                       
+database:
+    library-default:
+        dbname: '{root}/library/library.db'
+        driver: sqlite  
+
+filesystem:
+    root_dir: <root-dir>
+    library-default:
+        dir: '{root}/library/'
+              
+    downloads:
+        dir: '{root}/cache/downloads'
+        size: 20000
+
+    extracts: 
+        dir: '{root}/cache/extracts'
+        size: 20000

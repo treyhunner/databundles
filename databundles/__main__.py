@@ -43,6 +43,36 @@ def bundle_command(args, rc):
     
         shutil.copy(bundle_file ,name  )
 
+def install_command(args, rc):
+    import yaml, pkgutil
+    import os
+    from databundles.run import RunConfig as rc
+
+    if args.subcommand == 'config':
+        print "Initialize config"
+        
+        if not args.force and  os.path.exists(rc.ROOT_CONFIG):
+            orig = True
+            with open(rc.ROOT_CONFIG) as f:
+                contents = f.read()
+        else:
+            orig = False
+            contents = pkgutil.get_data("databundles.support", 'databundles.yaml')
+            
+        d = yaml.load(contents)
+
+        if args.root:
+            d['filesystem']['root_dir'] = args.root
+        
+        s =  yaml.dump(d, indent=4, default_flow_style=False)
+        
+        if args.prt:
+            print s
+        else:
+            with open(rc.ROOT_CONFIG,'w') as f:
+                f.write(s)
+
+
 def library_command(args, rc):
     import library
 
@@ -271,6 +301,21 @@ def main():
     group.add_argument('-j', '--json',  default=True, dest='use_json',  action='store_true')
     
     #
+    # Install Command
+    #
+    lib_p = cmd.add_parser('install', help='Install configuration files')
+    lib_p.set_defaults(command='install')
+    asp = lib_p.add_subparsers(title='Install', help='Install configuration files')
+    
+    sp = asp.add_parser('config', help='Install the global configuration')
+    sp.set_defaults(subcommand='config')
+    sp.add_argument('-p', '--print',  dest='prt', default=False, action='store_true', help='Print, rather than save, the config file')
+    sp.add_argument('-f', '--force',  default=False, action='store_true', help="Force using the default config; don't re-use the xisting config")
+    sp.add_argument('-r', '--root',  default=None,  help="Set the root dir")
+    sp.add_argument('-R', '--remote',  default=None,  help="Url of remote library")
+    
+                       
+    #
     # Test Command
     #
     lib_p = cmd.add_parser('test', help='Test and debugging')
@@ -299,6 +344,7 @@ def main():
         'bundle': bundle_command,
         'library':library_command,
         'test':test_command,
+        'install':install_command,
         'ckan':ckan_command
     }
         

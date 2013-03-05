@@ -37,6 +37,10 @@ class RunConfig(object):
     earlier ones. 
     '''
 
+    ROOT_CONFIG = '/etc/databundles.yaml'
+    USER_CONFIG = os.path.expanduser('~/.databundles.yaml')
+    DIR_CONFIG = os.path.join(os.getcwd(),'databundles.yaml')
+
     def __init__(self, path=None):
         '''Create a new RunConfig object
         
@@ -58,12 +62,8 @@ class RunConfig(object):
         if isinstance(path, list):
             self.files = path
         else:
-            self.files = ['/etc/databundles.yaml', 
-                     os.path.expanduser('~/.databundles.yaml'), 
-                     os.path.join(os.getcwd(),'databundles.yaml'),
-                     path ]
-
-
+            self.files = [ RunConfig.ROOT_CONFIG, RunConfig.USER_CONFIG, RunConfig.DIR_CONFIG]
+          
         loaded = False
         for f in self.files:
             if f is not None and os.path.exists(f):
