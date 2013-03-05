@@ -49,8 +49,7 @@ def install_command(args, rc):
     from databundles.run import RunConfig as rc
 
     if args.subcommand == 'config':
-        print "Initialize config"
-        
+
         if not args.force and  os.path.exists(rc.ROOT_CONFIG):
             orig = True
             with open(rc.ROOT_CONFIG) as f:
