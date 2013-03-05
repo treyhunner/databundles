@@ -338,7 +338,6 @@ def main():
     else:
         rc_path = args.config
         
-    rc = get_runconfig(rc_path)
    
     funcs = {
         'bundle': bundle_command,
@@ -349,6 +348,11 @@ def main():
     }
         
     f = funcs.get(args.command, False)
+        
+    if f != install_command:
+        rc = get_runconfig(rc_path)
+    else:
+        rc = None
         
     if not f:
         print "Error: No command: "+args.command
