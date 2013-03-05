@@ -62,8 +62,9 @@ class RunConfig(object):
         if isinstance(path, list):
             self.files = path
         else:
-            self.files = [ RunConfig.ROOT_CONFIG, RunConfig.USER_CONFIG, RunConfig.DIR_CONFIG]
-          
+            self.files = [ RunConfig.ROOT_CONFIG, RunConfig.USER_CONFIG, 
+                          RunConfig.DIR_CONFIG, path]
+
         loaded = False
         for f in self.files:
             if f is not None and os.path.exists(f):

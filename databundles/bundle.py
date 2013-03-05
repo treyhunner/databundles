@@ -537,8 +537,7 @@ class BundleFileConfig(BundleConfig):
         self.local_file = os.path.join(self.root_dir,'bundle.yaml')
 
         self._run_config = get_runconfig(self.local_file)
-     
-   
+
         # If there is no id field, create it immediately and
         # write the configuration back out. 
    

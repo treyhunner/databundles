@@ -1,15 +1,18 @@
 # Optional package requirements. 
 boto # Required for the library server
-gevent
-greenlet
+setproctitle # required for --daemonize
+paste
+#gevent
+#greenlet
 nose
 psycopg2
 numpy
-# gdal # Install outside of  virtenv via apt-get
-pysal # Spatial analysis library
 h5py # HDF5 dat file library
 python-daemon
 lockfile
-shapefile
+pyshp
+# gdal # Install outside of  virtenv via apt-get
+#scipy
+#pysal # Spatial analysis library
 
 
