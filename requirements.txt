@@ -3,3 +3,5 @@ SQLAlchemy
 beautifulsoup4
 petl
 decorator
+simplejson
+ckanclient

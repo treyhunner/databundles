@@ -4,12 +4,10 @@ gevent
 greenlet
 nose
 psycopg2
-simplejson
 numpy
 gdal
 pysal # Spatial analysis library
 h5py # HDF5 dat file library
-ckanclient
 python-daemon
 lockfile
 shapefile
