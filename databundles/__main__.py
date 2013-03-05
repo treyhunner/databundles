@@ -133,20 +133,38 @@ def library_command(args, rc):
             print "-- Display {} files".format(args.file_state)
             for f in files_:
                 print "{0:11s} {1:4s} {2}".format(f.ref,f.state,f.path)
-                
-    elif args.subcommand == 'get':
+
+    elif args.subcommand == 'find':
      
         rel_path, dataset, partition, is_local = l.get_ref(args.term)
-        
      
         if not rel_path:
             print "{}: Not found".format(args.term)
         else:
             print "Rel Path:  ",rel_path
             print "Abs Path:  ",os.path.join(l.cache.cache_dir, rel_path)
-            print "Dataset:   ",dataset
+            print "Dataset:   ",dataset.name
             print "Partition: ",partition
             print "Is Local:  ",is_local
+        
+                
+    elif args.subcommand == 'get':
+     
+        # This will fetch the data, but the return values aren't quite right
+        dataset, partition = l.get(args.term)
+        
+        # get the return values we want. 
+        rel_path, dataset, partition, is_local = l.get_ref(args.term)
+
+        if not rel_path:
+            print "{}: Not found".format(args.term)
+        else:
+         
+            print "Rel Path:  ",rel_path
+            print "Abs Path:  ",os.path.join(l.cache.cache_dir, rel_path)
+            print "Dataset:   ",dataset.name
+            print "Partition: ",partition
+            print "Is Local:  ",True
         
 
         if args.open:
@@ -287,10 +305,14 @@ def main():
     sp = asp.add_parser('info', help='Display information about the library')
     sp.set_defaults(subcommand='info')   
     
-    sp = asp.add_parser('get', help='Search for the argument as a bundle or partition name or id')
+    sp = asp.add_parser('get', help='Search for the argument as a bundle or partition name or id. Possible download the file from the remote library')
     sp.set_defaults(subcommand='get')   
     sp.add_argument('term', type=str,help='Query term')
     sp.add_argument('-o','--open',  default=False, action="store_true",  help='Open the database with sqlites')
+
+    sp = asp.add_parser('find', help='Search for the argument as a bundle or partition name or id')
+    sp.set_defaults(subcommand='find')   
+    sp.add_argument('term', type=str,help='Query term')
 
     sp = asp.add_parser('listremote', help='List the datasets stored on the remote')
     sp.set_defaults(subcommand='listremote')   

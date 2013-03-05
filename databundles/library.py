@@ -851,7 +851,7 @@ class Library(object):
                 
         # If dataset is not None, it means the file already is in the cache.
         dataset = None
-        is_local = True
+    
         try:
             on = ObjectNumber.parse(bp_id)
 
@@ -901,14 +901,13 @@ class Library(object):
                         
                     rel_path = identity.path+".db"
         
-                    is_local = False
             except socket.error:
                 self.logger.error("COnnection to remote {} failed".format(self.remote))
-                
-
-
+ 
         if not dataset:
             return False, False, False, False
+        
+        is_local = os.path.exists(os.path.join(self.cache.cache_dir, rel_path))
         
         return  rel_path, dataset, partition, is_local
 
@@ -929,16 +928,24 @@ class Library(object):
         # Not in the cache, try to get it from the remote library, 
         # if a remote was set. 
         bundle = None
-        if not abs_path and self.api and is_local is False and dataset is not False:
+
+        if self.api and is_local is False and dataset is not False:
             from databundles.identity import Identity, PartitionIdentity
 
             identity = ( PartitionIdentity(**(partition._asdict())) if partition 
                          else Identity(**(dataset._asdict())) )
             try:
                 r = self.api.get(identity.id_)
+                
                 abs_path = self.cache.put(r,rel_path)
+                
+                if not os.path.exists(abs_path):
+                    raise Exception("Didn't get file '{}' for id {}".format(abs_path,identity.name))
+                
                 bundle = DbBundle(abs_path)
-                self.put_file(identity, abs_path, bundle, state='pulled')
+                
+                # Already done
+                #self.put_file(identity, abs_path,  state='pulled')
                 
                 self.database.add_file(abs_path, self.cache.repo_id, bundle.identity.id_, 'pulled')
                      

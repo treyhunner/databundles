@@ -5,3 +5,4 @@ petl
 decorator
 simplejson
 ckanclient
+requests
