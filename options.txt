@@ -5,7 +5,7 @@ greenlet
 nose
 psycopg2
 numpy
-gdal
+# gdal # Install outside of  virtenv via apt-get
 pysal # Spatial analysis library
 h5py # HDF5 dat file library
 python-daemon
