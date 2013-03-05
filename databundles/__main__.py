@@ -132,7 +132,7 @@ def library_command(args, rc):
         if len(files_):
             print "-- Display {} files".format(args.file_state)
             for f in files_:
-                print "{0:6s} {1:4s} {2}".format(f.ref,f.state,f.path)
+                print "{0:11s} {1:4s} {2}".format(f.ref,f.state,f.path)
                 
     elif args.subcommand == 'get':
      
@@ -154,7 +154,15 @@ def library_command(args, rc):
             print "\nOpening: {}\n".format(abs_path)
 
             os.execlp('sqlite3','sqlite3',abs_path )
-
+            
+    elif args.subcommand == 'listremote':
+        print 'List Remote'
+        
+        datasets = l.api.list()
+        
+        for id_, data in datasets.items():
+            print "{0:11s} {1:4s} {2}".format(id_,'remote',data['name'])
+        
     else:
         print "Unknown subcommand"
         print args 
@@ -284,6 +292,9 @@ def main():
     sp.add_argument('term', type=str,help='Query term')
     sp.add_argument('-o','--open',  default=False, action="store_true",  help='Open the database with sqlites')
 
+    sp = asp.add_parser('listremote', help='List the datasets stored on the remote')
+    sp.set_defaults(subcommand='listremote')   
+   
  
     #
     # ckan Command

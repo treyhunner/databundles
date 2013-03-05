@@ -24,7 +24,7 @@ libraries = {}
 # Setup a default logger. The logger is re-assigned by the
 # bundle when the bundle instantiates the logger. 
 import logging #@UnusedImport
-import logging.handlers #@UnusedImport
+import logging.handlers #@Unus gedImport
 
 class NullHandler(logging.Handler):
     def emit(self, record):

@@ -211,7 +211,7 @@ class Rest(object):
                 else  Ref2(Entry(**i['dataset']))) for i in r  if i is not False]
     
     
-    def datasets(self):
+    def list(self):
         '''Return a list of all of the datasets in the library'''
         response =   self.api.datasets.get()
         raise_for_status(response)
