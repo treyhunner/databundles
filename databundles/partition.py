@@ -271,15 +271,19 @@ class Partitions(object):
         '''
 
         from databundles.orm import Partition as OrmPartition
+        from databundles.identity import PartitionNumber
         
         if isinstance(arg,OrmPartition):
             orm_partition = arg
         elif isinstance(arg, str):
             s = self.bundle.database.session        
-            orm_partition = s.query(OrmPartition).filter(OrmPartition.id_==arg ).one
+            orm_partition = s.query(OrmPartition).filter(OrmPartition.id_==arg ).one()
+        elif isinstance(arg, PartitionNumber):
+            s = self.bundle.database.session        
+            orm_partition = s.query(OrmPartition).filter(OrmPartition.id_==str(arg) ).one()
         else:
             raise ValueError("Arg must be a Partition or PartitionNumber")
-        
+
         if orm_partition.data.get('is_geo'):
             is_geo = True
         elif is_geo: # The caller signalled that this should be a Geo, but it isn't so set it. 

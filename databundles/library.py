@@ -882,6 +882,7 @@ class Library(object):
         if not dataset and self.api:
             from databundles.identity import Identity, PartitionIdentity
             import socket
+            from databundles.orm import  Dataset, Partition
             
             try:
                 r = self.api.find(bp_id)
@@ -892,11 +893,13 @@ class Library(object):
     
                     if hasattr(r, 'Partition') and r.Partition is not None:
                         identity = PartitionIdentity(**(r.Partition._asdict()))
-                        dataset = r.Dataset
-                        partition = r.Partition
+                        dataset = Dataset(**r.Dataset._asdict())
+               
+                        partition = ObjectNumber.parse(r.Partition.id)
+                    
                     else:
                         identity = Identity(**(r.Dataset._asdict()))
-                        dataset = r.Dataset
+                        dataset = Dataset(**r.Dataset._asdict())
                         partition = None
                         
                     rel_path = identity.path+".db"
