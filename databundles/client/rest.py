@@ -205,12 +205,14 @@ class Rest(object):
         from collections import namedtuple
         Ref1= namedtuple('Ref1','Dataset Partition')
         Ref2= namedtuple('Ref2','Dataset')
-        EntryT = namedtuple('Entry','id name source dataset subset variation creator revision')
+        EntryT = namedtuple('Entry','id name source dataset subset variation creator revision time space table grain')
         
         # Allow constructing Entry with missing values
         def Entry(id=None,name=None,source=None,dataset=None,subset=None,
-                  variation=None,creator=None,revision=None,):
-            return EntryT(id, name, source, dataset, subset, variation, creator, revision)
+                  variation=None,creator=None,revision=None,
+                  time=None, space=None, table=None, grain=None):
+            return EntryT(id, name, source, dataset, subset, variation, creator, revision,
+                          time,space,table,grain)
 
         return [ (Ref1(Entry(**i['dataset']) ,Entry(**i['partition'])) if i['partition'] 
                 else  Ref2(Entry(**i['dataset']))) for i in r  if i is not False]
