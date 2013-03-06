@@ -6,3 +6,4 @@ decorator
 simplejson
 ckanclient
 requests
+pyshp

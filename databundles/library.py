@@ -9,7 +9,7 @@ from databundles.run import  get_runconfig
 
 import os.path
 
-from databundles.dbexceptions import ConfigurationError
+from databundles.dbexceptions import ConfigurationError, NotFoundError
 from databundles.filesystem import  Filesystem
 from  databundles.identity import new_identity
 from databundles.bundle import DbBundle
@@ -981,7 +981,7 @@ class Library(object):
         """"Bundle version of get(), which uses a key in the 
         bundles configuration group 'dependencies' to resolve to a name"""
         
-        deps = self.bundle.config.group('dependencies')
+        deps = self.bundle.config.group('build').get('dependencies')
         
         if not deps:
             raise ConfigurationError("Configuration has no 'dependencies' group")
@@ -994,8 +994,8 @@ class Library(object):
         b = self.get(bundle_name)
         
         if not b:
-            self.bundle.error("Failed to get key={}, id={}".format(name, bundle_name))
-            return False
+            self.bundle.error("Failed to get dependency,  key={}, id={}".format(name, bundle_name))
+            raise NotFoundError("Failed to get dependency, key={}, id={}".format(name, bundle_name))
         
         return b
 

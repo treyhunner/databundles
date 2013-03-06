@@ -469,11 +469,16 @@ class BuildBundle(Bundle):
         dest = library.put(self)
         self.log("Installed to {} ".format(dest[2]))
         
-        for partition in self.partitions:
+        skips = self.config.group('build').get('skipinstall',[])
         
-            self.log("Install partition {}".format(partition.name))  
-            dest = library.put(partition)
-            self.log("Installed to {} ".format(dest[2]))
+        for partition in self.partitions:
+            
+            if partition.name in skips:
+                self.log('Skipping: {}'.format(partition.name))
+            else:
+                self.log("Install partition {}".format(partition.name))  
+                dest = library.put(partition)
+                self.log("Installed to {} ".format(dest[2]))
 
         return True
         

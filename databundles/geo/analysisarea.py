@@ -16,7 +16,14 @@ def get_analysis_area(library, **kwargs):
     """Return an analysis area by name or GEOID"""
     geoid = kwargs.get('geoid')
 
-    row = library.get("clarinova.com-extents-2012-7ba4")
+    extents_name = "clarinova.com-extents-2012-7ba4"
+
+    row = library.get(extents_name)
+    
+    if not row:
+        from databundles.dbexceptions import ConfigurationError
+        raise ConfigurationError("Didn't find extents package in library: {}".format(extents_name))
+    
     db = row.bundle.database
     
     places_t = db.table('places')
@@ -33,7 +40,7 @@ def get_analysis_area(library, **kwargs):
     row =  query.first()
     
     if not row:
-        raise Exception("Failed to get analysis area record")
+        raise Exception("Failed to get analysis area record for geoid: {}".format(geoid))
 
     return AnalysisArea( row[6],row.geoid , # 'name' is used twice, pick the first. 
                       row.eastmin, 

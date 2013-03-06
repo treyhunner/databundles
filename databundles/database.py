@@ -63,9 +63,9 @@ class ValueInserter(object):
         self.transaction = self.connection.begin()
         return self
         
-    def __exit__(self, type_, value, traceback):
+    def close(self):
         
-        if len(self.cache) > 0:       
+        if len(self.cache) > 0 and self.transaction:       
             try:
                 self.connection.execute(self.ins, self.cache)
                 self.transaction.commit()
@@ -82,7 +82,11 @@ class ValueInserter(object):
                 raise
         else:
             if self.transaction:
-                self.transaction.commit()
+                self.transaction.commit()    
+                    
+    def __exit__(self, type_, value, traceback):
+        
+        self.close()
                
         if type_ is not None:
             self.bundle.error("Got Exception: "+str(value))

@@ -21,3 +21,6 @@ class ResultCountError(BundleError):
     
 class FilesystemError(BundleError):
     '''Missing file, etc. '''
+
+class NotFoundError(BundleError):
+    '''Failed to find resource'''
