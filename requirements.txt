@@ -1,9 +1,37 @@
 PyYAML
 SQLAlchemy
-beautifulsoup4
 petl
 decorator
 simplejson
+nose
+psycopg2
+
+#
+# Remote services
+#
+beautifulsoup4
 ckanclient
 requests
+
+#
+# Numerical
+#
+numpy
+h5py # HDF5 data file library
+
+#
+# Geographic
+#
 pyshp
+#gdal # Install outside of  virtenv via apt-get
+#scipy
+#pysal # Spatial analysis library
+
+#
+# Packages for the library server
+#
+boto # Required for the library server
+setproctitle # required for --daemonize
+paste
+python-daemon
+lockfile
