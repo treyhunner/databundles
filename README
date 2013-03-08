@@ -1,13 +1,8 @@
-databundles
+Databundles
 ===========
 
 Data Bundles are packages of data that simplify the process of finding, cleaning, 
 transforming and loading popular datasets. http://clarinova.com/bundles
 
 
-Development Notes
-=================
-
-Use 'pip freeze' to create the requirements.txt file. Use 
-'pip install -r requirements.txt' to install the requirements. 
 

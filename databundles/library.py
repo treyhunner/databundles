@@ -914,7 +914,34 @@ class Library(object):
         
         return  rel_path, dataset, partition, is_local
 
-           
+    def _get_from_remote(self, rel_path, dataset, partition):
+        
+        from databundles.identity import Identity, PartitionIdentity
+        
+        identity = ( PartitionIdentity(**(partition._asdict())) if partition 
+                     else Identity(**(dataset._asdict())) )
+        try:
+            r = self.api.get(identity.id_)
+            
+            abs_path = self.cache.put(r,rel_path)
+            
+            if not os.path.exists(abs_path):
+                raise Exception("Didn't get file '{}' for id {}".format(abs_path,identity.name))
+            
+            bundle = DbBundle(abs_path)
+            
+            # Already done
+            #self.put_file(identity, abs_path,  state='pulled')
+            
+            self.database.add_file(abs_path, self.cache.repo_id, bundle.identity.id_, 'pulled')
+                 
+            self.database.install_bundle(bundle)
+            
+        except:
+            raise  
+
+        return abs_path, bundle
+            
     def get(self,bp_id):
         '''Get a bundle, given an id string or a name '''
 
@@ -933,29 +960,7 @@ class Library(object):
         bundle = None
 
         if self.api and is_local is False and dataset is not False:
-            from databundles.identity import Identity, PartitionIdentity
-
-            identity = ( PartitionIdentity(**(partition._asdict())) if partition 
-                         else Identity(**(dataset._asdict())) )
-            try:
-                r = self.api.get(identity.id_)
-                
-                abs_path = self.cache.put(r,rel_path)
-                
-                if not os.path.exists(abs_path):
-                    raise Exception("Didn't get file '{}' for id {}".format(abs_path,identity.name))
-                
-                bundle = DbBundle(abs_path)
-                
-                # Already done
-                #self.put_file(identity, abs_path,  state='pulled')
-                
-                self.database.add_file(abs_path, self.cache.repo_id, bundle.identity.id_, 'pulled')
-                     
-                self.database.install_bundle(bundle)
-                
-            except:
-                raise
+            abs_path, bundle = self._get_from_remote(rel_path, dataset, partition)
 
         if not abs_path or not os.path.exists(abs_path):
             return False
@@ -972,7 +977,7 @@ class Library(object):
             # to the database. 
             p.library = self
             
-            return self.Return(bundle, partition)
+            return self.Return(bundle, p)
             
         else:
             return self.Return(bundle, None)
