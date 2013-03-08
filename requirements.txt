@@ -15,12 +15,12 @@ requests
 #
 # Numerical
 #
-numpy
-h5py # HDF5 data file library
+#numpy # Must be installed externally
+#h5py # Must be installed externally on ubuntu
 
 #
 # Geographic
 #
 pyshp
-gdal
+# gdal Must be installed externally
 
