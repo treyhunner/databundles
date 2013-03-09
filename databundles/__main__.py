@@ -139,39 +139,41 @@ def library_command(args, rc):
 
     elif args.subcommand == 'find':
      
-        rel_path, dataset, partition, is_local = l.get_ref(args.term)
+        dataset, partition = l.get_ref(args.term)
      
-        if not rel_path:
+        if not dataset:
             print "{}: Not found".format(args.term)
         else:
-            print "Rel Path:  ",rel_path
-            print "Abs Path:  ",os.path.join(l.cache.cache_dir, rel_path)
-            print "Dataset:   ",dataset.name
-            print "Partition: ",partition
-            print "Is Local:  ",is_local
-        
+            print "Rel Path  : ",dataset.identity.cache_key
+            print "Abs Path  : ",os.path.join(l.cache.cache_dir, dataset.identity.cache_key)
+            print "Dataset   : ",dataset.name
+            print "Partition : ",partition if partition else ''
+            print "D Is Local: ",os.path.exists(dataset.identity.cache_key)
+            print "P Is Local: ", os.path.exists(partition.identity.cache_key) if partition else ''
                 
     elif args.subcommand == 'get':
      
-        # This will fetch the data, but the return values aren't quite right
-        dataset, partition = l.get(args.term)
-        
-        # get the return values we want. 
-        rel_path, dataset, partition, is_local = l.get_ref(args.term)
 
-        if not rel_path:
+        # This will fetch the data, but the return values aren't quite right
+        r = l.get(args.term)
+      
+        if not r:
             print "{}: Not found".format(args.term)
         else:
-         
-            print "Rel Path:  ",rel_path
-            print "Abs Path:  ",os.path.join(l.cache.cache_dir, rel_path)
-            print "Dataset:   ",dataset.name
-            print "Partition: ",partition
-            print "Is Local:  ",True
-        
+            print "Rel Path  : ",r.bundle.identity.cache_key
+            print "Abs Path  : ",os.path.join(l.cache.cache_dir, r.bundle.identity.cache_key)
+            print "Dataset   : ",r.bundle.identity.name
+            print "Partition : ",r.partition if r.partition else ''
+            print "D Is Local: ",os.path.exists(r.bundle.identity.cache_key)
+            print "P Is Local: ", os.path.exists(r.partition.identity.cache_key) if r.partition else ''
 
-        if args.open:
-            abs_path = os.path.join(l.cache.cache_dir, rel_path)
+        if r and args.open:
+            
+            if r.partition:
+                abs_path = os.path.join(l.cache.cache_dir, r.partition.identity.cache_key)
+            else:
+                abs_path = os.path.join(l.cache.cache_dir, r.bundle.identity.cache_key)
+                
             print "\nOpening: {}\n".format(abs_path)
 
             os.execlp('sqlite3','sqlite3',abs_path )

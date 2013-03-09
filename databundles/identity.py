@@ -83,6 +83,11 @@ class Identity(object):
     def path(self):
         '''The name is a form suitable for use in a filesystem'''
         return self.path_str(self)
+  
+    @property
+    def cache_key(self):
+        '''The name is a form suitable for use in a filesystem'''
+        return self.path_str(self)+".db"
     
     @classmethod
     def path_str(cls,o=None):
@@ -250,6 +255,43 @@ class PartitionIdentity(Identity):
         """Convert this identity to the identity of the correcsponding dataset. """
         return  Identity(**self.to_dict())
     
+    
+    @staticmethod
+    def convert(arg, bundle=None):
+        """Try to convert the argument to a PartitionIdentity"""
+        from databundles.orm import Partition
+                
+                
+        if isinstance(arg, Partition):
+            identity = PartitionIdentity(**(arg.to_dict()))
+        elif isinstance(arg, tuple):
+            identity = PartitionIdentity(**(arg._asdict())) 
+        elif isinstance(arg, PartitionIdentity):
+            identity = arg
+        elif isinstance(arg, PartitionNumber):
+            if bundle is not None:
+                partition = bundle.partitions.get(str(arg))
+                if partition:
+                    identity = partition.identity
+                else:
+                    identity = None
+                    raise ValueError("Could not find partition number {} in bundle"
+                                     .format(arg))
+            else:
+                raise Exception("Must specify a bundle to convert PartitionNumbers")
+        elif isinstance(arg, basestring):
+            try:
+                id = ObjectNumber.parse(arg)
+                raise NotImplementedError("Converting PartitionNumber strings")
+            except:
+                raise ValueError("Can't convert string '{}' to a arg identity"
+                             .format(type(arg)))
+        else:
+            raise ValueError("Can't convert type {} to a arg identity"
+                             .format(type(arg)))
+
+        return identity
+
     
 class ObjectNumber(object):
     '''

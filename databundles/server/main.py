@@ -131,15 +131,16 @@ def get_datasets():
 def get_datasets_find(term):
     '''Find a partition or data bundle with a, id or name term '''
     
-    rel_path, dataset, partition, is_local  = get_library().get_ref(term)
+    dataset, partition  = get_library().get_ref(term)
      
-    if rel_path is False:
+    if dataset is False:
         return False
      
     return {
              'dataset' : dataset.identity.to_dict(),
+             'dataset_local': os.path.exists(dataset.identity.cache_key),
              'partition' : partition.identity.to_dict() if partition else None,
-             'is_local' : is_local
+             'partition_local' :os.path.exists(partition.identity.cache_key) if partition else None,
              }
 
     
@@ -210,7 +211,7 @@ def _read_body(request):
     tmp_dir = tempfile.gettempdir()
     #tmp_dir = '/tmp'
             
-    file_ = os.path.join(tmp_dir,'rest-downloads',str(uuid.uuid4()))
+    file_ = os.path.join(tmp_dir,'rest-downloads',str(uuid.uuid4())+".db")
     if not os.path.exists(os.path.dirname(file_)):
         os.makedirs(os.path.dirname(file_))  
         
@@ -262,7 +263,7 @@ def put_dataset(did):
 
     try:
         cf = _read_body(request)
-        
+     
         size = os.stat(cf).st_size
         
         if size == 0:
@@ -284,9 +285,15 @@ def put_dataset(did):
             raise exc.BadRequest("Bad dataset id, not for a dataset: {}".format(did))
        
         # Is this a partition or a bundle?
-        tb = DbBundle(cf)
-     
-        if(tb.db_config.info.type == 'partition'):
+        
+        try:
+            tb = DbBundle(cf)
+            type = tb.db_config.info.type
+        except Exception as e:
+            logger.error("Failed to access database: {}".format(cf))
+            raise
+            
+        if( type == 'partition'):
             raise exc.BadRequest("Bad data type: Got a partition")
        
         if(tb.identity.id_ != did ):
@@ -299,7 +306,8 @@ def put_dataset(did):
         
         # if that worked, OK to remove the temporary file. 
     finally :
-        os.remove(cf)
+        pass
+        #os.remove(cf)
       
     r = identity.to_dict()
     r['url'] = url

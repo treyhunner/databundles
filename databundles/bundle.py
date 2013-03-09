@@ -95,6 +95,18 @@ class Bundle(object):
     def library(self, value):
         self._library = value
 
+    @property
+    def path(self):
+        """Return the base path for the bundle, usually the path to the
+        bundle database, but withouth the database extension."""
+        raise NotImplementedError("Abstract")
+
+    def sub_dir(self, *args):
+        """Return a subdirectory relative to the bundle's database root path
+        which based on the path of the database. For paths relative to the
+        directory of a BuildBundle, use the Filesystem object. """
+        return  os.path.join(self.path,*args)
+    
     
 class DbBundle(Bundle):
 
@@ -112,10 +124,16 @@ class DbBundle(Bundle):
         
         super(DbBundle, self).__init__()
        
+        self.database_file = database_file
         self.database = Database(self, database_file)
         self.db_config = self.config = BundleDbConfig(self.database)
         
         self.run_args = None
+        
+    @property
+    def path(self):
+        base, ext = os.path.splitext(self.database_file)
+        return base
         
     def table_data(self, query):
         '''Return a petl container for a data table'''
@@ -144,8 +162,6 @@ class BuildBundle(Bundle):
         if bundle_dir is None:
             import inspect
             bundle_dir = os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
-    
-            # bundle_dir = Filesystem.find_root_dir()
           
         if bundle_dir is None or not os.path.isdir(bundle_dir):
             from databundles.dbexceptions import BundleError
@@ -168,6 +184,11 @@ class BuildBundle(Bundle):
         self.ptick_count = 0;
 
 
+    @property
+    def path(self):
+        return self.filesystem.path(
+                    self.filesystem.BUILD_DIR,
+                    self.identity.path) 
 
     def parse_args(self,argv):
 
@@ -309,7 +330,7 @@ class BuildBundle(Bundle):
     def database(self):
         
         if self._database is None:
-            self._database  = Database(self)
+            self._database  = Database(self, self.path)
             
             def add_type(database):
                 self.db_config.set_value('info','type','bundle')

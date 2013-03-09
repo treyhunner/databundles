@@ -117,7 +117,7 @@ class TempFile(object):
         if suffix:
             name += "-"+suffix
 
-        self._path = str(self.db.path).replace('.db','-'+name+".csv")
+        self._path = str(self.db.path)+'-'+name+".csv"
         
         self._writer = None
         self._reader = None
@@ -224,7 +224,7 @@ class DbmFile(object):
         except:
             table_name = table
 
-        self._path = str(db.path).replace('.db','');
+        self._path = str(db.path)
 
         if table_name:
             self._path += '-'+table_name
@@ -271,27 +271,27 @@ class DbmFile(object):
         self._file[str(key)] =  str(val)
     
 
- 
 class Database(object):
     '''Represents a Sqlite database'''
 
     BUNDLE_DB_NAME = 'bundle'
     PROTO_SQL_FILE = 'support/configuration.sql' # Stored in the databundles module. 
+    EXTENSION = '.db'
 
-    def __init__(self, bundle, file_path=None, post_create=None):   
+    def __init__(self, bundle, base_path, post_create=None):   
         '''Initialize the a database object
         
         Args:
             bundle. a Bundle object
             
-            file_path. Path to the database file. If None, uses the name of the
+            base_path. Path to the database file. If None, uses the name of the
             bundle, in the bundle build director. 
             
             post_create. A function called during the create() method. has
             signature post_create(database)
        
         '''
-        self.bundle = bundle 
+        self.container = self.bundle = bundle 
         
         self._engine = None
         self._session = None
@@ -303,18 +303,16 @@ class Database(object):
         
         self._post_create = None
         
-        if file_path:
-            import re
-            self.file_path = file_path
-            self.root_path = re.sub('\.db$', '', self.file_path)
-            
-    
-        else:
-            self.root_path = self.bundle.filesystem.path(
-                                self.bundle.filesystem.BUILD_DIR,
-                                self.bundle.identity.path)
-            self.file_path = self.root_path+".db"
-            
+       
+        # For database bundles, where we have to pass in the whole file path
+        base_path, ext = os.path.splitext(base_path)
+        
+        if ext and ext != self.EXTENSION:
+            raise Exception("Bad extension to file: {}: {}".format(base_path, ext))
+        
+        self.base_path = base_path
+
+      
         self._last_attach_name = None
         
         self._table_meta_cache = {}
@@ -328,8 +326,10 @@ class Database(object):
 
     @property 
     def path(self):
-     
-        return self.file_path
+        return self.container.path + self.EXTENSION
+    
+    def sub_dir(self, *args):
+        return  self.container.sub_dir(*args)
       
     @property
     def metadata(self):
@@ -776,25 +776,15 @@ class PartitionDb(Database):
     '''a database for a partition file. Partition databases don't have a full schema
     and can load tables as they are referenced, by copying them from the prototype. '''
 
-    def __init__(self, bundle, partition, **kwargs):
+    def __init__(self, bundle, partition, base_path, **kwargs):
         '''''' 
-        self.partition = partition
-        super(PartitionDb, self).__init__(bundle, **kwargs)  
-
-       
+        
+        super(PartitionDb, self).__init__(bundle, base_path, **kwargs)  
+        self.container = self.partition = partition
+    
     @property
     def name(self):
         return self.partition.name
-    
-
-    @property
-    def path(self):
-        if self.file_path is not None:
-            return self.file_path
-        else:
-            return self.bundle.filesystem.path(
-                    self.bundle.filesystem.BUILD_DIR,
-                    self.partition.path+".db")
 
     
     def create(self, copy_tables = True):
@@ -819,8 +809,7 @@ class PartitionDb(Database):
             orm_p = bdbs.query(OrmPartition).filter(
                             OrmPartition.id_ == self.partition.identity.id_).one()
             s.merge(orm_p)
-        
-         
+          
             #Copy the tables and columns
             if copy_tables:
                 if orm_p.t_id is not None:

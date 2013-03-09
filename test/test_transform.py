@@ -6,22 +6,18 @@ Created on Aug 31, 2012
 import unittest
 from  testbundle.bundle import Bundle
 from databundles.run import  RunConfig
+from test_base import  TestBase
 
-server_url = 'http://localhost:7979'
-
-class Test(unittest.TestCase):
-
+class Test(TestBase):
 
     def setUp(self):
-        bundle = Bundle()      
-        bundle.clean()
-        
-        self.bundle = Bundle()
-        
-        self.bundle_dir = bundle.bundle_dir
-        
-        self.bundle.prepare()
-        self.bundle.build()
+
+        self.copy_or_build_bundle()
+
+        self.bundle = Bundle()    
+        self.bundle_dir = self.bundle.bundle_dir
+
+
         
     def tearDown(self):
         pass

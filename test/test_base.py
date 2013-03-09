@@ -16,6 +16,8 @@ logging.captureWarnings(True)
 
 class TestBase(unittest.TestCase):
 
+    server_url = None
+
     def copy_or_build_bundle(self):
         """Set up a clean bundle build, either by re-building the bundle, or
         by copying it from a saved bundle directory """
@@ -37,7 +39,7 @@ class TestBase(unittest.TestCase):
             bundle.clean()
             
             bundle = Bundle()   
-            if not os.path.exists(save_dir):
+            if True or not os.path.exists(save_dir):
                 logger.info( "Save dir is missing; re-build bundle. ")
                 bundle.prepare()
                 bundle.build()
@@ -51,19 +53,20 @@ class TestBase(unittest.TestCase):
         logger.info(  "Copying bundle from {}".format(save_dir))
         os.system("rm -rf {0}; rsync -arv {1} {0}  > /dev/null ".format(build_dir, save_dir))
         
-    def start_server(self, server_url):
+    def start_server(self, rc, name):
         '''Run the Bottle server as a thread'''
         from databundles.client.siesta import  API
         import databundles.server.main
         from threading import Thread
         import time
         from functools import  partial
-       
-        # Give the server a new RunConfig, so we can use a different library. 
-        rc = RunConfig([os.path.join(self.bundle_dir,'server-test-config.yaml')])
-        a = API(server_url)
-        
-      
+    
+        sub_rc = rc.library.get(name)
+    
+        self.server_url = sub_rc.remote
+        logger.info("Checking server at: {}".format(self.server_url))
+        a = API(self.server_url)
+
         #
         # Test to see of the server is already running. 
         #
@@ -84,7 +87,7 @@ class TestBase(unittest.TestCase):
             logger.info( 'No server, starting a local debug server')
 
 
-        server = Thread(target = partial(databundles.server.main.test_run, rc) ) 
+        server = Thread(target = partial(databundles.server.main.test_run, rc, name) ) 
         server.setDaemon(True)
         server.start()
         
@@ -100,9 +103,9 @@ class TestBase(unittest.TestCase):
                 logger.info( 'Server not started yet, waiting')
                 time.sleep(1)
                                
-
+        r = a.test.echo('foobar').get(bar='baz') 
     
-    def stop_server(self, server_url):
+    def stop_server(self):
         '''Shutdown the server process by calling the close() API, then waiting for it
         to stop serving requests '''
         
@@ -111,7 +114,7 @@ class TestBase(unittest.TestCase):
         import time
         import databundles.client.exceptions as exc
         
-        a = API(server_url)
+        a = API(self.server_url)
        
         is_debug = a.test.isdebug.get().object
   
@@ -119,19 +122,23 @@ class TestBase(unittest.TestCase):
             logger.info("Server is not debug, won't stop")
             return
         else:
-            logger.info("Server is  debug, stopping")
+            logger.info("Server at {} is debug, stopping".format(self.server_url))
        
         # Wait for the server to shutdown
         
         for i in range(1,10): #@UnusedVariable
             try:
                 a.test.close.post({})
-                #print 'Teardown: server still running, waiting'
+                logger.info('Teardown: server still running, waiting')
                 time.sleep(1)
             except socket.error:
                 pass # Just means that the socket is already closed
             except Exception as e:
                 logger.error("Got an exception while stopping: {}".format(e))
                 break   
+            
+        
+            
+            
         
  

@@ -574,8 +574,7 @@ class FsCache(object):
     
     When a file is added that causes the disk usage to exceed `maxsize`, the oldest
     files are deleted to free up space. 
-    
-     '''
+    '''
 
     def __init__(self, cache_dir,  upstream=None):
         '''Init a new FileSystem Cache
@@ -616,7 +615,15 @@ class FsCache(object):
 
         return self.upstream.get_stream(rel_path)
         
+    def exists(self, rel_path):
         
+        if os.path.exists(os.path.join(self.cache_dir, rel_path)):
+            return True
+        
+        if self.upstream:
+            return self.upstream.exists(rel_path)
+        
+        return False
         
     def get(self, rel_path):
         '''Return the file path referenced but rel_path, or None if
@@ -1231,7 +1238,10 @@ class S3Cache(object):
                 return None
             else:
                 raise e
-    
+   
+    def exists(self, rel_path):
+        raise NotImplementedError('')
+        
     def get(self, rel_path):
         '''Return the file path referenced but rel_path, or None if
         it can't be found. If an upstream is declared, it will try to get the file

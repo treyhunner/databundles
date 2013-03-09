@@ -180,7 +180,7 @@ class CensusTransform(BasicTransform):
         if column.datatype == 'integer'  or str(column.datatype) == 'integer64' :
             msg = column.name
             f = lambda v, msg = msg: coerce_int_except(v, msg)
-        elif column.datatype == 'real':
+        elif column.datatype == 'real' or column.datatype == 'float':
             msg = column.name
             f = lambda v, msg = msg: coerce_float_except(v, msg)
         else:
@@ -196,7 +196,7 @@ class CensusTransform(BasicTransform):
         if column.default and column.default.strip():
             if column.datatype == 'text':
                 default = column.default 
-            elif column.datatype == 'real':
+            elif column.datatype == 'real' or column.datatype == 'float':
                 default = float(column.default) 
             elif column.datatype == 'integer'  or str(column.datatype) == 'integer64' :
                 default = int(column.default) 

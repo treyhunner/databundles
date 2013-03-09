@@ -123,6 +123,24 @@ class Test(TestBase):
         self.assertEqual("source-dataset-subset-variation-ca0d-r1", dbb.identity.vname)
         self.assertEqual("source-dataset-subset-variation-ca0d", dbb.config.identity.name)
 
+    def test_paths(self):
+        
+        from databundles.bundle import BuildBundle, DbBundle
+        
+        b = self.bundle
+        db  =DbBundle(b.database.path)
+        
+        self.assertEqual(b.path, db.path)
+        self.assertTrue(os.path.exists(b.path))
+        
+        self.assertEqual( b.database.path, db.database.path)
+        self.assertTrue(os.path.exists(b.database.path))
+
+        self.assertEqual( b.identity.path, db.identity.path)
+
+        for p in zip(b.partitions, db.partitions):
+            self.assertEqual(p[0].path, p[1].path)
+            self.assertTrue(p[0].path)
                 
     def test_schema_direct(self):
         '''Test adding tables directly to the schema'''
@@ -178,6 +196,15 @@ class Test(TestBase):
         s.add_column(t3,name='col3', datatype=Column.DATATYPE_TEXT )   
 
         self.bundle.database.session.commit()
+     
+    def test_names(self):
+        
+        print self.bundle.identity.path
+        print self.bundle.database.path
+        
+        for p in self.bundle.partitions:
+            print "Part: ",p.identity.path, p.database.path
+
      
     def test_column_processor(self):
         from databundles.orm import  Column

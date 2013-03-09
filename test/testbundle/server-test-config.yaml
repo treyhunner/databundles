@@ -1,33 +1,24 @@
 library:
     default:
-        remote: http://localhost:7979
-        filesystem: test
-        database: test      
-    
-    remote:
         port: 7979
-        filesystem: remote
-        database: remote
-    
+        remote: http://localhost:7979
+        filesystem: server
+        database: server      
+
 database:
-    test:
-        dbname: '{root}/library.db'
+    server:
+        dbname: '/tmp/server/library.db'
         driver: sqlite  
-    remote:
-        dbname: '{root}/library-remote.db'
-        driver: sqlite
+
         
 filesystem:  
-    root_dir: /tmp/server-test/
-    test:
-        dir: '{root}/cache-l1'
+    server:
+        dir: '/tmp/server/cache-l1'
         size: 5
         upstream:
-          dir: '{root}/cache-l2'
+          dir: '/tmp/server//cache-l2'
           options: [compress]
-    remote:
-        dir: '{root}/cache-remote'
-        
+
             
 downloads:
     dir: '{root}/downloads'

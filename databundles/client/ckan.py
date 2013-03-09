@@ -294,7 +294,7 @@ class Ckan(object):
         r = requests.get(url,headers =  self.auth_headers)
         url_path = r.json()['action']
         
-        files = [('file', os.path.basename(file_key), open(file_path).read())]
+        files = [('file', os.path.basename(file_key), open(base_path).read())]
         fields = [('key', file_key)]
         content_type, body = self._encode_multipart_formdata(fields, files)
 

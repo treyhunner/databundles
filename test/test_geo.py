@@ -46,10 +46,7 @@ class Test(TestBase):
          
         
         aa.write_geotiff('/tmp/box.tiff',  a,  type_=GDT_Float32)
-         
 
-   
-        
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

@@ -10,9 +10,10 @@ library:
     filesystem: clean
     database: clean
   server:
-      port: 7979
-      filesystem: server
-      database: server
+    port: 7979
+    remote: http://localhost:7979
+    filesystem: server
+    database: server      
         
 database:
     client:
@@ -23,8 +24,8 @@ database:
         driver: sqlite  
   
     server:
-        dbname: '{root}/testserver/library.db'
-        driver: sqlite
+        dbname: '/tmp/server/library.db'
+        driver: sqlite  
     
 filesystem:  
     root_dir: /tmp/client-test
@@ -34,7 +35,12 @@ filesystem:
         dir: '{root}/cache-clean' 
         
     server:
-        dir: '{root}/library/testserver'
+        dir: '/tmp/server/cache-l1'
+        size: 5
+        upstream:
+          dir: '/tmp/server//cache-l2'
+          options: [compress]
+
 
 downloads:
     dir: '{root}/downloads'

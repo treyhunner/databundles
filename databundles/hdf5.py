@@ -15,13 +15,9 @@ class Hdf5File(h5py.File):
 
         self.partition = partition
 
-        self.root_path = self.partition.bundle.filesystem.path(
-                            self.partition.bundle.filesystem.BUILD_DIR,
-                            self.partition.bundle.identity.path)
-        
         source,  name_parts, partition_path = self.partition._path_parts() #@UnusedVariable
         
-        self._path = os.path.join(self.partition.bundle.database.root_path, *partition_path)+ '.h5'
+        self._path = os.path.join(self.partition.bundle.database.base_path, *partition_path)
 
 
     def open(self):

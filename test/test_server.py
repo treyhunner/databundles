@@ -13,8 +13,6 @@ from test_base import  TestBase
 from  databundles.client.rest import Rest #@UnresolvedImport
 from databundles.library import QueryCommand, get_library
 
-server_url = 'http://localhost:7979'
-
 logger = databundles.util.get_logger(__name__)
 logger.setLevel(logging.DEBUG) 
 logging.captureWarnings(True)
@@ -27,13 +25,16 @@ class Test(TestBase):
         self.bundle_dir =  os.path.join(os.path.dirname(os.path.abspath(__file__)),'testbundle')    
         self.rc = RunConfig([os.path.join(self.bundle_dir,'client-test-config.yaml'),
                              os.path.join(self.bundle_dir,'bundle.yaml')])
-           
+         
+        self.server_rc = RunConfig([os.path.join(self.bundle_dir,'server-test-config.yaml')])
+       
         self.bundle = Bundle()  
         self.bundle_dir = self.bundle.bundle_dir
-        self.start_server(server_url)
+        
+        self.start_server(self.server_rc, "default")
 
     def tearDown(self):
-        self.stop_server(server_url)
+        self.stop_server()
 
     def get_library(self, name='default'):
         """Clear out the database before the test run"""
@@ -43,7 +44,7 @@ class Test(TestBase):
     def test_simple_install(self):
         from databundles.library import QueryCommand
           
-        api = Rest(server_url)
+        api = Rest(self.server_url)
 
         r =  api.put(self.bundle.identity.id_, self.bundle.database.path)
       
@@ -88,6 +89,7 @@ class Test(TestBase):
         
         self.get_library('clean').purge()
         self.get_library('server').purge()
+
         
         l = self.get_library()
      
@@ -153,14 +155,14 @@ class Test(TestBase):
         l2.purge()
         
         r = l2.get('b1DxuZ001')
-        print r
+        self.assertTrue(r is not None and r is not False)
+        self.assertEquals(r.partition.identity.id_,'b1DxuZ001' )
         
         self.assertTrue(os.path.exists(r.partition.database.path))
-        
    
     def test_test(self):
         from databundles.client.siesta import  API
-        a = API(server_url)
+        a = API(self.server_url)
         
         # Test echo for get. 
         r = a.test.echo('foobar').get(bar='baz')
@@ -191,7 +193,7 @@ class Test(TestBase):
         from databundles.bundle import DbBundle
         from databundles.library import QueryCommand
         
-        r = Rest(server_url)
+        r = Rest(self.server_url)
         
         bf = self.bundle.database.path
 
@@ -208,8 +210,7 @@ class Test(TestBase):
             self.assertEquals(p.identity.id_, response.object.get('id'))
 
         # Now get the bundles
-        bundle_file = r.get(self.bundle.identity.id_,'/tmp/foo')
-
+        bundle_file = r.get(self.bundle.identity.id_,'/tmp/foo.db')
         bundle = DbBundle(bundle_file)
 
         self.assertIsNot(bundle, None)

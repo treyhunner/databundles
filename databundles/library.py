@@ -502,7 +502,7 @@ class LibraryDb(object):
             out = []
             for d in self.queryByIdentity(query_command).all():
                 id_ = d.identity
-                d.path = os.path.join(self.cache,id_.path+'.db')
+                d.path = os.path.join(self.cache,id_.cache_key)
                 out.append(d)
         
         if len(query_command.partition) == 0:
@@ -816,30 +816,21 @@ class Library(object):
         '''Return databundles.database.Database object'''
         return self._database
   
-        
     def _get_bundle_path_from_id(self, bp_id):
         
         try:
             # Assume it is an Identity, or Identity-like
             dataset, partition = self.database.get(bp_id.id_)
             
-            return bp_id.path+".db", dataset, partition
+            return  dataset, partition
         except AttributeError:
             pass
         
         # A string, either a name or an id
         dataset, partition = self.database.get(bp_id)
 
-        if not dataset:
-            return None, None, None
-       
-        if partition:
-            rel_path = partition.identity.path+".db"
-        else:
-            rel_path = dataset.identity.path+".db"
+        return dataset, partition
             
-        return rel_path, dataset, partition
-        
     def get_ref(self,bp_id):
         from databundles.identity import ObjectNumber, DatasetNumber, PartitionNumber, Identity
                 
@@ -858,7 +849,7 @@ class Library(object):
             if not ( isinstance(on, DatasetNumber) or isinstance(on, PartitionNumber)):
                 raise ValueError("Object number must be for a Dataset or Partition: {} ".format(bp_id))
             
-            rel_path,dataset, partition  = self._get_bundle_path_from_id(bp_id) #@UnusedVariable
+            dataset, partition  = self._get_bundle_path_from_id(bp_id) #@UnusedVariable
         except: 
             pass
         
@@ -867,7 +858,7 @@ class Library(object):
             r = self.find(QueryCommand().identity(name = bp_id) ).first()
             
             if r:
-                rel_path, dataset, partition  = self._get_bundle_path_from_id(r[0].id_) 
+                dataset, partition  = self._get_bundle_path_from_id(r[0].id_) 
 
         # Try the name as a partition name
         if not dataset:
@@ -875,7 +866,7 @@ class Library(object):
         
             r = q.first()
             if r:
-                rel_path, dataset, partition  = self._get_bundle_path_from_id(r[1].id_)         
+                dataset, partition  = self._get_bundle_path_from_id(r[1].id_)         
 
 
         # No luck so far, so now try to get it from the remote library
@@ -900,18 +891,14 @@ class Library(object):
                         identity = Identity(**(r.Dataset._asdict()))
                         dataset = Dataset(**r.Dataset._asdict())
                         partition = None
-                        
-                    rel_path = identity.path+".db"
-        
+               
             except socket.error:
                 self.logger.error("Connection to remote {} failed".format(self.remote))
  
         if not dataset:
-            return False, False, False, False
-        
-        is_local = os.path.exists(os.path.join(self.cache.cache_dir, rel_path))
-        
-        return  rel_path, dataset, partition, is_local
+            return False, False
+     
+        return  dataset, partition
 
     def _get_remote_dataset(self, dataset):
         from databundles.identity import Identity
@@ -925,10 +912,10 @@ class Library(object):
         
         # Store it in the local cache. 
         
-        abs_path = self.cache.put(r, self._get_bundle_path_from_id(identity)[0])
+        abs_path = self.cache.put(r, identity.cache_key )
         
         if not os.path.exists(abs_path):
-            raise Exception("Didn't get file '{}' for id {}".format(abs_path,identity.name)[0])
+            raise Exception("Didn't get file '{}' for id {}".format(abs_path, identity.cache_key))
             
         bundle = DbBundle(abs_path)
   
@@ -936,16 +923,15 @@ class Library(object):
         self.database.add_file(abs_path, self.cache.repo_id, bundle.identity.id_, 'pulled')                 
         self.database.install_bundle(bundle)
       
-        return abs_path, bundle
+        return abs_path
       
     def _get_remote_partition(self, bundle, partition):
         
-        from databundles.identity import  PartitionIdentity
-      
-        try:  # ORM Objects
-            identity = PartitionIdentity(**(partition.to_dict()))
-        except:  # Tuples
-            identity = PartitionIdentity(**(partition._asdict())) 
+        from databundles.identity import  PartitionIdentity 
+
+        identity = PartitionIdentity.convert(partition, bundle = bundle)
+
+            
 
         p = bundle.partitions.get(identity.id_) # Get partition information from bundle
         
@@ -958,7 +944,7 @@ class Library(object):
       
         r = self.api.get_partition(bundle.identity.id_, p.identity.id_)
         # Store it in the local cache. 
-        p_abs_path = self.cache.put(r,self._get_bundle_path_from_id(identity)[0])
+        p_abs_path = self.cache.put(r,p.identity.cache_key)
 
         if os.path.realpath(p_database_path) != os.path.realpath(p_abs_path):
             m =( "Path mismatch in downloading partition: {} != {}"
@@ -979,39 +965,40 @@ class Library(object):
 
         # Get a reference to the dataset, partition and relative path
         # from the local database. 
-        dataset, partition, is_local = self.get_ref(bp_id)
+        dataset, partition = self.get_ref(bp_id)
 
         if partition:
-            return self._get_partition(rel_path, is_local, dataset, partition)
+            return self._get_partition(dataset, partition)
         elif dataset:
-            return self._get_dataset(rel_path, is_local, dataset)        
+            return self._get_dataset(dataset)  
 
-    def _get_dataset(self, rel_path, is_local, dataset):
+    def _get_dataset(self, dataset):
 
         # Try to get the file from the cache. 
-        abs_path = self.cache.get(rel_path) if rel_path else None
+        abs_path = self.cache.get(dataset.identity.cache_key)
 
         # Not in the cache, try to get it from the remote library, 
         # if a remote was set. 
 
-        if self.api and is_local is False and dataset is not False:
-            abs_path, bundle = self._get_remote_dataset(dataset)
-        else:
-            bundle = None
+        if not abs_path and self.api:
+            abs_path = self._get_remote_dataset(dataset)
             
         if not abs_path or not os.path.exists(abs_path):
             return False
        
-        if not bundle:
-            bundle = DbBundle(abs_path)
+        bundle = DbBundle(abs_path)
             
         bundle.library = self
 
         return self.Return(bundle, None)
     
-    def _get_partition(self, rel_path, is_local, dataset, partition):
+    def _get_partition(self,  dataset, partition):
         from databundles.dbexceptions import NotFoundError
-        r = self._get_dataset(rel_path, is_local, dataset)
+        r = self._get_dataset(dataset)
+        
+        if not r:
+            return False
+        
      
         p =  r.bundle.partitions.partition(partition)
         
@@ -1026,7 +1013,6 @@ class Library(object):
                 raise NotFoundError("Didn't get partition in {} for id {}. "+
                                     " Partition found, but not in local library and api not set. "
                                .format(r.bundle.identity.name, partition))
-        
         p.library = self   
 
         return self.Return(r.bundle, p)
@@ -1066,9 +1052,7 @@ class Library(object):
         if isinstance(identity , dict):
             identity = new_identity(identity)
         
-        rel_path = identity.path+".db"
-        
-        dst = self.cache.put(file_path,rel_path)
+        dst = self.cache.put(file_path,identity.cache_key)
 
         if self.api and self.sync:
             self.api.put(file_path)
@@ -1078,7 +1062,7 @@ class Library(object):
         if identity.is_bundle:
             self.database.install_bundle_file(identity, file_path)
 
-        return dst, rel_path, self.cache.public_url_f()(rel_path)
+        return dst, identity.cache_key, self.cache.public_url_f()(identity.cache_key)
      
     def put(self, bundle):
         '''Install a bundle or partition file into the library.
@@ -1099,9 +1083,9 @@ class Library(object):
         
         bundle.identity.name # throw exception if not right type. 
 
-        dst, rel_path, url = self.put_file(bundle.identity, bundle.database.path)
+        dst, cache_key, url = self.put_file(bundle.identity, bundle.database.path)
 
-        return dst, rel_path, url
+        return dst, cache_key, url
 
     def remove(self, bundle):
         '''Remove a bundle from the library, and delete the configuration for
@@ -1109,13 +1093,15 @@ class Library(object):
         
         self.database.remove_bundle(bundle)
         
-        self.cache.remove(bundle.identity.path+".db")
+        self.cache.remove(bundle.identity.cache_key)
         
     def clean(self):
         self.database.clean()
         
     def purge(self):
-        from databundles.util import rm_rf
+        """Remove all records from the library database, then delete all
+        files from the cache"""
+        self.clean()
         self.cache.clean()
         
         

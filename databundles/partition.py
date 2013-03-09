@@ -48,20 +48,21 @@ class Partition(object):
         '''Return a pathname for the partition, relative to the containing 
         directory of the bundle. '''
         source,  name_parts, partition_path = self._path_parts()
-        
-        return  os.path.join(source, '-'.join( name_parts), *partition_path )
 
-        
+        return  os.path.join(self.bundle.database.base_path,  *partition_path )
+
+    def sub_dir(self, *args):
+        """Return a subdirectory relative to the partition path"""
+        return  os.path.join(self.path,*args)
+
     @property
     def database(self):
         if self._database is None:
             from databundles.database import PartitionDb
             
             source,  name_parts, partition_path = self._path_parts() #@UnusedVariable
-            
-            path = os.path.join(self.bundle.database.root_path, *partition_path)+".db"
 
-            self._database = PartitionDb(self.bundle, self, file_path=path)
+            self._database = PartitionDb(self.bundle, self, base_path=self.path)
             
             def add_type(database):
                 from databundles.bundle import BundleDbConfig
@@ -124,12 +125,12 @@ class Partition(object):
             clean. If True, delete the database first. Defaults to true. 
         
         '''
-        
+     
         if clean:
             self.database.delete()
-        
+
         self.database.create(copy_tables = False)
-       
+
         if tables is not None:
         
             if not isinstance(tables, list):
@@ -172,7 +173,7 @@ class GeoPartition(Partition):
         super(GeoPartition, self).__init__(bundle, record)
 
     def convert(self, table_name, progress_f=None):
-        """Convert a spatialite geopartition to a regular partition
+        """Convert a spatialite geopartition to a regular arg
         by extracting the geometry and re-projecting it to WGS84
         
         :param config: a `RunConfig` object
@@ -192,8 +193,8 @@ class GeoPartition(Partition):
         
         
         #
-        # Duplicate the geo partition table for the new partition
-        # Then make the new partition
+        # Duplicate the geo arg table for the new arg
+        # Then make the new arg
         #
         
         
@@ -210,8 +211,8 @@ class GeoPartition(Partition):
 
         pid = self.identity
         pid.table = table_name
-        partition = self.bundle.partitions.new_partition(pid)
-        partition.create_with_tables()
+        arg = self.bundle.partitions.new_partition(pid)
+        arg.create_with_tables()
         
         #
         # Open a connection to spatialite and run the query to 
@@ -245,7 +246,7 @@ class GeoPartition(Partition):
         if not progress_f:
             progress_f = lambda x: x
        
-        with partition.database.inserter(table_name) as ins:
+        with arg.database.inserter(table_name) as ins:
             for i, line in enumerate(reader):
                 ins.insert(line)
                 progress_f(i)
@@ -356,7 +357,7 @@ class Partitions(object):
         
         q = (self.bundle.database.session
              .query(OrmPartition)
-             .filter(OrmPartition.id_==id_.encode('ascii')))
+             .filter(OrmPartition.id_==str(id_).encode('ascii')))
       
         try:
             orm_partition = q.one()
