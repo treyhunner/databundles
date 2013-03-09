@@ -96,6 +96,48 @@ class Rest(object):
             # Read the damn thing yourself ... 
             return response
             
+    def get_partition(self, d_id_or_name, p_id_or_name, file_path=None):
+        '''Get a partition by name or id and either return a file object, or
+        store it in the given file object
+        
+        Args:
+            id_or_name 
+            file_path A string or file object where the bundle data should be stored
+                If not provided, the method returns a response object, from which the
+                caller my read the body. If file_path is True, the method will generate
+                a temporary filename. 
+        
+        return
+        
+        '''
+        response  = self.api.datasets(d_id_or_name).partitions(p_id_or_name).get()
+  
+        if response.status == 404:
+            raise NotFound("Didn't find a file for {} / {}".format(d_id_or_name, p_id_or_name))
+        elif response.status != 200:
+            raise RestError("Error from server: {} {}".format(response.status, response.reason))
+  
+        if file_path:
+            
+            if file_path is True:
+                    import uuid,tempfile,os
+            
+                    file_path = os.path.join(tempfile.gettempdir(),'rest-downloads',str(uuid.uuid4()))
+                    if not os.path.exists(os.path.dirname(file_path)):
+                        os.makedirs(os.path.dirname(file_path))  
+               
+            with open(file_path,'w') as file_:
+                chunksize = 8192
+                chunk =  response.read(chunksize) #@UndefinedVariable
+                while chunk:
+                    file_.write(chunk)
+                    chunk =  response.read(chunksize) #@UndefinedVariable
+    
+            return file_path
+        else:
+            # Read the damn thing yourself ... 
+            return response
+                    
     def _put(self, id_,source):
         '''Put the source to the remote, creating a compressed version if
         it is not originally compressed'''

@@ -66,18 +66,16 @@ class Test(TestBase):
   
         # Try variants of find. 
         r = api.find(self.bundle.identity.name)
-        self.assertEquals(self.bundle.identity.name, r[0]['dataset']['name'])
+        self.assertEquals(self.bundle.identity.name, r[0].Dataset.name)
         
         r = api.find(QueryCommand().identity(name = self.bundle.identity.name))
-        self.assertEquals(self.bundle.identity.name, r[0]['dataset']['name'])
+        self.assertEquals(self.bundle.identity.name, r[0].Dataset.name)
 
         for partition in self.bundle.partitions:
             r = api.find((QueryCommand().partition(name = partition.identity.name)).to_dict())
-            self.assertEquals(partition.identity.name, r[0]['partition']['name'])
+            self.assertEquals(partition.identity.name, r[0].Partition.name)
   
     def test_remote_library(self):
-   
-        return 
    
         # This test does not work with the threaded test server. 
         
@@ -87,6 +85,9 @@ class Test(TestBase):
         #
         # First store the files in the local library
         #
+        
+        self.get_library('clean').purge()
+        self.get_library('server').purge()
         
         l = self.get_library()
      
@@ -114,18 +115,48 @@ class Test(TestBase):
         # Now start with a different, clean library with the same remote
         #
 
-        # haven't pushed year, so should fail. 
+        # haven't pushed yet, so should fail. 
         l2 = self.get_library('clean')
-        r = l2.get(self.bundle.identity.name)
-        self.assertFalse(r)
-        
+        self.assertRaises(Exception, l2.get, self.bundle.identity.name)     
+     
         # Copy all of the newly added files to the server. 
         l.push()
    
         l2 = self.get_library('clean')
         r = l2.get(self.bundle.identity.name)
         self.assertTrue(r is not False)
+
    
+    def test_remote_library_partitions(self):
+        
+
+        l = self.get_library()
+     
+        r = l.put(self.bundle)
+
+        r = l.get(self.bundle.identity.name)
+        self.assertEquals(self.bundle.identity.name, r.bundle.identity.name)
+
+        for partition in self.bundle.partitions:
+            r = l.put(partition)
+
+            # Get the partition with a name
+            r = l.get(partition.identity.name)
+            self.assertTrue(r is not False)
+            self.assertEquals(partition.identity.name, r.partition.identity.name)
+            self.assertEquals(self.bundle.identity.name, r.bundle.identity.name)
+
+        # Copy all of the newly added files to the server. 
+        l.push()
+            
+        l2 = get_library('clean')
+        l2.purge()
+        
+        r = l2.get('b1DxuZ001')
+        print r
+        
+        self.assertTrue(os.path.exists(r.partition.database.path))
+        
    
     def test_test(self):
         from databundles.client.siesta import  API
@@ -156,8 +187,6 @@ class Test(TestBase):
         with self.assertRaises(Exception):
             r = a.test.exception.get()
 
-                  
-
     def test_put_bundle(self):
         from databundles.bundle import DbBundle
         from databundles.library import QueryCommand
@@ -187,14 +216,15 @@ class Test(TestBase):
         self.assertEquals('a1DxuZ',bundle.identity.id_)
 
         # Should show up in datasets list. 
-        o = r.datasets()
+        
+        o = r.list()
    
         self.assertTrue('a1DxuZ' in o.keys() )
     
         o = r.find(QueryCommand().table(name='tone').partition(any=True))
       
-        self.assertTrue( 'b1DxuZ001' in [i['partition']['id'] for i in o])
-        self.assertTrue( 'a1DxuZ' in [i['dataset']['id'] for i in o])
+        self.assertTrue( 'b1DxuZ001' in [i.Partition.id for i in o])
+        self.assertTrue( 'a1DxuZ' in [i.Dataset.id for i in o])
       
     def test_put_errors(self):
         pass

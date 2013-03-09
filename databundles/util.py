@@ -56,6 +56,19 @@ def get_logger(name):
     return logger
 
 
+def rm_rf( d):
+    """Recursively delete a directory"""
+    
+    if not os.path.exists(d):
+        return
+    
+    for path in (os.path.join(d,f) for f in os.listdir(d)):
+        if os.path.isdir(path):
+            rm_rf(path)
+        else:
+            os.unlink(path)
+    os.rmdir(d)
+
 def bundle_file_type(path_or_file):
     '''Return a determination if the file is a sqlite file or a gzip file
     

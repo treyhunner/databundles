@@ -307,6 +307,7 @@ class Database(object):
             import re
             self.file_path = file_path
             self.root_path = re.sub('\.db$', '', self.file_path)
+            
     
         else:
             self.root_path = self.bundle.filesystem.path(

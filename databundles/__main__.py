@@ -100,6 +100,10 @@ def library_command(args, rc):
     elif args.subcommand == 'clean':
         print "Clean tables"
         l.database.clean()
+      
+    elif args.subcommand == 'purge':
+        print "Purge library"
+        l.purge()
         
     elif args.subcommand == 'rebuild':
         print "Rebuild library"
@@ -295,8 +299,12 @@ def main():
     sp = asp.add_parser('drop', help='Print out files in the library')
     sp.set_defaults(subcommand='drop')    
     
-    sp = asp.add_parser('clean', help='Remove all entries from the library')
+    sp = asp.add_parser('clean', help='Remove all entries from the library database')
     sp.set_defaults(subcommand='clean')
+    
+    sp = asp.add_parser('purge', help='Remove all entries from the library database and delete all files')
+    sp.set_defaults(subcommand='purge')
+    
     
     sp = asp.add_parser('rebuild', help='Rebuild the library database from the files in the library')
     sp.set_defaults(subcommand='rebuild')

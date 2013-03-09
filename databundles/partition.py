@@ -50,6 +50,7 @@ class Partition(object):
         source,  name_parts, partition_path = self._path_parts()
         
         return  os.path.join(source, '-'.join( name_parts), *partition_path )
+
         
     @property
     def database(self):

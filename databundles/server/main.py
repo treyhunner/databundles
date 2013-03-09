@@ -18,31 +18,37 @@ import databundles.client.exceptions as exc
 
 # This might get changed, as in test_run
 run_config = databundles.run.RunConfig()
+library_name = 'default'
 
 logger = databundles.util.get_logger(__name__)
 logger.setLevel(logging.INFO)
     
 def get_library_config(name=None):
-    
-    if name is None:
-        name = 'default'
-    
-    cfg =  run_config.library.get(name)
+    global library_name
+
+    if name is not None:
+        library_name = name
+
+    cfg =  run_config.library.get(library_name)
     
     if not cfg:
-        raise Exception("Failed to get exception for name {} ".format(name))
+        raise Exception("Failed to get exception for name {} ".format(library_name))
     
     return cfg
     
-def get_library(name='default'):
+def get_library(name=None):
     '''Return the library. In a function to defer execution, so the
     run_config variable can be altered before it is called. '''
     
+    global library_name
     # Originally, we were caching the library, but the library
     # holds open a sqlite database, and that isn't multi-threaded, so then
     # we can use a multi-threaded server. 
     # Of course, then you have concurrency problems with sqlite .... 
-    return databundles.library._get_library(run_config, name)
+    if name is not None:
+        library_name = name
+
+    return databundles.library._get_library(run_config, library_name)
  
 
 def make_exception_response(e):
@@ -288,7 +294,7 @@ def put_dataset(did):
             match payload. {} != {}""".format(did,tb.identity.id_))
     
         library_path, rel_path, url = get_library().put(tb) #@UnusedVariable
-        
+
         identity = tb.identity
         
         # if that worked, OK to remove the temporary file. 
@@ -300,8 +306,9 @@ def put_dataset(did):
     return r
   
 
-@get('/datasets/<did>')    
-def get_dataset_identity(did):
+@get('/datasets/<did>') 
+@CaptureException   
+def get_dataset_bundle(did):
     '''Get a bundle database file, given an id or name
     
     Args:
@@ -313,26 +320,10 @@ def get_dataset_identity(did):
     bp = get_library().get(did)
 
     if bp is False:
-        raise Exception("Didn't file dataset for id: {} ".format(did))
+        raise Exception("Didn't find dataset for id: {} ".format(did))
 
     return static_file(bp.bundle.database.path, root='/', mimetype="application/octet-stream")    
 
-
-@get('/datasets/:did/record')
-def get_dataset_bundle(did):
-    '''Return a single dataset identity record given an id_ or name.
-    Returns only the dataset record, excluding chld objects like partitions, 
-    tables, and columns. 
-    
-    '''
-
-    gr =  get_library().get(did)
-    
-    if not gr:
-        raise exc.NotFound("Failed to find dataset for {}".format(did))
-    
-    
-    return gr.bundle.to_dict()
     
 
 @get('/datasets/:did/info')
@@ -341,6 +332,7 @@ def get_dataset_info(did):
     the schema and all partitions. '''
 
 @get('/datasets/<did>/partitions')
+@CaptureException
 def get_dataset_partitions_info(did):
     ''' GET    /dataset/:did/partitions''' 
     gr =  get_library().get(did)
@@ -361,21 +353,8 @@ def get_dataset_partitions(did, pid):
     '''Return a partition for a dataset'''
     
     dataset, partition = _get_dataset_partition_record(did, pid)
-    
-    ds =  get_library().findByIdentity(did)
-    
-    if len(ds) == 0:
-        raise exc.NotFound('No dataset for id: {}'.format(did))
-        
-    if len(ds) > 1:
-        raise exc.Conflict("Got more than one result")
 
-    bundle, partition = _get_dataset_partition_record(did).partitions.get(pid)
-    
-    if not partition:
-        raise exc.NotFound('No partition in dataset {} for id: {}'.format(did, pid)) 
-
-    return partition.identity.to_dict();
+    return static_file(partition.database.path, root='/', mimetype="application/octet-stream")    
 
 @put('/datasets/<did>/partitions/<pid>')
 @CaptureException
@@ -433,12 +412,14 @@ def put_test_exception():
 @get('/test/isdebug')
 def get_test_isdebug():
     '''eturn true if the server is open and is in debug mode'''
-    global stoppable_wsgi_server_run
-    if stoppable_wsgi_server_run is True:
-        return True
-    else: 
+    try:
+        global stoppable_wsgi_server_run
+        if stoppable_wsgi_server_run is True:
+            return True
+        else: 
+            return False
+    except NameError:
         return False
-   
 
 @post('/test/close')
 @CaptureException
@@ -517,12 +498,12 @@ def local_run(config=None, name='default', reloader=True):
 
     return run(host=host, port=port, reloader=reloader)
     
-def local_debug_run():
+def local_debug_run(name='default'):
     from bottle import run, debug
 
     debug()
     l = get_library()  #@UnusedVariable
-    config = get_library_config()
+    config = get_library_config(name)
     port = config.get('port', 8080)
     host = config.get('host', '0.0.0.0')
     return run(host=host, port=port, reloader=True)

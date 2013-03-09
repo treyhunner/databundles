@@ -563,7 +563,201 @@ class BundleFilesystem(Filesystem):
         return o
    
 
-class FsLimitedCache(object):
+class FsCache(object):
+    '''A cache that transfers files to and from a remote filesystem
+    
+    The `FsCache` stores files in a filesystem, possily retrieving and storing
+    files to an upstream cache. 
+    
+    When files are written , they are written through to the upstream. If a file
+    is requested that does not exist, it is fetched from the upstream. 
+    
+    When a file is added that causes the disk usage to exceed `maxsize`, the oldest
+    files are deleted to free up space. 
+    
+     '''
+
+    def __init__(self, cache_dir,  upstream=None):
+        '''Init a new FileSystem Cache
+        
+        Args:
+            cache_dir
+            maxsize. Maximum size of the cache, in GB
+        
+        '''
+        
+        from databundles.dbexceptions import ConfigurationError
+        self.cache_dir = cache_dir
+        self.upstream = upstream
+     
+        if not os.path.isdir(self.cache_dir):
+            os.makedirs(self.cache_dir)
+        
+        if not os.path.isdir(self.cache_dir):
+            raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
+        
+    @property
+    def repo_id(self):
+        '''Return the ID for this repository'''
+        import hashlib
+        m = hashlib.md5()
+        m.update(self.cache_dir)
+
+        return m.hexdigest()
+    
+    def get_stream(self, rel_path):
+        p = self.get(rel_path)
+        
+        if p:
+            return open(p) 
+     
+        if not self.upstream:
+            return None
+
+        return self.upstream.get_stream(rel_path)
+        
+        
+        
+    def get(self, rel_path):
+        '''Return the file path referenced but rel_path, or None if
+        it can't be found. If an upstream is declared, it will try to get the file
+        from the upstream before declaring failure. 
+        '''
+        import shutil
+
+        logger.debug("{} get {}".format(self.repo_id,rel_path)) 
+               
+        path = os.path.join(self.cache_dir, rel_path)
+      
+        # If is already exists in the repo, just return it. 
+        if  os.path.exists(path):
+            
+            if not os.path.isfile(path):
+                raise ValueError("Path does not point to a file")
+            
+            logger.debug("{} get {} found ".format(self.repo_id, path))
+            return path
+            
+        if not self.upstream:
+            # If we don't have an upstream, then we are done. 
+            return None
+     
+        stream = self.upstream.get_stream(rel_path)
+        
+        if not stream:
+            logger.debug("{} get not found in upstream ()".format(self.repo_id,rel_path)) 
+            return None
+        
+        # Got a stream from upstream, so put the file in this cache. 
+        dirname = os.path.dirname(path)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        
+        with open(path,'w') as f:
+            shutil.copyfileobj(stream, f)
+        
+        stream.close()
+        
+        if not os.path.exists(path):
+            raise Exception("Failed to copy upstream data to {} ".format(path))
+        
+        logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
+        return path
+    
+
+    def put(self, source, rel_path):
+        '''Copy a file to the repository
+        
+        Args:
+            source: Absolute path to the source file, or a file-like object
+            rel_path: path relative to the root of the repository
+        
+        '''
+
+        sink = self.put_stream(rel_path)
+        
+        copy_file_or_flo(source, sink)
+        
+        sink.close()
+
+        return sink.repo_path
+
+    def put_stream(self,rel_path):
+        """return a file object to write into the cache. The caller
+        is responsibile for closing the stream
+        """
+        
+        repo_path = os.path.join(self.cache_dir, rel_path)
+      
+        if not os.path.isdir(os.path.dirname(repo_path)):
+            os.makedirs(os.path.dirname(repo_path))
+        
+        sink = open(repo_path,'w+')
+        upstream = self.upstream
+        
+        class flo:
+            '''This File-Like-Object class ensures that the file is also
+            sent to the upstream after it is stored in the FSCache. '''
+            def __init__(self):
+                pass 
+            
+            @property
+            def repo_path(self):
+                return repo_path
+            
+            def write(self, str_):
+                sink.write(str_)
+            
+            def close(self):
+                sink.close()
+                if upstream:
+                    upstream.put(repo_path, rel_path) 
+                
+        return flo()
+    
+    def find(self,query):
+        '''Passes the query to the upstream, if it exists'''
+        if self.upstream:
+            return self.upstream.find(query)
+        else:
+            return False
+    
+    def remove(self,rel_path, propagate = False):
+        '''Delete the file from the cache, and from the upstream'''
+        repo_path = os.path.join(self.cache_dir, rel_path)
+
+        if os.path.exists(repo_path):
+            os.remove(repo_path)
+
+        if self.upstream and propagate :
+            self.upstream.remove(rel_path)    
+            
+    def clean(self):
+        Filesystem.rm_rf(self.cache_dir)
+        
+        if self.upstream:
+            self.upstream.clean()
+
+        
+    def list(self, path=None):
+        '''get a list of all of the files in the repository'''
+        
+        path = path.strip('/')
+        
+        raise NotImplementedError() 
+
+
+    def public_url_f(self):
+        ''' Returns a function that will convert a rel_path into a public URL'''
+        if self.upstream:
+            upstream_f = self.upstream.public_url_f()
+            return lambda rel_path: upstream_f(rel_path)
+        else:
+            cache_dir = self.cache_dir
+            return lambda rel_path: 'file://{}'.format(os.path.join(cache_dir, rel_path))            
+
+
+class FsLimitedCache(FsCache):
     '''A cache that transfers files to and from a remote filesystem
     
     The `FsCache` stores files in a filesystem, possily retrieving and storing
@@ -887,194 +1081,7 @@ class FsLimitedCache(object):
             return lambda rel_path: 'file://{}'.format(os.path.join(cache_dir, rel_path))     
     
 
-class FsCache(object):
-    '''A cache that transfers files to and from a remote filesystem
-    
-    The `FsCache` stores files in a filesystem, possily retrieving and storing
-    files to an upstream cache. 
-    
-    When files are written , they are written through to the upstream. If a file
-    is requested that does not exist, it is fetched from the upstream. 
-    
-    When a file is added that causes the disk usage to exceed `maxsize`, the oldest
-    files are deleted to free up space. 
-    
-     '''
-
-    def __init__(self, cache_dir,  upstream=None):
-        '''Init a new FileSystem Cache
-        
-        Args:
-            cache_dir
-            maxsize. Maximum size of the cache, in GB
-        
-        '''
-        
-        from databundles.dbexceptions import ConfigurationError
-        self.cache_dir = cache_dir
-        self.upstream = upstream
-     
-        if not os.path.isdir(self.cache_dir):
-            os.makedirs(self.cache_dir)
-        
-        if not os.path.isdir(self.cache_dir):
-            raise ConfigurationError("Cache dir '{}' is not valid".format(self.cache_dir)) 
-        
-    @property
-    def repo_id(self):
-        '''Return the ID for this repository'''
-        import hashlib
-        m = hashlib.md5()
-        m.update(self.cache_dir)
-
-        return m.hexdigest()
-    
-    def get_stream(self, rel_path):
-        p = self.get(rel_path)
-        
-        if p:
-            return open(p) 
-     
-        if not self.upstream:
-            return None
-
-        return self.upstream.get_stream(rel_path)
-        
-        
-        
-    def get(self, rel_path):
-        '''Return the file path referenced but rel_path, or None if
-        it can't be found. If an upstream is declared, it will try to get the file
-        from the upstream before declaring failure. 
-        '''
-        import shutil
-
-        logger.debug("{} get {}".format(self.repo_id,rel_path)) 
-               
-        path = os.path.join(self.cache_dir, rel_path)
-      
-        # If is already exists in the repo, just return it. 
-        if  os.path.exists(path):
-            
-            if not os.path.isfile(path):
-                raise ValueError("Path does not point to a file")
-            
-            logger.debug("{} get {} found ".format(self.repo_id, path))
-            return path
-            
-        if not self.upstream:
-            # If we don't have an upstream, then we are done. 
-            return None
-     
-        stream = self.upstream.get_stream(rel_path)
-        
-        if not stream:
-            logger.debug("{} get not found in upstream ()".format(self.repo_id,rel_path)) 
-            return None
-        
-        # Got a stream from upstream, so put the file in this cache. 
-        dirname = os.path.dirname(path)
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-        
-        with open(path,'w') as f:
-            shutil.copyfileobj(stream, f)
-        
-        stream.close()
-        
-        if not os.path.exists(path):
-            raise Exception("Failed to copy upstream data to {} ".format(path))
-        
-        logger.debug("{} get return from upstream {}".format(self.repo_id,rel_path)) 
-        return path
-    
-
-    def put(self, source, rel_path):
-        '''Copy a file to the repository
-        
-        Args:
-            source: Absolute path to the source file, or a file-like object
-            rel_path: path relative to the root of the repository
-        
-        '''
-
-        sink = self.put_stream(rel_path)
-        
-        copy_file_or_flo(source, sink)
-        
-        sink.close()
-
-        return sink.repo_path
-
-    def put_stream(self,rel_path):
-        """return a file object to write into the cache. The caller
-        is responsibile for closing the stream
-        """
-        
-        repo_path = os.path.join(self.cache_dir, rel_path)
-      
-        if not os.path.isdir(os.path.dirname(repo_path)):
-            os.makedirs(os.path.dirname(repo_path))
-        
-        sink = open(repo_path,'w+')
-        upstream = self.upstream
-        
-        class flo:
-            '''This File-Like-Object class ensures that the file is also
-            sent to the upstream after it is stored in the FSCache. '''
-            def __init__(self):
-                pass 
-            
-            @property
-            def repo_path(self):
-                return repo_path
-            
-            def write(self, str_):
-                sink.write(str_)
-            
-            def close(self):
-                sink.close()
-                if upstream:
-                    upstream.put(repo_path, rel_path) 
-                
-        return flo()
-    
-    def find(self,query):
-        '''Passes the query to the upstream, if it exists'''
-        if self.upstream:
-            return self.upstream.find(query)
-        else:
-            return False
-    
-    def remove(self,rel_path, propagate = False):
-        '''Delete the file from the cache, and from the upstream'''
-        repo_path = os.path.join(self.cache_dir, rel_path)
-
-        if os.path.exists(repo_path):
-            os.remove(repo_path)
-
-        if self.upstream and propagate :
-            self.upstream.remove(rel_path)    
-            
-        
-    def list(self, path=None):
-        '''get a list of all of the files in the repository'''
-        
-        path = path.strip('/')
-        
-        raise NotImplementedError() 
-
-
-    def public_url_f(self):
-        ''' Returns a function that will convert a rel_path into a public URL'''
-        if self.upstream:
-            upstream_f = self.upstream.public_url_f()
-            return lambda rel_path: upstream_f(rel_path)
-        else:
-            cache_dir = self.cache_dir
-            return lambda rel_path: 'file://{}'.format(os.path.join(cache_dir, rel_path))            
-
-class FsCompressionCache(object):
+class FsCompressionCache(FsCache):
     
     '''A Cache Adapter that compresses files before sending  them to
     another cache.

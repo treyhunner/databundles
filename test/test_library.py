@@ -61,9 +61,10 @@ class Test(TestBase):
         
         l = self.get_library()
      
-        r = l.put(self.bundle)
+        r = l.put(self.bundle) #@UnusedVariable
 
         r = l.get(self.bundle.identity.name)
+        self.assertTrue(r is not False)
         self.assertEquals(self.bundle.identity.name, r.bundle.identity.name)
 
         r = l.get('gibberish')
@@ -159,13 +160,13 @@ class Test(TestBase):
         # Find the bundle and partitions in the library. 
     
         r = l.find(QueryCommand().table(name='tone'))
-        self.assertEquals('source-dataset-subset-variation-ca0d-r1',r[0].Dataset.identity.name)  
+        self.assertEquals('source-dataset-subset-variation-ca0d',r[0].Dataset.identity.name)  
     
         r = l.find(QueryCommand().table(name='tone').partition(any=True)).all()
-        self.assertEquals('source-dataset-subset-variation-ca0d-tone-r1',r[0].Partition.identity.name)
+        self.assertEquals('source-dataset-subset-variation-ca0d-tone',r[0].Partition.identity.name)
         
         r = l.find(QueryCommand().table(name='tthree').partition(any=True)).all()
-        self.assertEquals('source-dataset-subset-variation-ca0d-tthree-r1',r[0].Partition.identity.name)
+        self.assertEquals('source-dataset-subset-variation-ca0d-tthree',r[0].Partition.identity.name)
         
         #
         #  Try getting the files 
@@ -190,7 +191,7 @@ class Test(TestBase):
         self.assertEquals(1, len(r))
        
         ds_names = [ds.identity.name for ds in l.datasets]
-        self.assertIn('source-dataset-subset-variation-ca0d-r1', ds_names)
+        self.assertIn('source-dataset-subset-variation-ca0d', ds_names)
 
     def test_cache(self):
         from databundles.filesystem import  FsCache, FsLimitedCache

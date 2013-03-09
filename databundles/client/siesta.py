@@ -113,7 +113,6 @@ class Response(object):
         if isinstance(args, list) and len(args) > 0:
             args[0] = pre_message + str(args[0])
      
-    
         # Add the trace
         args[0] = args[0] + "\n---- Server Trace --- \n" + self.object['exception']['trace']
     

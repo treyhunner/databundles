@@ -9,7 +9,11 @@ library:
     remote: http://localhost:7979
     filesystem: clean
     database: clean
-
+  server:
+      port: 7979
+      filesystem: server
+      database: server
+        
 database:
     client:
         dbname: '{root}/library.db'
@@ -17,6 +21,10 @@ database:
     clean: # A clean library to test the remote. 
         dbname: '{root}/library-clean.db'
         driver: sqlite  
+  
+    server:
+        dbname: '{root}/testserver/library.db'
+        driver: sqlite
     
 filesystem:  
     root_dir: /tmp/client-test
@@ -24,6 +32,9 @@ filesystem:
         dir: '{root}/cache-l1'
     clean:
         dir: '{root}/cache-clean' 
+        
+    server:
+        dir: '{root}/library/testserver'
 
 downloads:
     dir: '{root}/downloads'
