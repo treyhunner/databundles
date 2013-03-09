@@ -863,7 +863,7 @@ class Library(object):
         # Try the name as a partition name
         if not dataset:
             q = self.find(QueryCommand().partition(name = bp_id) )
-        
+       
             r = q.first()
             if r:
                 dataset, partition  = self._get_bundle_path_from_id(r[1].id_)         

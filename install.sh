@@ -1,5 +1,5 @@
 #!/bin/bash 
-DATA_DIR=/data # Directory to stor downloads and library. 
+DATA_DIR=/data # Directory to store downloads and library. 
 while getopts "d:" OPTION
 do
      case $OPTION in

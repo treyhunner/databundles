@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
+#from distribute_setup import use_setuptools
+#use_setuptools()
 
-try:
-    from setuptools import setup
-    extra = {}
-except ImportError:
-    from distutils.core import setup
-    extra = {}
+from setuptools import setup, find_packages #@UnresolvedImport
+
 
 import sys, re
 
@@ -50,12 +48,14 @@ setup(name = "databundles",
       author = "Eric Busboom",
       author_email = "eric@clarinova.com",
       url = "https://github.com/clarinova/databundles",
-      packages = ["databundles", 
+      install_requires=['distribute'],
+      xpackages = ["databundles", 
                   "databundles.client",
                   "databundles.server",
                   "databundles.geo",
                   "databundles.sourcesupport",
                   ],
+      packages = find_packages(), 
       scripts=['scripts/dbundle', 'scripts/dbmanage'],
       package_data = {"databundles": ["support/*"]},
       license = "",
@@ -64,5 +64,4 @@ setup(name = "databundles",
       #zip_safe=False,
       #install_requires = parse_requirements('requirements.txt'),
       #dependency_links = parse_dependency_links('requirements.txt'),
-      **extra
       )

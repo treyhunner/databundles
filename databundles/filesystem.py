@@ -617,8 +617,10 @@ class FsCache(object):
         
     def exists(self, rel_path):
         
-        if os.path.exists(os.path.join(self.cache_dir, rel_path)):
-            return True
+        abs_path = os.path.join(self.cache_dir, rel_path)
+        
+        if os.path.exists(abs_path):
+            return abs_path
         
         if self.upstream:
             return self.upstream.exists(rel_path)

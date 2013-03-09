@@ -145,11 +145,11 @@ def library_command(args, rc):
             print "{}: Not found".format(args.term)
         else:
             print "Rel Path  : ",dataset.identity.cache_key
-            print "Abs Path  : ",os.path.join(l.cache.cache_dir, dataset.identity.cache_key)
-            print "Dataset   : ",dataset.name
-            print "Partition : ",partition if partition else ''
-            print "D Is Local: ",os.path.exists(dataset.identity.cache_key)
-            print "P Is Local: ", os.path.exists(partition.identity.cache_key) if partition else ''
+            print "Abs Path  : ",l.cache.exists(dataset.identity.cache_key)
+            print "Dataset   : ",dataset.id, dataset.name
+            print "Partition : ",(partition.id, partition.name )if partition else ''
+            print "D Is Local: ",l.cache.exists(dataset.identity.cache_key) is not False
+            print "P Is Local: ",(l.cache.exists(partition.identity.cache_key) is not False) if partition else ''
                 
     elif args.subcommand == 'get':
      
@@ -161,11 +161,14 @@ def library_command(args, rc):
             print "{}: Not found".format(args.term)
         else:
             print "Rel Path  : ",r.bundle.identity.cache_key
-            print "Abs Path  : ",os.path.join(l.cache.cache_dir, r.bundle.identity.cache_key)
-            print "Dataset   : ",r.bundle.identity.name
-            print "Partition : ",r.partition if r.partition else ''
-            print "D Is Local: ",os.path.exists(r.bundle.identity.cache_key)
-            print "P Is Local: ", os.path.exists(r.partition.identity.cache_key) if r.partition else ''
+            print "Abs Path  : ",l.cache.exists(r.bundle.identity.cache_key)
+            print "Dataset   : ",r.bundle.identity.id_, r.bundle.identity.name
+            if r.partition:
+                print "Partition : ",r.partition.identity.id_, r.partition.name
+            else:
+                print "Partition : "
+            print "D Is Local: ",l.cache.exists(r.bundle.identity.cache_key) is not False
+            print "P Is Local: ",(l.cache.exists(r.partition.identity.cache_key) is not False) if r.partition else ''
 
         if r and args.open:
             
