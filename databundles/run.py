@@ -150,7 +150,8 @@ def run(argv, bundle_class):
 
     if 'clean' in phases:
         b.log("---- Cleaning ---")
-        b.clean()
+        # Only clean the meta phases when it is explicityly specified. 
+        b.clean(clean_meta=('meta' in phases))
         
     # The Meta phase prepares neta information, such as list of cites
     # that is doenloaded from a website, or a specificatoin for a schema. 

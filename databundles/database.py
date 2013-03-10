@@ -117,7 +117,7 @@ class TempFile(object):
         if suffix:
             name += "-"+suffix
 
-        self._path = str(self.db.path)+'-'+name+".csv"
+        self._path = str(self.db.path)+'/'+name+".csv"
         
         self._writer = None
         self._reader = None
@@ -130,9 +130,12 @@ class TempFile(object):
             
             if self.exists:
                 mode = 'a+'
+
             else:
                 mode = 'w'
-            
+                try: os.makedirs(os.path.dirname(self.path))
+                except: pass
+
             self.file = open(self.path, mode)
             self._writer = csv.writer(self.file)
             
@@ -399,9 +402,6 @@ class Database(object):
       
         return self._tempfiles[hk]
 
-
-
-    
     def dbm(self,table=None, suffix=None):
         
         hk = (table,suffix)

@@ -321,7 +321,7 @@ class UsCensusDimBundle(UsCensusBundle):
 
         with partition.database.inserter(partition.table) as ins:
             for state in self.states:
-                for row in self.generate_rows(state): #@UnusedVariable
+                for row in self.build_generate_rows(state): #@UnusedVariable
                     
                     row_i += 1
                 
@@ -398,9 +398,9 @@ class UsCensusDimBundle(UsCensusBundle):
 
 
         # Iterate over all of the geo rows for this state. 
-        for geo in self.generate_rows(state): #@UnusedVariable
+        for geo in self.build_generate_rows(state): #@UnusedVariable
          
-            if row_i == 0: # HEre b/c opening the files in generate_rows is slow. 
+            if row_i == 0: # HEre b/c opening the files in build_generate_rows is slow. 
                 self.log("Starting loop for state: "+state+' ')
                 t_start = time.time()
             row_i += 1
@@ -693,7 +693,7 @@ class UsCensusDimBundle(UsCensusBundle):
                 
         return record_code_partition;
 
-    def generate_geodim_rows(self, state):
+    def build_generate_geodim_rows(self, state):
         '''Generate the rows that were created to link the geo split files with the
         segment tables'''
         
@@ -992,7 +992,7 @@ class UsCensusFactBundle(UsCensusBundle):
             else:
                 for state in self.states:
                     self.log("Building fact tables for {}".format(state))
-                    self.run_state_tables(state)
+                    self.build_run_state_tables(state)
       
       
         # Load all of the fact table tempfiles into the fact table databases
@@ -1068,7 +1068,7 @@ class UsCensusFactBundle(UsCensusBundle):
        
 
 
-    def run_state_tables(self, state):
+    def build_run_state_tables(self, state):
         '''Split up the segment files into seperate tables, and link in the
         geo splits table for foreign keys to the geo splits. '''
         import time
@@ -1092,7 +1092,7 @@ class UsCensusFactBundle(UsCensusBundle):
   
         row_i = 0
 
-        for state, logrecno, geo, segments, geo_keys in self.generate_rows(state, geodim=True ): #@UnusedVariable
+        for state, logrecno, geo, segments, geo_keys in self.build_generate_rows(state, geodim=True ): #@UnusedVariable
  
             if row_i == 0:
                 t_start = time.time()

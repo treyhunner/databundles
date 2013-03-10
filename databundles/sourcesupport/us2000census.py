@@ -69,7 +69,7 @@ class Us2000CensusDimBundle(UsCensusDimBundle):
             
         return {'tables':tables,'geos':geos}
                       
-    def generate_rows(self, state):
+    def build_generate_rows(self, state):
         '''A generator that yields rows from the state geo files. It will 
         unpack the fixed width file and return a dict'''
         import struct
@@ -280,7 +280,7 @@ class Us2000CensusFactBundle(UsCensusFactBundle):
                  
         return
  
-    def generate_rows(self, state, geodim=False):
+    def build_generate_rows(self, state, geodim=False):
         '''A Generator that yelds a tuple that has the logrecno row
         for all of the segment files and the geo file. '''
         import struct
@@ -292,7 +292,7 @@ class Us2000CensusFactBundle(UsCensusFactBundle):
       
         gens = [self.generate_seg_rows(n,source) for n,source in self.urls['tables'][state].items() ]
 
-        geodim_gen = self.generate_geodim_rows(state) if geodim else None
+        geodim_gen = self.build_generate_geodim_rows(state) if geodim else None
      
         rows = 0;
 
@@ -345,7 +345,7 @@ class Us2000CensusFactBundle(UsCensusFactBundle):
                     # a generator function, gets propagated all the way up, 
                     # ending all higher level generators. thanks for nuthin. 
                     
-                    #self.log("Got StopIteration in generate_rows at logrec={}. Is seg file state={} index={} seg_number={} shorter?"
+                    #self.log("Got StopIteration in build_generate_rows at logrec={}. Is seg file state={} index={} seg_number={} shorter?"
                     #         .format(lrn,state, index, seg_number))
                     
                     break

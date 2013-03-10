@@ -410,9 +410,9 @@ def daemonize(f, args,  rc):
         '''Run a process as a daemon'''
         import daemon
         import lockfile 
+        import setproctitle
         import os, sys
         import grp, pwd
-        import setproctitle
         
         proc_name = 'databundle-library'
         

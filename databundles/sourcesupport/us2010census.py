@@ -182,7 +182,7 @@ class Us2010CensusBundle(UsCensusBundle):
             
         return str(o)
     
-    def _generate_row(self, first, gens, geodim_gen,  geo_file_path, gln, unpack_str, line, last_line):
+    def build_generate_row(self, first, gens, geodim_gen,  geo_file_path, gln, unpack_str, line, last_line):
         
         import struct 
         
@@ -242,7 +242,7 @@ class Us2010CensusBundle(UsCensusBundle):
         return logrecno, geo, segments, geodim
     
     
-    def generate_rows(self, state, geodim=False):
+    def build_generate_rows(self, state, geodim=False):
         '''A Generator that yelds a tuple that has the logrecno row
         for all of the segment files and the geo file. '''
         import re
@@ -252,7 +252,7 @@ class Us2010CensusBundle(UsCensusBundle):
          
         source_url = self.urls['geos'][state]
         
-        geodim_gen = self.generate_geodim_rows(state) if geodim else None
+        geodim_gen = self.build_generate_geodim_rows(state) if geodim else None
         
         with self.filesystem.download(source_url) as state_file:
     
@@ -278,7 +278,7 @@ class Us2010CensusBundle(UsCensusBundle):
                     for line in geofile.readlines():
                         gln += 1
 
-                        logrecno, geo, segments, geodim =  self._generate_row(
+                        logrecno, geo, segments, geodim =  self.build_generate_row(
                             first, gens, geodim_gen,  geo_file_path, gln, unpack_str, line, last_line)
 
                         yield state, logrecno, dict(zip(header,geo)), segments, geodim
