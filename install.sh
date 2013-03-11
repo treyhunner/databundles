@@ -75,20 +75,18 @@ curl https://raw.github.com/pypa/virtualenv/master/virtualenv.py > $install_dir/
 # Source the activate script to get it going
 . $install_dir/bin/activate
 
-echo "--- Install the databundles package from github"
 # Download the data bundles with pip so the code gets installed.
+echo "--- Install the databundles package from github"
 pip install -e 'git+https://github.com/clarinova/databundles#egg=databundles'
 
 # Install the basic required packages
 pip install -r $install_dir/src/databundles/requirements.txt
-
 if [ $? -ne 0 ]; then
-    echo "ERROR: Requirements.txt installation failed!"
+    echo "ERROR: requirements.txt installation failed!"
     exit 1
 fi
 
-#
-# These packages don't install propertly in the virtualenv in  Ubunty, so we
+# These packages don't install propertly in the virtualenv in Ubuntu, so we
 # install them at the start via apt-get, but they install OK on Mac OS X.
 if [ `uname` = 'Darwin' ]; then
     pip install gdal
