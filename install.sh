@@ -1,4 +1,9 @@
 #!/bin/bash 
+
+usage() {
+    echo "Usage: $0 [install-directory]"
+}
+
 DATA_DIR=/data # Directory to store downloads and library. 
 while getopts "d:" OPTION
 do
