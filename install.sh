@@ -38,9 +38,9 @@ command -v brew >/dev/null 2>&1; has_brew=$?
 # Install required dependencies using appropriate package manager
 if [ $has_aptget -eq 0 ]; then
     echo "--- Installing base packages with apt-get"
-    sudo apt-get install -y gdal-bin sqlite3 spatialite-bin curl git
-    sudo apt-get install -y python-gdal python-h5py python-numpy python-scipy
-    sudo apt-get install -y libpq-dev libhdf5-dev hdf5-tools h5utils
+    sudo apt-get install -y python-setuptools sqlite3 spatialite-bin curl git
+    sudo apt-get install -y gdal-bin python-gdal python-numpy python-scipy
+    sudo apt-get install -y libpq-dev python-h5py libhdf5-dev hdf5-tools h5utils
 elif [ `uname` = 'Darwin' ]; then
     if [ $has_brew -eq 0 ]; then
         echo "--- Installing with Homebrew"
@@ -66,13 +66,14 @@ if [ ! -d $install_dir ]; then
   mkdir -p $install_dir
 fi
 
-# Basic virtualenv setup.
-echo "--- Building virtualenv"
-mkdir -p $install_dir/bin
-curl https://raw.github.com/pypa/virtualenv/master/virtualenv.py > $install_dir/bin/virtualenv.py
-/usr/bin/python $install_dir/bin/virtualenv.py --system-site-packages $install_dir
+# Install pip and virtualenv Python packages system-wide
+sudo easy_install pip virtualenv
 
-# Source the activate script to get it going
+# Create virtualenv
+echo "--- Building virtualenv"
+virtualenv --system-site-packages .
+
+# Source the activate script to get inside the virtualenv
 . $install_dir/bin/activate
 
 # Download the data bundles with pip so the code gets installed.
