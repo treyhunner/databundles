@@ -30,10 +30,12 @@ if [ -z "$install_dir" ]; then
     exit 1
 fi
 
+# Determine whether a suitable package manager is available
 echo "--- Installing base packages. May need to ask for root password"
 command -v apt-get >/dev/null 2>&1; has_aptget=$?
 command -v brew >/dev/null 2>&1; has_brew=$?
 
+# Install required dependencies using appropriate package manager
 if [ $has_aptget -eq 0 ]; then
     echo "--- Installing base packages with apt-get"
     sudo apt-get install -y gdal-bin sqlite3 spatialite-bin curl git
@@ -59,6 +61,7 @@ else
     exit 1
 fi
 
+# Create install directory if it doesn't exist yet
 if [ ! -d $install_dir ]; then
   mkdir -p $install_dir
 fi
