@@ -1,16 +1,16 @@
-PyYAML
-SQLAlchemy
-petl
-decorator
-simplejson
-nose
+PyYAML==3.10
+SQLAlchemy==0.8.0
+petl==0.11.1
+decorator==3.4.0
+simplejson==3.1.0
+nose==1.1.2
 
 #
 # Remote services
 #
-beautifulsoup4
-ckanclient
-requests
+beautifulsoup4==4.1.3
+ckanclient==0.10
+requests==0.1.0
 
 #
 # Numerical
@@ -21,6 +21,6 @@ requests
 #
 # Geographic
 #
-pyshp
+pyshp==1.1.4
 # gdal Must be installed externally
 
