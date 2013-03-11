@@ -1,10 +1,10 @@
-#!/bin/bash 
+#!/bin/bash
 
 usage() {
     echo "Usage: $0 [install-directory]"
 }
 
-DATA_DIR=/data # Directory to store downloads and library. 
+DATA_DIR=/data # Directory to store downloads and library.
 while getopts "d:" OPTION
 do
      case $OPTION in
@@ -36,9 +36,9 @@ command -v brew >/dev/null 2>&1; has_brew=$?
 
 if [ $has_aptget -eq 0 ]; then
     echo "--- Installing base packages with apt-get"
-    sudo apt-get install -y gdal-bin sqlite3 spatialite-bin curl git 
+    sudo apt-get install -y gdal-bin sqlite3 spatialite-bin curl git
     sudo apt-get install -y python-gdal python-h5py python-numpy python-scipy
-    sudo apt-get install -y libpq-dev libhdf5-dev hdf5-tools h5utils 
+    sudo apt-get install -y libpq-dev libhdf5-dev hdf5-tools h5utils
 elif [ `uname` = 'Darwin' ]; then
     if [ $has_brew -eq 0 ]; then
         echo "--- Installing with Homebrew"
@@ -52,15 +52,15 @@ elif [ `uname` = 'Darwin' ]; then
     else
         echo "ERROR: For Macs, but could not find a package manager. "
         exit 1
-    fi        
-        
+    fi
+
 else
     echo "ERROR: Could not determine how to install base packages"
     exit 1
 fi
 
 if [ ! -d $install_dir ]; then
-  mkdir -p $install_dir  
+  mkdir -p $install_dir
 fi
 
 # Basic virtualenv setup.
@@ -68,12 +68,12 @@ echo "--- Building virtualenv"
 mkdir -p $install_dir/bin
 curl https://raw.github.com/pypa/virtualenv/master/virtualenv.py > $install_dir/bin/virtualenv.py
 /usr/bin/python $install_dir/bin/virtualenv.py --system-site-packages $install_dir
-  
+
 # Source the activate script to get it going
 . $install_dir/bin/activate
- 
+
 echo "--- Install the databundles package from github"
-# Download the data bundles with pip so the code gets installed. 
+# Download the data bundles with pip so the code gets installed.
 pip install -e 'git+https://github.com/clarinova/databundles#egg=databundles'
 
 # Install the basic required packages
@@ -91,11 +91,11 @@ if [ `uname` = 'Darwin' ]; then
     pip install gdal
     pip install numpy
     pip install h5py
-fi 
+fi
 
 # The actual bundles don't need to be installed
 git clone https://github.com/clarinova/civicdata $install_dir/src/civicdata
- 
+
 # Install the /etc/databundles.yaml file
 dbmanage install config -p -f --root $DATA_DIR > databundles.yaml
 sudo mv databundles.yaml /etc/databundles.yaml
