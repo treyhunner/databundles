@@ -13,3 +13,7 @@ To install to a virtualenv at <virtenv>:
 .. code-block:: bash
 
     $ curl https://raw.github.com/clarinova/databundles/master/install.sh | sh -s <virtenv>
+
+See `INSTALL.rst`_ file for more details.
+
+.. _INSTALL.rst: INSTALL.rst
